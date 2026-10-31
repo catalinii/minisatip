@@ -30,45 +30,47 @@
 int snprintf_pointer(char *dest, int max_len, int type, void *p,
                      float multiplier) {
     int nb;
+    size_t size = static_cast<size_t>(max_len);
     switch (type & 0xF) {
     case VAR_UINT8:
-        nb = snprintf(dest, max_len, "%d",
+        nb = snprintf(dest, size, "%d",
                       (int)((*(unsigned char *)p) * multiplier));
         break;
     case VAR_INT8:
-        nb = snprintf(dest, max_len, "%d", (int)((*(char *)p) * multiplier));
+        nb = snprintf(dest, size, "%d", (int)((*(char *)p) * multiplier));
         break;
     case VAR_UINT16:
-        nb =
-            snprintf(dest, max_len, "%d", (int)((*(uint16_t *)p) * multiplier));
+        nb = snprintf(dest, size, "%d", (int)((*(uint16_t *)p) * multiplier));
         break;
     case VAR_INT16:
-        nb = snprintf(dest, max_len, "%d", (int)((*(int16_t *)p) * multiplier));
+        nb = snprintf(dest, size, "%d", (int)((*(int16_t *)p) * multiplier));
         break;
     case VAR_INT:
-        nb = snprintf(dest, max_len, "%d", (int)((*(int *)p) * multiplier));
+        nb = snprintf(dest, size, "%d",
+                      (int)(static_cast<float>(*(int *)p) * multiplier));
         break;
 
     case VAR_INT64:
-        nb = snprintf(dest, max_len, "%jd",
-                      (int64_t)((*(int64_t *)p) * multiplier));
+        nb =
+            snprintf(dest, size, "%jd",
+                     (int64_t)(static_cast<float>(*(int64_t *)p) * multiplier));
         break;
 
     case VAR_STRING:
-        nb = snprintf(dest, max_len, "%s", (char *)p);
+        nb = snprintf(dest, size, "%s", (char *)p);
         break;
 
     case VAR_PSTRING:
-        nb = snprintf(dest, max_len, "%s", (*(char **)p) ? (*(char **)p) : "");
+        nb = snprintf(dest, size, "%s", (*(char **)p) ? (*(char **)p) : "");
         break;
 
     case VAR_FLOAT:
-        nb =
-            snprintf(dest, max_len, "%f", (double)((*(float *)p) * multiplier));
+        nb = snprintf(dest, size, "%f", (double)((*(float *)p) * multiplier));
         break;
 
     case VAR_HEX:
-        nb = snprintf(dest, max_len, "0x%x", (int)((*(int *)p) * multiplier));
+        nb = snprintf(dest, size, "0x%x",
+                      (int)(static_cast<float>(*(int *)p) * multiplier));
         break;
 
     default:
@@ -88,7 +90,7 @@ int var_eval(char *orig, int len, char *dest, int max_len) {
     void *p;
     int nb = 0;
     memset(var, 0, sizeof(var));
-    strncpy(var, orig + 1, len - 1);
+    strncpy(var, orig + 1, static_cast<size_t>(len - 1));
     p = get_var_address(var, &multiplier, &type, storage, sizeof(storage));
     if (p)
         nb = snprintf_pointer(dest, max_len, type, p, multiplier);
@@ -276,12 +278,12 @@ int get_json_state(char *buf, int len, char *sbuf, int slen) {
                 get_data_string funs = (get_data_string)p->addr;
                 strlcatf(buf, len, ptr, "[");
                 for (off = 0; off < p->len; off++) {
-                    memset(sbuf, 0, slen);
+                    memset(sbuf, 0, static_cast<size_t>(slen));
                     funs(off, sbuf, slen - 1);
                     if (off > 0)
                         strlcatf(buf, len, ptr, ",");
                     ptr += escape_json_string(buf + ptr, len - ptr, sbuf,
-                                              strlen(sbuf));
+                                              static_cast<int>(strlen(sbuf)));
                 }
                 strlcatf(buf, len, ptr, "]");
                 //				LOG("func_str -> %s", buf);

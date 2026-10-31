@@ -69,7 +69,7 @@ int dvbca_init_dev(adapter *ad);
 int dvbca_close_dev(adapter *ad);
 int ca_timeout(sockets *s);
 int ca_read(sockets *s);
-int ca_write_apdu(ca_session_t *s, int tag, const void *data, int len);
+int ca_write_apdu(ca_session_t *s, int tag, const void *data, size_t len);
 int ca_read_apdu(ca_session_t *session, uint8_t *buf, int buf_len);
 int ca_read_tpdu(int socket, void *buf, int buf_len, sockets *ss, int *rb);
 int ca_read_enigma(int socket, void *buf, int len, sockets *ss, int *rb);
@@ -400,7 +400,7 @@ int test_create_capmt_three_pmts() {
     for (int i = 0; i < 3; i++) {
         p[i] = pmt_add(0, 0x300 + i, 0x310 + i);
         SPMT *pmt = get_pmt(p[i]);
-        pmt_add_caid(pmt, 0x0664, static_cast<uint16_t>(0x700 + i), nullptr, 0);
+        pmt_add_caid(pmt, 0x0664, 0x700 + i, nullptr, 0);
         pmt_add_stream_pid(pmt, 0x800 + i * 0x10, 2, false, true);
         pmt_add_stream_pid(pmt, 0x801 + i * 0x10, 3, true, false);
     }
@@ -627,8 +627,7 @@ int test_create_capmt_both_pmt_and_other_with_caids() {
     int pmt_id = pmt_add(0, 0x100, 0x101);
     SPMT *pmt = get_pmt(pmt_id);
     for (int i = 0; i < 8; i++) {
-        pmt_add_caid(pmt, static_cast<uint16_t>(0x0B00 + i),
-                     static_cast<uint16_t>(0x570 + i), nullptr, 0);
+        pmt_add_caid(pmt, 0x0B00 + i, 0x570 + i, nullptr, 0);
     }
     pmt_add_stream_pid(pmt, 0x501, 2, false, true);
     pmt_add_stream_pid(pmt, 0x502, 3, true, false);
@@ -636,8 +635,7 @@ int test_create_capmt_both_pmt_and_other_with_caids() {
     int other_pmt_id = pmt_add(0, 0x200, 0x201);
     SPMT *other = get_pmt(other_pmt_id);
     for (int i = 0; i < 8; i++) {
-        pmt_add_caid(other, static_cast<uint16_t>(0x0C00 + i),
-                     static_cast<uint16_t>(0x670 + i), nullptr, 0);
+        pmt_add_caid(other, 0x0C00 + i, 0x670 + i, nullptr, 0);
     }
     pmt_add_stream_pid(other, 0x601, 2, false, true);
     pmt_add_stream_pid(other, 0x602, 3, true, false);
@@ -672,8 +670,7 @@ int test_create_capmt_both_pmt_and_other_many_streams() {
     int pmt_id = pmt_add(0, 0x100, 0x101);
     SPMT *pmt = get_pmt(pmt_id);
     for (int i = 0; i < 10; i++) {
-        pmt_add_caid(pmt, static_cast<uint16_t>(0x0B00 + i),
-                     static_cast<uint16_t>(0x570 + i), nullptr, 0);
+        pmt_add_caid(pmt, 0x0B00 + i, 0x570 + i, nullptr, 0);
     }
     for (int i = 0; i < 8; i++) {
         pmt_add_stream_pid(pmt, 0x500 + i, (i % 2 == 0) ? 2 : 3, (i % 2 == 1),
@@ -683,8 +680,7 @@ int test_create_capmt_both_pmt_and_other_many_streams() {
     int other_pmt_id = pmt_add(0, 0x200, 0x201);
     SPMT *other = get_pmt(other_pmt_id);
     for (int i = 0; i < 10; i++) {
-        pmt_add_caid(other, static_cast<uint16_t>(0x0C00 + i),
-                     static_cast<uint16_t>(0x670 + i), nullptr, 0);
+        pmt_add_caid(other, 0x0C00 + i, 0x670 + i, nullptr, 0);
     }
     for (int i = 0; i < 8; i++) {
         pmt_add_stream_pid(other, 0x600 + i, (i % 2 == 0) ? 2 : 3, (i % 2 == 1),
@@ -718,8 +714,7 @@ int test_create_capmt_size_near_limit() {
     SPMT *pmt = get_pmt(pmt_id);
     // Add 10 CAIDs to primary PMT
     for (int i = 0; i < 10; i++) {
-        pmt_add_caid(pmt, static_cast<uint16_t>(0x0B00 + i),
-                     static_cast<uint16_t>(0x570 + i), nullptr, 0);
+        pmt_add_caid(pmt, 0x0B00 + i, 0x570 + i, nullptr, 0);
     }
     // Add 11 streams to primary PMT
     for (int i = 0; i < 11; i++) {
@@ -731,8 +726,7 @@ int test_create_capmt_size_near_limit() {
     SPMT *other = get_pmt(other_pmt_id);
     // Add 10 CAIDs to other PMT
     for (int i = 0; i < 10; i++) {
-        pmt_add_caid(other, static_cast<uint16_t>(0x0C00 + i),
-                     static_cast<uint16_t>(0x670 + i), nullptr, 0);
+        pmt_add_caid(other, 0x0C00 + i, 0x670 + i, nullptr, 0);
     }
     // Add 11 streams to other PMT
     for (int i = 0; i < 11; i++) {
@@ -767,8 +761,7 @@ int test_create_capmt_respects_length() {
     uint8_t priv[64];
     memset(priv, 0xAB, sizeof(priv));
     for (int i = 0; i < MAX_CAID; i++)
-        pmt_add_caid(pmt, static_cast<uint16_t>(0x0B00 + i),
-                     static_cast<uint16_t>(0x570 + i), priv, sizeof(priv));
+        pmt_add_caid(pmt, 0x0B00 + i, 0x570 + i, priv, sizeof(priv));
     for (int i = 0; i < 20; i++)
         pmt_add_stream_pid(pmt, 0x500 + i, 2, false, true);
 
@@ -1351,6 +1344,8 @@ int test_ca_cmd_watchdog() {
     ASSERT(pipe(sp) == 0, "pipe for close observation");
     int id = sockets_add(sp[0], NULL, 65, TYPE_TCP, NULL, NULL, NULL);
     ASSERT(id >= 0, "socket added");
+    sockets *ss = get_sockets(id);
+    ASSERT(ss, "socket found");
     dev.sock = id;
     int fds[2];
     ASSERT(pipe(fds) == 0, "pipe for TPDU writes");
@@ -1362,48 +1357,48 @@ int test_ca_cmd_watchdog() {
     dev.pending_session = 3;
     dev.pending_since = t0;
     ca_cmd_watchdog(&dev, t0 + 1000);
-    ASSERT_EQUAL(get_sockets(id)->force_close, 0, "fresh command not closed");
+    ASSERT_EQUAL(ss->force_close, 0, "fresh command not closed");
     ASSERT(dev.pending_tag != 0, "fresh command stays tracked");
 
     dev.pending_tag = TAG_PROFILE_ENQUIRY;
     dev.pending_session = 1;
     dev.pending_since = t0;
     ca_cmd_watchdog(&dev, t0 + CA_CMD_TIMEOUT_MS);
-    ASSERT_EQUAL(get_sockets(id)->force_close, 1, "stale command resets");
+    ASSERT_EQUAL(ss->force_close, 1, "stale command resets");
     ASSERT_EQUAL(dev.pending_tag, 0, "reset clears pending");
     ASSERT_EQUAL(dev.pending_since, -1, "reset disarms");
-    get_sockets(id)->force_close = 0;
+    ss->force_close = 0;
 
     dev.pending_since = t0; // stalled init: nothing pending, quiet since t0
     ca_cmd_watchdog(&dev, t0 + CA_CMD_TIMEOUT_MS);
-    ASSERT_EQUAL(get_sockets(id)->force_close, 1, "stalled init resets");
+    ASSERT_EQUAL(ss->force_close, 1, "stalled init resets");
     ASSERT_EQUAL(dev.pending_since, -1, "init reset disarms");
-    get_sockets(id)->force_close = 0;
+    ss->force_close = 0;
 
     dev.state = CA_STATE_INITIALIZED;
     dev.pending_since = t0;
     ca_cmd_watchdog(&dev, t0 + 10 * CA_CMD_TIMEOUT_MS);
-    ASSERT_EQUAL(get_sockets(id)->force_close, 0, "initialized idles quietly");
+    ASSERT_EQUAL(ss->force_close, 0, "initialized idles quietly");
     ASSERT_EQUAL(dev.pending_since, t0, "quiet keeps anchor");
 
     dev.pending_tag = TAG_CA_INFO_ENQUIRY; // post-init commands still guarded
     dev.pending_session = 3;
     dev.pending_since = t0;
     ca_cmd_watchdog(&dev, t0 + CA_CMD_TIMEOUT_MS);
-    ASSERT_EQUAL(get_sockets(id)->force_close, 1, "post-init stale resets");
-    get_sockets(id)->force_close = 0;
+    ASSERT_EQUAL(ss->force_close, 1, "post-init stale resets");
+    ss->force_close = 0;
 
     dev.state = CA_STATE_ACTIVE;
     dev.pending_since = -1; // fully unarmed: late ticks stay quiet
     ca_cmd_watchdog(&dev, t0 + 10 * CA_CMD_TIMEOUT_MS);
-    ASSERT_EQUAL(get_sockets(id)->force_close, 0, "unarmed never resets");
+    ASSERT_EQUAL(ss->force_close, 0, "unarmed never resets");
 
     dev.pending_tag = TAG_CA_INFO_ENQUIRY; // tick-zero anchor still arms
     dev.pending_session = 3;
     dev.pending_since = 0;
     ca_cmd_watchdog(&dev, CA_CMD_TIMEOUT_MS);
-    ASSERT_EQUAL(get_sockets(id)->force_close, 1, "zero anchor fires");
-    get_sockets(id)->force_close = 0;
+    ASSERT_EQUAL(ss->force_close, 1, "zero anchor fires");
+    ss->force_close = 0;
 
     ca_session_t rs{};
     rs.ca = &dev;
@@ -1548,9 +1543,9 @@ int test_ca_cmd_watchdog() {
     ASSERT_EQUAL(ca_read(&cs), 0, "second close parsed");
     hi = getTick();
     ca_cmd_watchdog(&dev, hi + 1000);
-    ASSERT_EQUAL(get_sockets(id)->force_close, 0, "no instant reset");
+    ASSERT_EQUAL(ss->force_close, 0, "no instant reset");
     ca_cmd_watchdog(&dev, hi + CA_CMD_TIMEOUT_MS);
-    ASSERT_EQUAL(get_sockets(id)->force_close, 1, "quiet after close resets");
+    ASSERT_EQUAL(ss->force_close, 1, "quiet after close resets");
 
     opts.enigma = saved_enigma;
     sockets_del(id); // closes sp[0]
@@ -2111,7 +2106,7 @@ static SPMT *packing_program(int sid) {
         pmt_add_stream_pid(pmt, pid, video ? 2 : 3, !video, video);
         for (auto &p : pcam->ad.pids)
             if (p.flags <= PID_STATE_INACTIVE) {
-                p.pid = static_cast<int16_t>(pid);
+                p.pid = pid;
                 p.flags = 1;
                 break;
             }

@@ -77,7 +77,7 @@ int enabledKeys = 0;
 int dvbapi_protocol_version = DVBAPI_PROTOCOL_VERSION;
 int oscam_version;
 
-uint64_t dvbapi_last_close = 0;
+int64_t dvbapi_last_close = 0;
 
 SegmentedPool<SKey *, KEYS_BUCKETS, MAX_KEYS> keys;
 unsigned char read_buffer[8192];
@@ -86,9 +86,9 @@ extern char *listmgmt_str[];
 // Single write() is kernel-atomic; the failure close is idempotent.
 #define TEST_WRITE(a, xlen)                                                    \
     {                                                                          \
-        int x;                                                                 \
+        ssize_t x;                                                             \
         if ((x = (a)) != (xlen)) {                                             \
-            LOG("write to dvbapi socket failed (%d out of %d), closing "       \
+            LOG("write to dvbapi socket failed (%zd out of %d), closing "      \
                 "socket %d, "                                                  \
                 "errno %d, error: %s",                                         \
                 x, (int)xlen, sock.load(), errno, strerror(errno));            \
@@ -99,7 +99,7 @@ extern char *listmgmt_str[];
 static inline SKey *get_key(int i) {
     if (i < 0 || i >= MAX_KEYS)
         return NULL;
-    SKey *k = keys[i];
+    SKey *k = keys[static_cast<size_t>(i)];
     if (!k || !k->enabled)
         return NULL;
     return k;
@@ -170,7 +170,7 @@ int dvbapi_reply(sockets *s) {
     }
 
     while (pos < s->rlen) {
-        int op1;
+        unsigned int op1;
         b = s->buf + pos;
         copy32r(op, b, 0);
         op1 = op & 0xFFFFFF;
@@ -220,7 +220,7 @@ int dvbapi_reply(sockets *s) {
             if (dvbapi_protocol_version > DVBAPI_PROTOCOL_VERSION)
                 dvbapi_protocol_version = DVBAPI_PROTOCOL_VERSION;
             dvbapi_is_enabled = 1;
-            pos = 6 + strlen((const char *)b + 6) + 1;
+            pos = static_cast<int>(6 + strlen((const char *)b + 6) + 1);
             if (oscam_version > 0 && oscam_version < 11533) {
                 LOG0(
                     "Oscam build %d (< 11553) is not supported after minisatip "
@@ -481,10 +481,10 @@ int dvbapi_reply(sockets *s) {
 }
 
 // Caller holds pmt->mutex of k's PMT: it walks stream_pids/CA tables.
-int dvbapi_send_pmt(SKey *k, int cmd_id, int force) {
+int dvbapi_send_pmt(SKey *k, uint8_t cmd_id, int force) {
     unsigned char buf[2500];
     int len;
-    int listmgmt = CLM_UPDATE;
+    uint8_t listmgmt = CLM_UPDATE;
     std::lock_guard<SMutex> lock(k->mutex);
     SPMT *pmt = get_pmt(k->pmt_id);
     if (!pmt)
@@ -518,15 +518,15 @@ int dvbapi_send_pmt(SKey *k, int cmd_id, int force) {
 
     copy16(buf, 13, 0x8301); // adapter_device_descriptor, works only in
                              // newer versions (> 11500)
-    buf[15] = adapter_index;
+    buf[15] = static_cast<unsigned char>(adapter_index);
     copy16(buf, 16, 0x8402); // pmt_pid_descriptor
     copy16(buf, 18, pmt->pid);
 
     copy16(buf, 20, 0x8601); // demux_id_descriptor
-    buf[22] = demux;
+    buf[22] = static_cast<unsigned char>(demux);
 
     copy16(buf, 23, 0x8701); // ca_device_descriptor (caX)
-    buf[25] = demux;
+    buf[25] = static_cast<unsigned char>(demux);
 
     len = 26 + pmt_add_ca_descriptor(pmt, buf + 26, sizeof(buf) - 26,
                                      dvbapi_ca); // CA description
@@ -540,7 +540,7 @@ int dvbapi_send_pmt(SKey *k, int cmd_id, int force) {
             break;
         }
         len += 5;
-        int type = stream_pid.type;
+        uint8_t type = stream_pid.type;
         int pid = stream_pid.pid;
         buf[len - 5] = type;
         copy16(buf, len - 4, pid);
@@ -568,7 +568,7 @@ int dvbapi_send_pmt(SKey *k, int cmd_id, int force) {
             "adapter %d, demux %d, using socket %d (%s)",
             k->pmt_id, k->pmt_pid, k->sid, k->id, adapter_index, demux,
             sock.load(), listmgmt_str[listmgmt]);
-        TEST_WRITE(write(sock, buf, len), len);
+        TEST_WRITE(write(sock, buf, static_cast<size_t>(len)), len);
         // TEST_WRITE closes the socket on short write: baseline the
         // hash only when the bytes went out.
         if (sock > 0) {
@@ -606,9 +606,9 @@ int dvbapi_timeout(sockets *) {
 }
 
 int is_adapter_active() {
-    int i, active_adapters = 0;
-    for (i = 0; i < MAX_ADAPTERS; i++)
-        if (a[i] && a[i]->enabled) {
+    int active_adapters = 0;
+    for (adapter *ad : a)
+        if (ad && ad->enabled) {
             active_adapters = 1;
             break;
         }
@@ -694,9 +694,9 @@ void send_client_info(sockets *s) {
     unsigned char len;
     memset(buf, 0, sizeof(buf));
     copy32(buf, 0, DVBAPI_CLIENT_INFO);
-    copy16(buf, 4, dvbapi_protocol_version) len =
-        sprintf(buf + 7, "%s/%s", app_name, app_version);
-    buf[6] = len;
+    copy16(buf, 4, dvbapi_protocol_version) len = static_cast<unsigned char>(
+        sprintf(buf + 7, "%s/%s", app_name, app_version));
+    buf[6] = static_cast<char>(len);
     dvbapi_is_enabled = 1;
     TEST_WRITE(write(s->sock, buf, len + 7), len + 7);
 }
@@ -779,12 +779,12 @@ int send_ecm(int filter_id, unsigned char *b, int len, void *opaque) {
         return -1;
 
     copy32(buf, 0, DVBAPI_FILTER_DATA);
-    buf[4] = demux;
-    buf[5] = filter;
-    memcpy(buf + 6, b, len);
+    buf[4] = static_cast<uint8_t>(demux);
+    buf[5] = static_cast<uint8_t>(filter);
+    memcpy(buf + 6, b, static_cast<size_t>(len));
     //	hexdump("ecm: ", buf, len + 6);
     if (sock > 0)
-        TEST_WRITE(write(sock, buf, len + 6), len + 6);
+        TEST_WRITE(write(sock, buf, static_cast<size_t>(len + 6)), len + 6);
     return 0;
 }
 
@@ -879,7 +879,7 @@ int keys_del(int i) {
         if (sock > 0)
             TEST_WRITE(write(sock, buf, sizeof(buf)), sizeof(buf));
     } else if (!ed) {
-        buf[7] = k->demux_index;
+        buf[7] = static_cast<unsigned char>(k->demux_index);
         msg = "DEMUX";
         if (sock > 0)
             TEST_WRITE(write(sock, buf, sizeof(buf)), sizeof(buf));
@@ -910,7 +910,11 @@ int keys_del(int i) {
         if (k->filter_id[j] >= 0)
             del_filter(k->filter_id[j]);
 
-    k->hops = k->caid = k->info_pid = k->prid = k->ecmtime = 0;
+    k->ecmtime = 0;
+    k->prid = 0;
+    k->info_pid = 0;
+    k->caid = 0;
+    k->hops = 0;
     dvbapi_last_close = getTick();
     // Free last: teardown above must not overlap a reuse.
     k->allocated = false;
@@ -951,8 +955,8 @@ int dvbapi_add_pmt(adapter *ad, SPMT *pmt, int update) {
     SKey *old = (SKey *)pmt->opaque;
     if (old && old->id >= 0 && old->id < MAX_KEYS) {
         std::lock_guard<SMutex> oldlock(old->mutex);
-        if (old->enabled && keys[old->id] == old && old->pmt_id == pmt->id &&
-            old->adapter == ad->id) {
+        if (old->enabled && keys[static_cast<size_t>(old->id)] == old &&
+            old->pmt_id == pmt->id && old->adapter == ad->id) {
             old->sid = pmt->sid;
             old->pmt_pid = pid;
             old->tsid = ad->transponder_id;
@@ -1032,7 +1036,7 @@ void dvbapi_descramble_watchdog(adapter *ad) {
             }
             if (!k->stall_start)
                 k->stall_start = now;
-            auto &w = watchdog[pmt->id];
+            auto &w = watchdog[static_cast<size_t>(pmt->id)];
             if (w.decrypt_ok != pmt->last_decrypt_ok)
                 w = {pmt->last_decrypt_ok, 0};
             int64_t grace = DVBAPI_KEY_GRACE_MS << std::min(w.restarts, 6);
@@ -1053,17 +1057,21 @@ static int dvbapi_ts(adapter *ad) {
     // Per adapter: each adapter thread only touches its own entry
     static std::array<int64_t, MAX_ADAPTERS> last_run{};
     int64_t now = getTick();
-    if (ad->id < 0 || ad->id >= MAX_ADAPTERS || now - last_run[ad->id] < 100)
+    if (ad->id < 0 || ad->id >= MAX_ADAPTERS ||
+        now - last_run[static_cast<size_t>(ad->id)] < 100)
         return 0;
-    last_run[ad->id] = now;
+    last_run[static_cast<size_t>(ad->id)] = now;
     dvbapi_descramble_watchdog(ad);
     return 0;
 }
 
 // Set up once: the adapter threads call through it while OSCam reconnects
-SCA_op dvbapi = {.ca_add_pmt = dvbapi_add_pmt,
+SCA_op dvbapi = {.ca_add_pid = NULL,
+                 .ca_del_pid = NULL,
+                 .ca_add_pmt = dvbapi_add_pmt,
                  .ca_del_pmt = dvbapi_del_pmt,
                  .ca_init_dev = dvbapi_init_dev,
+                 .ca_close_dev = NULL,
                  .ca_ts = dvbapi_ts};
 
 void register_dvbapi() { dvbapi_ca = add_ca(&dvbapi); }
@@ -1103,7 +1111,7 @@ char *get_channel_for_key(int key, char *dest, int max_size) {
     if (name[0])
         _strncpy(dest, name, max_size - 1);
     else
-        snprintf(dest, max_size, "SID %d", sid);
+        snprintf(dest, static_cast<size_t>(max_size), "SID %d", sid);
 
     return dest;
 }
@@ -1112,7 +1120,7 @@ char *get_channel_for_key(int key, char *dest, int max_size) {
 static SKey *get_key_nw(int i) {
     if (i < 0 || i >= MAX_KEYS)
         return NULL;
-    return keys[i];
+    return keys[static_cast<size_t>(i)];
 }
 
 static int get_key_enabled(int i) {

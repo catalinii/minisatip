@@ -35,6 +35,7 @@ alternative source
 #include <algorithm>
 #include <array>
 #include <charconv>
+#include <memory>
 #include <openssl/aes.h>
 #include <openssl/crypto.h>
 #include <openssl/err.h>
@@ -273,7 +274,7 @@ static int sha256_final(EVP_MD_CTX *ctx, uint8_t *out) {
     return ret;
 }
 
-int RSA_private_encrypt_wrapper(EVP_PKEY *pkey, int dlen, uint8_t *data,
+int RSA_private_encrypt_wrapper(EVP_PKEY *pkey, size_t dlen, uint8_t *data,
                                 uint8_t *out) {
     /* RSA-PSS signature with SHA-1 hash and MGF1-SHA1 */
 #if OPENSSL_VERSION_NUMBER >= 0x30000000L
@@ -358,19 +359,18 @@ const char en300468_mod_map[4][8] = {"auto", "QPSK", "8PSK", "16QAM"};
 static int ca_send_datetime(ca_device_t *d);
 static SMutex &ca_dev_lock(int id);
 void disable_cws_for_all_pmts(ca_device_t *d);
-int populate_resources(ca_device_t *d, int *resource_ids);
-int ca_write_apdu(ca_session_t *s, int resource, const void *data, int len);
+size_t populate_resources(ca_device_t *d, uint32_t *resource_ids);
+int ca_write_apdu(ca_session_t *s, int resource, const void *data, size_t len);
 ca_session_t *find_session_for_resource(ca_device_t *d, int resource);
 int asn_1_decode(int *length, unsigned char *asn_1_array);
 
 ///// AES_XCBC_MAC
 
 int aes_xcbc_mac_init(struct aes_xcbc_mac_ctx *ctx, const uint8_t *key) {
-    int y, x;
+    int y;
 
     for (y = 0; y < 3; y++) {
-        for (x = 0; x < 16; x++)
-            ctx->K[y][x] = y + 1;
+        memset(ctx->K[y], y + 1, 16);
         aes_ecb_encrypt_block(ctx->K[y], ctx->K[y], key);
     }
 
@@ -453,7 +453,7 @@ int dh_mod_exp(uint8_t *dest, int dest_len, uint8_t *base, int base_len,
         return -1;
     }
 
-    gap = dest_len - len;
+    gap = static_cast<unsigned int>(dest_len - len);
     memset(dest, 0, gap);
     BN_bn2bin(bn_dest, &dest[gap]);
 
@@ -614,7 +614,7 @@ X509 *certificate_load_and_check(struct cert_ctx *ctx, const char *filename) {
 }
 
 X509 *certificate_import_and_check(struct cert_ctx *ctx, const uint8_t *data,
-                                   int len) {
+                                   long len) {
     X509 *cert;
 
     cert = d2i_X509(NULL, &data, len);
@@ -636,9 +636,10 @@ X509 *certificate_import_and_check(struct cert_ctx *ctx, const uint8_t *data,
 
 ////// MISC.C
 
-int add_padding(uint8_t *dest, unsigned int len, unsigned int blocklen) {
+unsigned int add_padding(uint8_t *dest, unsigned int len,
+                         unsigned int blocklen) {
     uint8_t padding = 0x80;
-    int count = 0;
+    unsigned int count = 0;
 
     while (len & (blocklen - 1)) {
         *dest++ = padding;
@@ -669,8 +670,8 @@ void str2bin(uint8_t *dst, char *data, int len) {
     int i;
 
     for (i = 0; i < len; i += 2)
-        *dst++ = (get_bin_from_nibble(data[i]) << 4) |
-                 get_bin_from_nibble(data[i + 1]);
+        *dst++ = static_cast<uint8_t>((get_bin_from_nibble(data[i]) << 4) |
+                                      get_bin_from_nibble(data[i + 1]));
 }
 
 void cert_strings(char *certfile) {
@@ -696,7 +697,7 @@ void cert_strings(char *certfile) {
         c = fgetc(file);
         //              if (isprint(c) || c == '\t')
         if (isprint(c)) {
-            string[count] = c;
+            string[count] = static_cast<char>(c);
             count++;
         } else {
             if (count > n) /* line feed */
@@ -795,10 +796,10 @@ static void capmt_compact(SCAPMT *c) {
 // Forget every PMT held on a dead CAM, clearing its tables masks
 // so the retry loop resends them once the CAM is initialized again.
 void ca_release_pmts(ca_device_t *d) {
-    uint64_t mask;
+    int mask;
     if (!d)
         return;
-    mask = 1ULL << dvbca_id;
+    mask = 1 << dvbca_id;
     // Same bound as the producers: slots beyond max_ca_pmt are
     // always -1, as max_ca_pmt is fixed at startup (see opts).
     int n = d->max_ca_pmt;
@@ -888,7 +889,7 @@ void disable_cws_for_all_pmts(ca_device_t *d) {
     }
 }
 
-int CAPMT_add_PMT(uint8_t *capmt, int len, SPMT *pmt, int cmd_id,
+int CAPMT_add_PMT(uint8_t *capmt, int len, SPMT *pmt, uint8_t cmd_id,
                   int added_only, int ca_id) {
     int pos = 0;
     for (const auto &stream_pid : pmt->stream_pids) {
@@ -924,8 +925,8 @@ int CAPMT_add_PMT(uint8_t *capmt, int len, SPMT *pmt, int cmd_id,
 
 // Builds the CAPMT place by place; with kept, an empty place repeats the
 // streams last sent there. spans gets each place's offset and length.
-int create_capmt(SCAPMT *ca, int listmgmt, uint8_t *capmt, int capmt_len,
-                 int cmd_id, int added_only, int kept, int (*spans)[2]) {
+int create_capmt(SCAPMT *ca, uint8_t listmgmt, uint8_t *capmt, int capmt_len,
+                 uint8_t cmd_id, int added_only, int kept, int (*spans)[2]) {
     int pos = 0;
     int first = capmt_first_pmt_id(ca);
     int version = ca->version;
@@ -936,7 +937,7 @@ int create_capmt(SCAPMT *ca, int listmgmt, uint8_t *capmt, int capmt_len,
     capmt[pos++] = listmgmt;
     copy16(capmt, pos, ca->sid);
     pos += 2;
-    capmt[pos++] = ((version & 0xF) << 1) | 0x1;
+    capmt[pos++] = static_cast<uint8_t>(((version & 0xF) << 1) | 0x1);
     capmt[pos++] = 0; // PI LEN 2 bytes, set 0
     capmt[pos++] = 0;
 
@@ -948,7 +949,7 @@ int create_capmt(SCAPMT *ca, int listmgmt, uint8_t *capmt, int capmt_len,
                                  added_only, dvbca_id);
         else if (kept && !PMT_ID_IS_VALID(id) && kept_len > 0 &&
                  kept_len <= CAPMT_KEPT_ES_MAX && pos + kept_len <= capmt_len) {
-            memcpy(capmt + pos, ca->sent_es[place], kept_len);
+            std::copy_n(ca->sent_es[place], kept_len, capmt + pos);
             pos += kept_len;
         }
         if (spans) {
@@ -967,7 +968,7 @@ uint32_t capmt_content_hash(uint8_t *capmt, int len) {
         return crc_32(capmt, len);
     uint8_t lm = capmt[0], ver = capmt[3];
     capmt[0] = 0;
-    capmt[3] &= ~0x3E;
+    capmt[3] &= 0xC1; // clear the version bits
     uint32_t hash = crc_32(capmt, len);
     capmt[0] = lm;
     capmt[3] = ver;
@@ -975,7 +976,7 @@ uint32_t capmt_content_hash(uint8_t *capmt, int len) {
 }
 
 // Creates and sends the CAPMT with its first PMT and any packed partners
-int send_capmt(ca_device_t *d, SCAPMT *ca, int listmgmt, int reason,
+int send_capmt(ca_device_t *d, SCAPMT *ca, uint8_t listmgmt, uint8_t reason,
                int force) {
     uint8_t capmt[8192];
     int spans[MAX_PMT_PER_CAPMT][2];
@@ -1018,7 +1019,7 @@ int send_capmt(ca_device_t *d, SCAPMT *ca, int listmgmt, int reason,
 
     // Baseline the hash only when the write succeeded, so a failed
     // send never suppresses the retry.
-    if (ca_write_apdu(session, TAG_CA_PMT, capmt, size)) {
+    if (ca_write_apdu(session, TAG_CA_PMT, capmt, static_cast<size_t>(size))) {
         capmt_forget_sent(ca);
         LOG_AND_RETURN(TABLES_RESULT_ERROR_RETRY, "CA %d: CAPMT write failed",
                        d->id);
@@ -1029,7 +1030,7 @@ int send_capmt(ca_device_t *d, SCAPMT *ca, int listmgmt, int reason,
         auto [start, len] = spans[place];
         int fits = len > 0 && len <= CAPMT_KEPT_ES_MAX;
         if (fits)
-            memcpy(ca->sent_es[place], capmt + start, len);
+            std::copy_n(capmt + start, len, ca->sent_es[place]);
         ca->sent_es_len[place] = fits ? len : 0;
     }
     return 0;
@@ -1072,7 +1073,7 @@ SCAPMT *add_pmt_to_capmt(ca_device_t *d, SPMT *pmt, int multiple,
             for (int place = 0; place < MAX_PMT_PER_CAPMT; place++)
                 if (!PMT_ID_IS_VALID(capmt_place(c, place)) &&
                     c->sent_es_len[place] == len &&
-                    !memcmp(c->sent_es[place], es, len)) {
+                    std::equal(es, es + len, c->sent_es[place])) {
                     capmt_place(c, place) = pmt->id;
                     res = c;
                     if (rejoined)
@@ -1140,7 +1141,7 @@ int get_active_capmts(ca_device_t *d) {
 
 void set_input_ci(int ci, int aid) {
     char filename[100];
-    char val = 'A' + aid;
+    int val = 'A' + aid;
     sprintf(filename, "/proc/stb/tsmux/ci%d_input", ci);
     LOG("%s: %s -> %c", __FUNCTION__, filename, val);
     FILE *fp = fopen(filename, "w");
@@ -1158,10 +1159,10 @@ void set_tuner_input(int ci, int aid) {
     if (aid == -1)
         return;
     if (ci == -1) {
-        val[0] = 'A' + aid;
+        val[0] = static_cast<char>('A' + aid);
         val[1] = 0;
     } else
-        val[2] = '0' + ci;
+        val[2] = static_cast<char>('0' + ci);
 
     sprintf(filename, "/proc/stb/tsmux/input%d", aid);
     LOG("%s: %s -> %s", __FUNCTION__, filename, val);
@@ -1230,8 +1231,8 @@ void remove_pmt_from_device(ca_device_t *d, SPMT *pmt);
 
 int dvbca_process_pmt(adapter *ad, SPMT *spmt, int update) {
     ca_device_t *d = ca_devices[ad->id];
-    uint16_t pid, sid;
-    int listmgmt;
+    int pid, sid;
+    uint8_t listmgmt;
     int prev_linked = -2; // -2: CI was not moved for this call
     SPMT *first = NULL;
 
@@ -1395,7 +1396,7 @@ int dvbca_del_pmt(adapter *ad, SPMT *spmt) {
     int last_in_capmt = capmt_pmt_count(capmt) == 1;
     if (last_in_capmt) {
         listmgmt = CLM_UPDATE;
-        if (send_capmt(d, capmt, listmgmt, CA_PMT_CMD_ID_NOT_SELECTED, 1))
+        if (send_capmt(d, capmt, CLM_UPDATE, CA_PMT_CMD_ID_NOT_SELECTED, 1))
             LOG("%s: send_capmt failed releasing pmt %d", __FUNCTION__,
                 spmt->id);
     }
@@ -1481,7 +1482,7 @@ static int element_set_certificate(struct cc_ctrl_data *cc_data,
         return 0;
     }
 
-    if (!element_set(cc_data, id, cert_der, cert_len)) {
+    if (!element_set(cc_data, id, cert_der, static_cast<uint32_t>(cert_len))) {
         LOG("can not store element (%d)", id);
         return 0;
     }
@@ -1514,7 +1515,7 @@ static int element_set_hostid_from_certificate(struct cc_ctrl_data *cc_data,
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
         memcpy(hostid, ASN1_STRING_data(data), len);
 #else
-        memcpy(hostid, ASN1_STRING_get0_data(data), len);
+        memcpy(hostid, ASN1_STRING_get0_data(data), static_cast<size_t>(len));
 #endif
     }
 
@@ -1575,9 +1576,8 @@ static unsigned int element_get_req(struct cc_ctrl_data *cc_data, uint8_t *dest,
         return 0;
     }
 
-    dest[0] = id;
-    dest[1] = len >> 8;
-    dest[2] = len;
+    dest[0] = static_cast<uint8_t>(id);
+    copy16(dest, 1, len);
 
     return 3 + len;
 }
@@ -1603,8 +1603,8 @@ static uint8_t *element_get_ptr(struct cc_ctrl_data *cc_data, unsigned int id) {
     return e->data;
 }
 
-void get_authdata_filename(char *dest, size_t len, unsigned int slot,
-                           char *ci_name) {
+void get_authdata_filename(char *dest, size_t len, int slot,
+                           const char *ci_name) {
     char cin[128];
     /* add module name to slot authorization bin file */
     memset(cin, 0, sizeof(cin));
@@ -1620,8 +1620,8 @@ void get_authdata_filename(char *dest, size_t len, unsigned int slot,
     snprintf(dest, len, "%s/ci_auth_%s_%d.bin", opts.cache_dir, cin, slot);
 }
 
-static int get_authdata(uint8_t *host_id, uint8_t *dhsk, uint8_t *akh,
-                        unsigned int slot, unsigned int index, char *ci_name) {
+static int get_authdata(uint8_t *host_id, uint8_t *dhsk, uint8_t *akh, int slot,
+                        unsigned int index, char *ci_name) {
     char filename[FILENAME_MAX];
     int fd;
     uint8_t chunk[8 + 256 + 32];
@@ -1657,9 +1657,8 @@ static int get_authdata(uint8_t *host_id, uint8_t *dhsk, uint8_t *akh,
     return 0;
 }
 
-static int write_authdata(unsigned int slot, const uint8_t *host_id,
-                          const uint8_t *dhsk, const uint8_t *akh,
-                          char *ci_name) {
+static int write_authdata(int slot, const uint8_t *host_id, const uint8_t *dhsk,
+                          const uint8_t *akh, char *ci_name) {
     char filename[FILENAME_MAX];
     int fd;
     uint8_t buf[(8 + 256 + 32) * MAX_PAIRS];
@@ -1667,7 +1666,7 @@ static int write_authdata(unsigned int slot, const uint8_t *host_id,
     unsigned int i;
 
     for (entries = 0; entries < MAX_PAIRS; entries++) {
-        int offset = (8 + 256 + 32) * entries;
+        size_t offset = (8 + 256 + 32) * entries;
         if (!get_authdata(&buf[offset], &buf[offset + 8],
                           &buf[offset + 8 + 256], slot, entries, ci_name))
             break;
@@ -1713,7 +1712,7 @@ static int write_authdata(unsigned int slot, const uint8_t *host_id,
         entries = 3;
 
     for (i = 0; i < entries; i++) {
-        int offset = (8 + 256 + 32) * i;
+        size_t offset = (8 + 256 + 32) * i;
         if (write(fd, &buf[offset], (8 + 256 + 32)) != (8 + 256 + 32)) {
             LOG("error in write");
             close(fd);
@@ -1742,7 +1741,8 @@ static int data_initialize(ca_device_t *d) {
 
     /* set uri versions */
     memset(buf, 0, 32);
-    buf[31] = d->uri_mask; // uri version bitmask, e.g. 1-3
+    buf[31] =
+        static_cast<uint8_t>(d->uri_mask); // uri version bitmask, e.g. 1-3
     LOG("uri version bitmask set to '%d'", buf[31]);
     if (!element_set(&d->private_data, 29, buf, 32)) {
         LOG("can not set uri_versions in elements");
@@ -1798,8 +1798,8 @@ static int sac_check_auth(const uint8_t *data, unsigned int len, uint8_t *sak) {
     return 1;
 }
 
-static int sac_gen_auth(uint8_t *out, uint8_t *in, unsigned int len,
-                        uint8_t *sak) {
+static unsigned int sac_gen_auth(uint8_t *out, uint8_t *in, unsigned int len,
+                                 uint8_t *sak) {
     struct aes_xcbc_mac_ctx ctx;
 
     aes_xcbc_mac_init(&ctx, sak);
@@ -1915,8 +1915,8 @@ static int check_ci_certificates(struct cc_ctrl_data *cc_data) {
             open(ci_cert_file, O_CREAT | O_WRONLY | O_TRUNC, S_IRUSR | S_IWUSR);
         if (fd < 0)
             LOG_AND_RETURN(-1, "opening %s for writing failed", ci_cert_file);
-        int ret = write(fd, element_get_ptr(cc_data, 16),
-                        element_get_buf(cc_data, NULL, 16));
+        ssize_t ret = write(fd, element_get_ptr(cc_data, 16),
+                            element_get_buf(cc_data, NULL, 16));
         if (ret)
             LOG("write cert failed");
         close(fd);
@@ -2232,19 +2232,19 @@ static int data_req_handle_new(ca_device_t *d, unsigned int id) {
     return 0;
 }
 
-static int data_get_loop(ca_device_t *d, struct cc_ctrl_data *cc_data,
-                         const unsigned char *data, unsigned int datalen,
-                         unsigned int items) {
+static unsigned int data_get_loop(ca_device_t *d, struct cc_ctrl_data *cc_data,
+                                  const unsigned char *data,
+                                  unsigned int datalen, unsigned int items) {
     unsigned int i;
-    int dt_id, dt_len;
+    unsigned int dt_id, dt_len;
     unsigned int pos = 0;
 
     for (i = 0; i < items; i++) {
         if (pos + 3 > datalen)
             return 0;
         dt_id = data[pos++];
-        dt_len = data[pos++] << 8;
-        dt_len |= data[pos++];
+        copy16r(dt_len, data, pos);
+        pos += 2;
         if (pos + dt_len > datalen)
             return 0;
         LOGM("set element(dt_id) %d dt_len = %i", dt_id, dt_len);
@@ -2259,16 +2259,16 @@ static int data_get_loop(ca_device_t *d, struct cc_ctrl_data *cc_data,
     return pos;
 }
 
-static int data_req_loop(ca_device_t *d, unsigned char *dest,
-                         const unsigned char *data, unsigned int datalen,
-                         unsigned int items) {
-    int dt_id;
+static unsigned int data_req_loop(ca_device_t *d, unsigned char *dest,
+                                  const unsigned char *data,
+                                  unsigned int datalen, unsigned int items) {
+    unsigned int dt_id;
     unsigned int i;
-    int pos = 0;
-    int len;
+    unsigned int pos = 0;
+    unsigned int len;
 
     if (items > datalen)
-        return -1;
+        return 0;
 
     for (i = 0; i < items; i++) {
         dt_id = *data++;
@@ -2279,7 +2279,7 @@ static int data_req_loop(ca_device_t *d, unsigned char *dest,
         len = element_get_req(&d->private_data, dest, dt_id);
         if (len == 0) {
             LOG("cannot get element %d", dt_id);
-            return -1;
+            return 0;
         }
         pos += len;
         dest += len;
@@ -2298,8 +2298,8 @@ void ci_ccmgr_cc_open_cnf(ca_session_t *session) {
     ca_write_apdu(session, CIPLUS_TAG_CC_OPEN_CNF, &bitmap, 1);
 }
 
-static int ci_ccmgr_cc_sac_send(ca_session_t *session, uint32_t tag,
-                                uint8_t *data, unsigned int pos) {
+static int ci_ccmgr_cc_sac_send(ca_session_t *session, int tag, uint8_t *data,
+                                unsigned int pos) {
     struct cc_ctrl_data *cc_data = &session->ca->private_data;
     if (pos < 8)
         return 0;
@@ -2323,22 +2323,22 @@ static int ci_ccmgr_cc_sac_data_req(ca_session_t *session, const uint8_t *data,
                                     unsigned int len) {
     ca_device_t *d = session->ca;
     struct cc_ctrl_data *cc_data = &d->private_data;
-    uint32_t data_cnf_tag = CIPLUS_TAG_CC_SAC_DATA_CNF;
+    int data_cnf_tag = CIPLUS_TAG_CC_SAC_DATA_CNF;
     uint8_t dest[2048];
-    uint8_t tmp[len];
     uint8_t id_bitmask, dt_nr;
     unsigned int serial;
-    int answ_len;
-    int pos = 0;
+    unsigned int answ_len;
+    unsigned int pos = 0;
     unsigned int rp = 0;
 
     if (len < 10)
         return 0;
     //_hexdump("ci_ccmgr_cc_sac_data_req:", data, len);
 
-    memcpy(tmp, data, 8);
+    std::vector<uint8_t> tmp(len);
+    memcpy(tmp.data(), data, 8);
     sac_crypt(&tmp[8], &data[8], len - 8, cc_data->sek, AES_DECRYPT);
-    data = tmp;
+    data = tmp.data();
 
     if (!sac_check_auth(data, len, cc_data->sak)) {
         LOG("check_auth of message failed");
@@ -2390,7 +2390,7 @@ static void ci_ccmgr_cc_sac_sync_req(ca_session_t *session,
     int sync_cnf_tag = CIPLUS_TAG_CC_SAC_SYNC_CNF;
     uint8_t dest[64];
     unsigned int serial;
-    int pos = 0;
+    unsigned int pos = 0;
 
     //      hexdump("cc_sac_sync_req: ", (void *)data, len);
 
@@ -2418,9 +2418,9 @@ static int ci_ccmgr_cc_data_req(ca_session_t *session, const uint8_t *data,
     ca_device_t *d = session->ca;
     struct cc_ctrl_data *cc_data = &d->private_data;
     uint8_t dest[2048 * 2];
-    int dt_nr;
-    int id_bitmask;
-    int answ_len;
+    uint8_t dt_nr;
+    uint8_t id_bitmask;
+    unsigned int answ_len;
     unsigned int rp = 0;
 
     if (len < 2)
@@ -2483,13 +2483,13 @@ static int CIPLUS_APP_CC_handler(ca_session_t *session, int tag, uint8_t *data,
         ci_ccmgr_cc_open_cnf(session);
         break;
     case CIPLUS_TAG_CC_DATA_REQ: // 03
-        ci_ccmgr_cc_data_req(session, data, len);
+        ci_ccmgr_cc_data_req(session, data, static_cast<unsigned int>(len));
         break;
     case CIPLUS_TAG_CC_SYNC_REQ: // 05
         ci_ccmgr_cc_sync_req(session);
         break;
     case CIPLUS_TAG_CC_SAC_DATA_REQ: // 07
-        ci_ccmgr_cc_sac_data_req(session, data, len);
+        ci_ccmgr_cc_sac_data_req(session, data, static_cast<unsigned int>(len));
         break;
     case CIPLUS_TAG_CC_SAC_SYNC_REQ: // 09
         ci_ccmgr_cc_sac_sync_req(session, data);
@@ -2722,19 +2722,16 @@ static int CIPLUS_APP_UPGR_handler(ca_session_t *session, int tag,
 static int ca_send_datetime(ca_device_t *d) {
     unsigned char msg[5];
     time_t tv = time(NULL);
-    uint16_t mjd = tv / 86400 + 40587; // mjd 01.01.1970 is 40587
-    tv %= 86400;
-    uint8_t hh = tv / 3600;
-    tv %= 3600;
-    uint8_t mm = tv / 60;
-    tv %= 60;
-    uint8_t ss = (uint8_t)tv;
+    // hours, minutes and seconds go out as BCD bytes
+    auto bcd = [](time_t v) {
+        return static_cast<uint8_t>(((v / 10) << 4) | (v % 10));
+    };
 
-    msg[0] = (mjd >> 8) & 0xff;
-    msg[1] = mjd & 0xff;
-    msg[2] = ((hh / 10) << 4) | (hh % 10);
-    msg[3] = ((mm / 10) << 4) | (mm % 10);
-    msg[4] = ((ss / 10) << 4) | (ss % 10);
+    copy16(msg, 0, tv / 86400 + 40587); // mjd 01.01.1970 is 40587
+    tv %= 86400;
+    msg[2] = bcd(tv / 3600);
+    msg[3] = bcd(tv / 60 % 60);
+    msg[4] = bcd(tv % 60);
     ca_session_t *s =
         find_session_for_resource(d, EN50221_APP_DATETIME_RESOURCEID);
     if (s) {
@@ -2758,7 +2755,8 @@ static int APP_RM_create(ca_session_t *session, int) {
 }
 
 int APP_RM_handler(ca_session_t *session, int resource, uint8_t *, int) {
-    int resource_ids[100], rlen;
+    uint32_t resource_ids[100];
+    size_t rlen;
     switch (resource) {
     case TAG_PROFILE:
         ca_write_apdu(session, TAG_PROFILE_CHANGE, NULL, 0);
@@ -2807,7 +2805,7 @@ static int CIPLUS_APP_AI_handler(ca_session_t *session, int resource_id,
         // The name length comes from the CAM: bound it by the data and ci_name
         int dl = std::min({static_cast<int>(data[5]), data_length - 6,
                            static_cast<int>(sizeof(d->ci_name)) - 1});
-        memcpy(d->ci_name, data + 6, dl);
+        memcpy(d->ci_name, data + 6, static_cast<size_t>(dl));
         if (dl > 0)
             d->ci_name[dl] = '\0'; // NOSONAR
         LOG("  CAM Name: %s (%d)", d->ci_name, dl);
@@ -2847,7 +2845,7 @@ int APP_CA_handler(ca_session_t *session, int resource, uint8_t *data,
                    int len) {
     ca_device_t *d = session->ca;
     uint32_t i = 0;
-    uint32_t caid_count = len / 2;
+    int caid_count = len / 2;
 
     switch (resource) {
     case TAG_CA_INFO:
@@ -2862,14 +2860,15 @@ int APP_CA_handler(ca_session_t *session, int resource, uint8_t *data,
         // Ignore CAM reported values if user has forced specific CAIDs
         if (!d->has_forced_caids) {
             d->caids = 0;
-            for (i = 0; i < caid_count; i++) {
+            for (int j = 0; j < caid_count; j++) {
                 if (d->caids >= MAX_CAID) {
                     LOG("CA%d: CAM reported more CAIDs than MAX_CAID limit "
                         "(%d), truncating",
                         d->id, MAX_CAID);
                     break;
                 }
-                int caid = (data[i * 2 + 0] << 8) | data[i * 2 + 1];
+                uint16_t caid;
+                copy16r(caid, data, j * 2);
                 d->caid[d->caids++] = caid;
             }
         }
@@ -2904,8 +2903,9 @@ int APP_DateTime_handler(ca_session_t *session, int resource, uint8_t *buffer,
 
 int ca_app_mmi_answ(ca_session_t *session, uint8_t answ_id, uint8_t *text,
                     uint32_t text_count) {
-    uint8_t buf[10 + text_count];
-    int len = 1 + text_count;
+    std::vector<uint8_t> answ(text_count + size_t{10});
+    uint8_t *buf = answ.data();
+    size_t len = 1 + text_count;
 
     buf[0] = answ_id;
 
@@ -2996,10 +2996,7 @@ int APP_MMI_handler(ca_session_t *session, int resource, uint8_t *buffer,
             DEBUGM("[%d] %d bytes text", i, textlen);
             if ((data + textlen) > max)
                 break;
-            char str[textlen + 1];
-            memcpy(str, data, textlen);
-            str[textlen] = '\0';
-            LOG("[UI %d] %s", i, str);
+            LOG("[UI %d] %.*s", i, textlen, data);
             data += textlen;
         }
         LOG("======================")
@@ -3120,8 +3117,8 @@ ca_session_t *find_session_for_resource(ca_device_t *d, int resource) {
     return NULL;
 }
 
-int populate_resources(ca_device_t *d, int *resource_ids) {
-    uint32_t i;
+size_t populate_resources(ca_device_t *d, uint32_t *resource_ids) {
+    size_t i;
     LOG("Populating %s resources", d->force_ci ? "CI" : "CI+");
     for (i = 0;
          i < sizeof(application_handler) / sizeof(application_handler[0]);
@@ -3130,7 +3127,7 @@ int populate_resources(ca_device_t *d, int *resource_ids) {
         if (d->force_ci && resource == TS101699_APP_RM_RESOURCEID) {
             break;
         }
-        resource_ids[i] = htonl(resource);
+        resource_ids[i] = htonl(static_cast<uint32_t>(resource));
     }
     return i;
 }
@@ -3156,18 +3153,17 @@ int asn_1_decode(int *length, unsigned char *asn_1_array) {
     return -1;
 }
 
-int asn_1_encode(int length, uint8_t *asn_1_array) {
+size_t asn_1_encode(size_t length, uint8_t *asn_1_array) {
     if (length < 0x80) {
         asn_1_array[0] = length & 0x7f;
         return 1;
     } else if (length < 0x100) {
         asn_1_array[0] = 0x81;
-        asn_1_array[1] = length;
+        asn_1_array[1] = static_cast<uint8_t>(length);
         return 2;
     } else {
         asn_1_array[0] = 0x82;
-        asn_1_array[1] = length >> 8;
-        asn_1_array[2] = length;
+        copy16(asn_1_array, 1, length);
         return 3;
     }
 
@@ -3177,25 +3173,26 @@ int asn_1_encode(int length, uint8_t *asn_1_array) {
 // Enigma handles only session data, that's why the method just writes the SPDU
 // to the CA device For dvbca codepath, this wraps the session data into a TPDU
 // and sends it to the device.
-int ca_write_tpdu(ca_device_t *d, int tag, uint8_t *buf, int len) {
+int ca_write_tpdu(ca_device_t *d, uint8_t tag, uint8_t *buf, size_t len) {
     if (opts.enigma) {
 
-        int written;
+        ssize_t written;
         do {
             written = write(d->fd, buf, len);
         } while (written == -1 && errno == EINTR);
-        if (written != len) {
-            LOG("incomplete write to CA %d fd %d, expected %d got %d, errno %d "
-                "%s",
+        if (written != static_cast<ssize_t>(len)) {
+            LOG("incomplete write to CA %d fd %d, expected %zu got %zd, "
+                "errno %d %s",
                 d->id, d->fd, len, written, errno, strerror(errno));
             return 1;
         }
         return 0;
     }
-    uint8_t p_data[10 + len];
-    int i_size;
-    int slot_id = 0;
-    int connection_id = slot_id + 1;
+    auto tpdu = std::make_unique_for_overwrite<uint8_t[]>(10 + len);
+    uint8_t *p_data = tpdu.get();
+    ptrdiff_t i_size;
+    uint8_t slot_id = 0;
+    uint8_t connection_id = slot_id + 1;
 
     i_size = 0;
     p_data[0] = slot_id;
@@ -3245,13 +3242,14 @@ int ca_write_tpdu(ca_device_t *d, int tag, uint8_t *buf, int len) {
         hexdump("WRITE TPDU: ", p_data, i_size);
     }
 
-    int written;
+    ssize_t written;
     do {
-        written = write(d->fd, p_data, i_size);
+        written = write(d->fd, p_data, static_cast<size_t>(i_size));
     } while (written == -1 && errno == EINTR);
     if (written != i_size) {
         int err = errno;
-        LOG("incomplete write to CA %d fd %d, expected %d got %d, errno %d %s",
+        LOG("incomplete write to CA %d fd %d, expected %td got %zd, errno %d "
+            "%s",
             d->id, d->fd, i_size, written, errno, strerror(errno));
         // this signals the CAM was removed
         if (written == -1 && err == EIO)
@@ -3329,7 +3327,7 @@ void ca_match_reply(ca_session_t *s, int tag) {
 
 // writes session data to the CAM.
 int ca_write_spdu(ca_device_t *d, int session_number, unsigned char tag,
-                  const void *data, int len, const void *apdu, int alen) {
+                  const void *data, size_t len, const void *apdu, size_t alen) {
     unsigned char pkt[4096];
     unsigned char *ptr = pkt;
     memset(pkt, 0xFF, sizeof(pkt));
@@ -3338,8 +3336,8 @@ int ca_write_spdu(ca_device_t *d, int session_number, unsigned char tag,
     if (data)
         memcpy(ptr, data, len);
     ptr += len;
-    *ptr++ = session_number >> 8;
-    *ptr++ = session_number;
+    copy16(ptr, 0, session_number);
+    ptr += 2;
 
     if (apdu)
         memcpy(ptr, apdu, alen);
@@ -3353,23 +3351,23 @@ int ca_write_spdu(ca_device_t *d, int session_number, unsigned char tag,
            tag, ptr - pkt);
     if (ptr > pkt)
         hexdump("WRITE SPDU: ", pkt, ptr - pkt);
-    return ca_write_tpdu(d, T_DATA_LAST, pkt, ptr - pkt);
+    return ca_write_tpdu(d, T_DATA_LAST, pkt, static_cast<size_t>(ptr - pkt));
 }
 
 // write an APDU using the current session
-int ca_write_apdu(ca_session_t *s, int tag, const void *data, int len) {
-    unsigned char pkt[len + 3 + 4];
-    int l;
+int ca_write_apdu(ca_session_t *s, int tag, const void *data, size_t len) {
+    auto apdu = std::make_unique_for_overwrite<unsigned char[]>(len + 3 + 4);
+    unsigned char *pkt = apdu.get();
+    size_t l;
 
-    pkt[0] = (tag >> 16) & 0xFF;
-    pkt[1] = (tag >> 8) & 0xFF;
-    pkt[2] = tag & 0xFF;
+    pkt[0] = static_cast<unsigned char>((tag >> 16) & 0xFF);
+    copy16(pkt, 1, tag);
 
     l = asn_1_encode(len, pkt + 3);
     if (data)
         memcpy(pkt + 3 + l, data, len);
     LOG("ca_write_apdu: CA %d, session %d, name %s, write tag %06X, data "
-        "length %d",
+        "length %zu",
         s->ca->id, s->session_number, s->handler.name, tag, len);
     int rc = ca_write_spdu(s->ca, s->session_number, ST_SESSION_NUMBER, 0, 0,
                            pkt, len + 3 + l);
@@ -3391,7 +3389,7 @@ int ca_read_tpdu(int, void *buf, int buf_len, sockets *ss, int *rb) {
     uint8_t data[4096];
     int len;
     unsigned char *d;
-    len = read(c->fd, data, sizeof(data));
+    len = static_cast<int>(read(c->fd, data, sizeof(data)));
     if (len <= 0) {
         // Spurious wakeup on a live link, otherwise the CAM is gone.
         if (len < 0 &&
@@ -3462,7 +3460,7 @@ int ca_read_tpdu(int, void *buf, int buf_len, sockets *ss, int *rb) {
             break;
         case T_DATA_MORE:
         case T_DATA_LAST:
-            memcpy((char *)buf + *rb, d, asn_data_length);
+            memcpy((char *)buf + *rb, d, static_cast<size_t>(asn_data_length));
             *rb += asn_data_length;
             break;
         case T_SB: {
@@ -3524,15 +3522,16 @@ int ca_read_apdu(ca_session_t *session, uint8_t *buf, int buf_len) {
 // code path
 int ca_read(sockets *s) {
     unsigned char *data;
-    uint32_t resource_identifier;
+    int resource_identifier;
     int session_number = -1;
     ca_device_t *d;
-    char pkt[6];
+    uint8_t pkt[6];
     if (!s || s->sid < 0 || s->sid >= MAX_ADAPTERS || !ca_devices[s->sid])
         return 0;
     data = s->buf;
     d = ca_devices[s->sid];
-    int len, status = 0;
+    int len;
+    uint8_t status = 0;
     hexdump("CAREAD", data, s->rlen);
     int tag = data[0];
     int llen = asn_1_decode(&len, data + 1);
@@ -3696,7 +3695,7 @@ void ca_cmd_watchdog(ca_device_t *d, int64_t now) {
 int ca_read_enigma(int socket, void *buf, int len, sockets *ss, int *rb) {
     if (!ss || !rb || !buf)
         return 0;
-    int rl = read(socket, buf, len);
+    int rl = static_cast<int>(read(socket, buf, static_cast<size_t>(len)));
     *rb = 0;
     if (rl > 0) {
         *rb = rl;
@@ -3752,7 +3751,7 @@ static int ca_slot_get_info(int fd, struct ca_slot_info *info) {
     return ioctl(fd, CA_GET_SLOT_INFO, info);
 }
 
-static void ca_sleep_ms(int ms) { sleep_msec((uint32_t)ms); }
+static void ca_sleep_ms(int ms) { sleep_msec(ms); }
 
 // Returns 0 when ready, 1 on timeout, -1 on io error.
 int ca_reset_and_wait_ready(int fd, struct ca_slot_info *info, int id,
@@ -3846,7 +3845,7 @@ ca_device_t *alloc_ca_device() {
 
 void flush_handle(int fd) {
     uint8_t buf[1024];
-    uint64_t start = getTick();
+    int64_t start = getTick();
     int flags = fcntl(fd, F_GETFL);
     if (!(flags & O_NONBLOCK) && (fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1))
         LOG("Failed to set the handle %d as non blocking", fd);
@@ -3922,7 +3921,7 @@ int dvbca_init_dev(adapter *ad) {
     if (initialized) {
         extern SMutex ca_mask_mutex;
         std::lock_guard<SMutex> mask_lock(ca_mask_mutex);
-        ad->ca_mask |= (1ULL << dvbca_id);
+        ad->ca_mask |= (1 << dvbca_id);
         return TABLES_RESULT_OK;
     }
 
@@ -4006,7 +4005,7 @@ int dvbca_init_dev(adapter *ad) {
     {
         extern SMutex ca_mask_mutex;
         std::lock_guard<SMutex> lock(ca_mask_mutex);
-        ad->ca_mask |= (1ULL << dvbca_id);
+        ad->ca_mask |= (1 << dvbca_id);
     }
 
     set_socket_thread(c->sock, ad->thread);
@@ -4035,6 +4034,7 @@ int dvbca_add_pid(adapter *, SPMT *pmt, int pid) {
 
 SCA_op dvbca = {
     .ca_add_pid = dvbca_add_pid,
+    .ca_del_pid = NULL,
     .ca_add_pmt = dvbca_process_pmt,
     .ca_del_pmt = dvbca_del_pmt,
     .ca_init_dev = dvbca_init_dev,
@@ -4043,7 +4043,7 @@ SCA_op dvbca = {
 };
 
 int ca_reconnect(void *) {
-    int i;
+    size_t i;
     int64_t now = getTick();
     for (i = 0; i < MAX_ADAPTERS; i++) {
         ca_device_t *c = ca_devices[i];
@@ -4053,7 +4053,7 @@ int ca_reconnect(void *) {
         ad = a[i];
         if (!ad || !ad->enabled)
             continue;
-        LOG("Trying to reconnect to CA %d", i);
+        LOG("Trying to reconnect to CA %zu", i);
         if (dvbca_init_dev(ad) == TABLES_RESULT_OK) {
             c = ca_devices[i];
             if (c)
@@ -4193,7 +4193,8 @@ void set_ca_channels(char *o) {
                 caid_sv.data(), caid_sv.data() + caid_sv.size(), caid, 16);
             if (result.ec == std::errc{} && caid > 0) {
                 if (ca_devices[ddci]->caids < MAX_CAID) {
-                    ca_devices[ddci]->caid[ca_devices[ddci]->caids++] = caid;
+                    ca_devices[ddci]->caid[ca_devices[ddci]->caids++] =
+                        static_cast<uint16_t>(caid);
                     ca_devices[ddci]->has_forced_caids = 1;
                     LOG("Forcing CA %d to use CAID %04X", ddci, caid);
                 } else {

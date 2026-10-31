@@ -84,7 +84,7 @@ inline bool starts_with_case_insensitive(std::string_view str,
 
 int check_strs(std::string_view s, const char *const v[], int dv);
 std::string_view header_parameter(const std::vector<std::string_view> &arg,
-                                  int i);
+                                  size_t i);
 char *get_current_timestamp();
 std::string_view strip(std::string_view s);
 void set_signal_handler(char *argv0);
@@ -100,15 +100,15 @@ void join_thread();
 void add_join_thread(pthread_t t);
 void join_exited_threads();
 int init_utils(char *arg0);
-void _hexdump(const char *desc, void *addr, int len);
-uint32_t crc_32(const uint8_t *data, int datalen);
+void _hexdump(const char *desc, void *addr, ptrdiff_t len);
+uint32_t crc_32(const uint8_t *data, ptrdiff_t datalen);
 void _dump_packets(const char *message, unsigned char *b, int len,
                    int packet_offset);
 int buffer_to_ts(uint8_t *dest, int dstsize, uint8_t *src, int srclen,
                  int16_t *cc, int pid);
 void write_buf_to_file(char *file, uint8_t *buf, int len);
 int mkdir_recursive(const char *path);
-void sleep_msec(uint32_t msec);
+void sleep_msec(int msec);
 int get_random(unsigned char *dest, int len);
 void _strncpy(char *dst, const char *src, int len);
 int is_rtsp_response(char *buf, int len);
@@ -136,19 +136,21 @@ std::string iterable_to_string(const Container &container,
     if (DEFAULT_LOG & opts.debug)                                              \
     _hexdump(message, b, len)
 
-#define strlcatf(buf, size, ptr, fmt...)                                       \
+#define strlcatf(buf, size, ptr, ...)                                          \
     do {                                                                       \
-        int __r = snprintf((buf) + ptr, (size) - ptr, fmt);                    \
+        const int strlcatf_size = static_cast<int>(size);                      \
+        int __r =                                                              \
+            snprintf((buf) + ptr, static_cast<size_t>(strlcatf_size - ptr),    \
+                     __VA_ARGS__);                                             \
         ptr += __r;                                                            \
-        if (ptr >= (int)(size)) {                                              \
+        if (ptr >= strlcatf_size) {                                            \
             LOG("%s:%d buffer size too small (%d)", __FUNCTION__, __LINE__,    \
-                (int)(size));                                                  \
-            ptr = (size) - 1;                                                  \
+                strlcatf_size);                                                \
+            ptr = strlcatf_size - 1;                                           \
         }                                                                      \
     } while (0)
 
-#define strcatf(buf, ptr, fmt, ...)                                            \
-    strlcatf(buf, (int)(sizeof(buf) - 1), ptr, fmt, ##__VA_ARGS__)
+#define strcatf(buf, ptr, ...) strlcatf(buf, sizeof(buf) - 1, ptr, __VA_ARGS__)
 
 #define safe_strncpy(a, b) _strncpy(a, b, sizeof(a))
 

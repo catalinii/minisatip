@@ -78,7 +78,7 @@ const char *listmgmt_str[] = {"CLM_MORE", "CLM_FIRST", "CLM_LAST",
 static inline SPMT *get_pmt_for_existing_pid(SPid *p) {
     SPMT *pmt = NULL;
     if (p && p->pmt >= 0 && p->pmt < (int)pmts.size()) {
-        SPMT *cand = pmts[p->pmt];
+        SPMT *cand = pmts[static_cast<size_t>(p->pmt)];
         if (cand && cand->enabled)
             pmt = cand;
     }
@@ -126,7 +126,7 @@ mark_padding_header(uint8_t *b) { // Generate a clean packet without any payload
         for (i = 0; i + payload < 188; i++)
             b[payload + i] = 0xFF;
 
-        b[4] = i + payload - 5;
+        b[4] = static_cast<uint8_t>(i + payload - 5);
 
         if (payload < 5) {
             b[5] = 0; // Set clean Adaptation field header
@@ -153,7 +153,7 @@ mark_pcr_only(uint8_t *b) { // Generate a clean packet with only the Adaptation
     }
 
     // Convert the Payload Data in Adaptation Stuffing
-    int i;
+    uint8_t i;
     int payload = get_adaptation_len(b);
     for (i = 0; i + payload < 188; i++)
         b[payload + i] = 0xFF;
@@ -314,10 +314,12 @@ int del_filter(int id) {
     int pid;
     int aid = -1;
     LOG("deleting filter %d", id);
-    if (id < 0 || id >= MAX_FILTERS || !filters[id])
+    if (id < 0 || id >= MAX_FILTERS)
         return 0;
 
-    f = filters[id];
+    f = filters[static_cast<size_t>(id)];
+    if (!f)
+        return 0;
     std::lock_guard<SMutex> lock(filters_mutex);
     if (!f->enabled) {
         return 0;
@@ -353,14 +355,14 @@ int del_filter(int id) {
             }
     }
     int last = -1;
-    for (int j = (int)filters.size() - 1; j >= 0; --j) {
-        SFilter *o = filters[j];
+    for (size_t j = filters.size(); j > 0; --j) {
+        SFilter *o = filters[j - 1];
         if (o && o->enabled) {
             last = o->id;
             break;
         }
     }
-    filters.shrink_to(last + 1);
+    filters.shrink_to(static_cast<size_t>(last + 1));
     f->pid = -1;
     f->allocated = false;
     LOG("deleted filter %d, ad %d, pid %d, max filters %d", id, aid, pid,
@@ -603,7 +605,8 @@ void clear_cw_for_pmt(int pmt_id, int parity) {
 #define PID_PARITY_CHANGE 0x80
 int wait_pusi(adapter *ad, int len) {
     uint8_t pids[8192], parity[8192];
-    int i, cp, op;
+    int i;
+    uint8_t cp, op;
     memset(pids, 0, sizeof(pids));
     memset(parity, 0, sizeof(parity));
     for (i = 0; i < MAX_PIDS; i++)
@@ -627,7 +630,7 @@ int wait_pusi(adapter *ad, int len) {
             }
             // pusi
             if (b[1] & 0x40) {
-                pids[pid] &= ~PID_PARITY_CHANGE;
+                pids[pid] &= ~PID_PARITY_CHANGE & 0xFF;
             }
         }
     }
@@ -647,31 +650,34 @@ void disable_cw(int pmt_id) {
     }
 }
 
-void cw_decrypt_stream(SCW *cw, SPMT_batch *batch, int len) {
-    SPMT_batch out[len + 1];
-    int i;
+void cw_decrypt_stream(SCW *cw, SPMT_batch *batch, size_t len) {
+    std::vector<SPMT_batch> outv(len + 1);
+    SPMT_batch *out = outv.data();
+    size_t i;
     for (i = 0; i < len; i++) {
         int adapt_len = get_adaptation_len(batch[i].data);
         out[i].data = batch[i].data + adapt_len;
-        out[i].len = DVB_FRAME - adapt_len;
+        out[i].len = static_cast<unsigned int>(DVB_FRAME - adapt_len);
     }
-    cw->op->decrypt_stream(cw, out, len);
+    cw->op->decrypt_stream(cw, out, static_cast<int>(len));
 }
 
 // Return 0 if the packet was decrypted successfully, 1 otherwise
-int test_decrypt_packet(SCW *cw, SPMT_batch *start, int len) {
-    uint8_t data[len * 188 + 256];
-    int i = 0;
+int test_decrypt_packet(SCW *cw, SPMT_batch *start, size_t len) {
+    std::vector<uint8_t> datav(len * 188 + 256);
+    uint8_t *data = datav.data();
+    size_t i = 0;
     uint32_t pos = 0;
-    LOGM("Testing len %d, CW: %s", len, cw_to_string(cw, (char *)data));
-    SPMT_batch batch[len + 1];
+    LOGM("Testing len %zu, CW: %s", len, cw_to_string(cw, (char *)data));
+    std::vector<SPMT_batch> batchv(len + 1);
+    SPMT_batch *batch = batchv.data();
     for (i = 0; i < len; i++) {
         hexdump("test_decrypt_packet before: ", start[i].data, start[i].len);
         memcpy(data + pos, start[i].data, start[i].len);
         batch[i].data = data + pos;
         batch[i].len = start[i].len;
         pos += start[i].len;
-        if (pos > sizeof(data))
+        if (pos > datav.size())
             break;
     }
 
@@ -687,9 +693,9 @@ int test_decrypt_packet(SCW *cw, SPMT_batch *start, int len) {
 }
 
 // copy also the TS to prevent poluting the adapter buffer
-int fill_packet_start_indicator(SPMT_batch *all, int max_all, SPMT_batch *start,
-                                int max_start) {
-    int i = 0, s = 0;
+size_t fill_packet_start_indicator(SPMT_batch *all, size_t max_all,
+                                   SPMT_batch *start, size_t max_start) {
+    size_t i = 0, s = 0;
     for (i = 0; i < max_all; i++) {
         if ((all[i].data[1] & 0xC0) == 0x40) {
             start[s].data = all[i].data;
@@ -718,7 +724,7 @@ void update_cw(SPMT *pmt) {
     int64_t ctime = getTick();
     int i = 0;
     SPMT_batch start[10];
-    int len = fill_packet_start_indicator(pmt->batch, pmt->blen, start, 9);
+    size_t len = fill_packet_start_indicator(pmt->batch, pmt->blen, start, 9);
     int validated = (len > 0);
 
     // If no CW exists and we can validate the CW, try to find one again
@@ -744,7 +750,7 @@ void update_cw(SPMT *pmt) {
             if (ctime > cws[i]->expiry)
                 continue;
             if (len && !test_decrypt_packet(cws[i], start, len)) {
-                LOGM("correct CW found (len %d): %s", len,
+                LOGM("correct CW found (len %zu): %s", len,
                      cw_to_string(cws[i], buf));
                 cw = cws[i];
                 break;
@@ -772,8 +778,8 @@ void update_cw(SPMT *pmt) {
         }
 
     LOGL(old_cw == cw ? DEFAULT_LOG : 1,
-         "found CW: %d %s for %s PMT %d, old cw %d, packets %d, parity %d, pid "
-         "%d: %s",
+         "found CW: %d %s for %s PMT %d, old cw %d, packets %zu, parity %d, "
+         "pid %d: %s",
          cw ? cw->id : -1, validated ? "[validated]" : "[not validated]",
          pmt->name, pmt->id, old_cw ? old_cw->id : -1, pmt->blen,
          pmt->parity.load(), pmt->pid, cw_to_string(cw, buf));
@@ -913,7 +919,7 @@ int send_cw(int pmt_id, int algo, int parity, uint8_t *cw, uint8_t *iv,
 // If CW not found, tries to find one
 // pmt->blen needs to be 0 at the end of this
 int decrypt_batch(SPMT *pmt) {
-    int i;
+    size_t i;
     SCW *old_cw = pmt->cw.load();
 
     if (pmt->blen <= 0) {
@@ -930,8 +936,8 @@ int decrypt_batch(SPMT *pmt) {
 
     int pid = PID_FROM_TS(pmt->batch[0].data);
     cw_decrypt_stream(cw, pmt->batch, pmt->blen);
-    LOGM("pmt: decrypted pmt %d, packets %d, CW %d, old CW %d, parity %d at "
-         "len %d, channel_id %d (pid %d)",
+    LOGM("pmt: decrypted pmt %d, packets %zu, CW %d, old CW %d, parity %d at "
+         "len %zu, channel_id %d (pid %d)",
          pmt->id, pmt->blen, cw->id, old_cw ? old_cw->id : -1,
          pmt->parity.load(), pmt->blen, pmt->sid, pid);
     for (i = 0; i < pmt->blen; i++)
@@ -950,13 +956,11 @@ int pmt_decrypt_stream(adapter *ad) {
     unsigned char *b;
     SPid *p = NULL;
     int pid;
-    int cp;
+    int8_t cp;
     int rlen = ad->rlen;
     int64_t now = getTick();
-    int pmt_id[rlen / DVB_FRAME + 10];
-    int pmt_ids = 0;
-
-    memset(pmt_id, -1, sizeof(pmt_id));
+    std::vector<int> pmt_id(static_cast<size_t>(rlen / DVB_FRAME + 10), -1);
+    size_t pmt_ids = 0;
 
     for (i = 0; i < rlen; i += DVB_FRAME) {
         b = ad->buf + i;
@@ -991,13 +995,9 @@ int pmt_decrypt_stream(adapter *ad) {
                 disable_cw(pmt->id);
             }
             if (!pmt->batch) {
-                int len =
-                    sizeof(pmt->batch[0]) * (opts.adapter_buffer / 188 + 100);
-                pmt->batch = (SPMT_batch *)alloca(len);
-                if (!pmt->batch) {
-                    LOG0("Failed to allocate batch with size %d in the stack",
-                         len);
-                }
+                pmt->batch_buffer.resize(
+                    static_cast<size_t>(opts.adapter_buffer / 188 + 100));
+                pmt->batch = pmt->batch_buffer.data();
             }
 
             pmt->batch[pmt->blen].data = b;
@@ -1007,8 +1007,8 @@ int pmt_decrypt_stream(adapter *ad) {
     }
 
     // decrypt everything that's left
-    for (int id : std::span(pmt_id, pmt_ids)) {
-        pmt = pmts[id];
+    for (int id : std::span(pmt_id).first(pmt_ids)) {
+        pmt = pmts[static_cast<size_t>(id)];
         if (pmt && pmt->blen > 0)
             decrypt_batch(pmt);
         if (pmt && pmt->batch != NULL)
@@ -1665,7 +1665,7 @@ int pmt_del(int id) {
 }
 
 // Frees owned sub-objects: CA entries plus the start maps.
-// batch is stack memory, cw points into the CW pool: untouched.
+// batch points into batch_buffer, cw into the CW pool: untouched.
 struct_pmt::~struct_pmt() {
     for (int j = 0; j < MAX_CAID; j++)
         delete ca[j];
@@ -1806,7 +1806,7 @@ int assemble_normal(SFilter *f, uint8_t *b) {
                        "%02X %02X %02X %02X %02X]",
                        f->pos, pid, b[0], b[1], b[2], b[3], b[4], b[5]);
 
-    memcpy(f->data + f->pos, b + start, left);
+    memcpy(f->data + f->pos, b + start, static_cast<size_t>(left));
     f->pos += left;
 
     f->len = ((f->data[1] & 0xF) << 8) + f->data[2];
@@ -1990,7 +1990,7 @@ int process_pat(int filter, unsigned char *b, int len, void *opaque) {
     return 0;
 }
 
-int pmt_caid_exist(SPMT *pmt, uint16_t caid, uint16_t capid) {
+int pmt_caid_exist(SPMT *pmt, int caid, int capid) {
     int i;
 
     for (i = 0; i < pmt->caids; i++) {
@@ -2011,8 +2011,7 @@ int is_ac3_es(unsigned char *es, int len) {
     return isAC3;
 }
 
-void pmt_add_caid(SPMT *pmt, uint16_t caid, uint16_t capid, uint8_t *data,
-                  int len) {
+void pmt_add_caid(SPMT *pmt, int caid, int capid, uint8_t *data, int len) {
     // Whole function: teardown races both the descriptor append
     // below and the mask reset, so cover both with one guard.
     std::lock_guard<SMutex> lock(pmt->mutex);
@@ -2121,10 +2120,13 @@ void pmt_add_stream_pid_descriptors(SPMT *pmt, SStreamPid &sp,
     }
 }
 
-int pmt_add_stream_pid(SPMT *pmt, int pid, int type, bool is_audio,
-                       bool is_video) {
-    pmt->stream_pids.push_back(
-        {.type = type, .pid = pid, .is_audio = is_audio, .is_video = is_video});
+size_t pmt_add_stream_pid(SPMT *pmt, int pid, uint8_t type, bool is_audio,
+                          bool is_video) {
+    pmt->stream_pids.push_back({.type = type,
+                                .pid = pid,
+                                .is_audio = is_audio,
+                                .is_video = is_video,
+                                .descriptors = {}});
 
     return pmt->stream_pids.size() - 1;
 }
@@ -2132,7 +2134,8 @@ int pmt_add_stream_pid(SPMT *pmt, int pid, int type, bool is_audio,
 int process_pmt(int filter, unsigned char *b, int, void *opaque) {
     int pi_len = 0, isAC3, pmt_len = 0, i, es_len, ver, pcr_pid = 0;
     unsigned char *pmt_b, *pi;
-    int pid, spid, stype, sid;
+    int pid, spid, sid;
+    uint8_t stype;
     SPid *p;
     SFilter *f;
     adapter *ad = NULL;
@@ -2225,7 +2228,7 @@ int process_pmt(int filter, unsigned char *b, int, void *opaque) {
             (stype == 2) || (stype == 27) || (stype == 36) || (stype == 15);
         bool is_audio = isAC3 || (stype == 3) || (stype == 4) || (stype == 17);
 
-        int stream_pid_id =
+        size_t stream_pid_id =
             pmt_add_stream_pid(pmt, spid, stype, is_audio, is_video);
 
         LOG("PMT pid %d - stream pid %04X (%d), type %d%s, es_len %d, pos "
@@ -2244,9 +2247,8 @@ int process_pmt(int filter, unsigned char *b, int, void *opaque) {
             continue;
 
         // Add stream-level descriptors from elementary stream info
-        if (stream_pid_id >= 0)
-            pmt_add_stream_pid_descriptors(pmt, pmt->stream_pids[stream_pid_id],
-                                           pmt_b + i + 5, es_len);
+        pmt_add_stream_pid_descriptors(pmt, pmt->stream_pids[stream_pid_id],
+                                       pmt_b + i + 5, es_len);
     }
     // Add the PCR pid if it's independent
     if (pcr_pid > 0 && pcr_pid < 8191)
@@ -2323,7 +2325,7 @@ int process_sdt(int, unsigned char *sdt, int, void *opaque) {
             if (c[0] == 0x48) {
                 pmt->sdt_service_type = c[2];
                 if (!pmt->name[0]) {
-                    int name_size = sizeof(pmt->name) - 1;
+                    size_t name_size = sizeof(pmt->name) - 1;
                     c += 3;
                     dvb_get_string(pmt->provider, name_size, c + 1, c[0]);
                     c += c[0] + 1;
@@ -2464,14 +2466,15 @@ int pmt_add_ca_descriptor(SPMT *pmt, uint8_t *buf, int buf_len,
             continue;
         }
 #endif
-        int private_data_len = pmt->ca[i]->private_data.size();
+        int private_data_len =
+            static_cast<int>(pmt->ca[i]->private_data.size());
         if (len + 6 + private_data_len > buf_len) {
             LOG("PMT %d CA descriptor %d does not fit, truncating at %d",
                 pmt->id, i, len);
             break;
         }
         buf[len] = 0x09;
-        buf[len + 1] = 0x04 + private_data_len;
+        buf[len + 1] = static_cast<uint8_t>(0x04 + private_data_len);
         copy16(buf, len + 2, pmt->ca[i]->id);
         copy16(buf, len + 4, pmt->ca[i]->pid);
         std::copy_n(pmt->ca[i]->private_data.data(), private_data_len,

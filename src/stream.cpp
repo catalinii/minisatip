@@ -62,18 +62,11 @@ SMutex bw_mutex;
 extern int tuner_s2, tuner_t, tuner_c, tuner_t2, tuner_c2;
 int pmt_process_stream(adapter *ad);
 
-streams *get_stream(int i) {
-    if (i < 0 || i >= MAX_STREAMS)
-        return NULL;
-    streams *sid = streams_pool[i];
-    return (sid && sid->enabled) ? sid : NULL;
-}
+streams *get_stream(int i) { return get_sid_nw(i); }
 
 streams *get_sid1(int sid, const char *file, int line) {
-    streams *s = NULL;
-    if (sid >= 0 && sid < MAX_STREAMS)
-        s = streams_pool[sid];
-    if (!s || s->enabled == 0) {
+    streams *s = get_sid_nw(sid);
+    if (!s) {
         LOG("%s:%d get_sid returns NULL for s_id = %d", file, line, sid);
         return NULL;
     }
@@ -99,7 +92,7 @@ char *describe_streams(sockets *s, std::string_view req, char *sbuf, int size) {
     is_ipv6 = strchr(localhost, ':') != NULL;
 
     snprintf(
-        sbuf, size - 1,
+        sbuf, static_cast<size_t>(size - 1),
         "v=0\r\no=- %010d %010d IN %s %s\r\ns=SatIPServer:1 %d,%d,%d\r\nt=0 "
         "0\r\n",
         sidf, sidf, is_ipv6 ? "IP6" : "IP4", localhost, tuner_s2,
@@ -117,7 +110,7 @@ char *describe_streams(sockets *s, std::string_view req, char *sbuf, int size) {
 
     if (do_all) {
         for (streams *sid2 : streams_pool) {
-            int slen = strlen(sbuf);
+            int slen = static_cast<int>(strlen(sbuf));
             streams_enabled++;
             strlcatf(
                 sbuf, size, slen,
@@ -132,7 +125,7 @@ char *describe_streams(sockets *s, std::string_view req, char *sbuf, int size) {
         }
     }
     if (!streams_enabled) {
-        int slen = strlen(sbuf);
+        int slen = static_cast<int>(strlen(sbuf));
         int s_id = 1;
         char *tp;
         if (sid) {
@@ -350,10 +343,12 @@ int close_stream_for_socket(sockets *s) {
 
 int close_stream(int i) {
     LOG("closing stream %d", i);
-    if (i < 0 || i >= MAX_STREAMS || !streams_pool[i])
+    if (i < 0 || i >= MAX_STREAMS)
         return 0;
 
-    streams *sid = streams_pool[i];
+    streams *sid = streams_pool[static_cast<size_t>(i)];
+    if (!sid)
+        return 0;
     int ad, rsock_id, type, rtcp_sock, rtcp, st_sock, rsock;
     [[maybe_unused]] int srt_sock; // only read when SRT is enabled
     { // Disable under own lock; never hold it across adapter calls.
@@ -631,7 +626,7 @@ int streams_add() {
     // should
     // be random
     /* coverity[DC.WEAK_CRYPTO] */
-    ss->ssrc = random();
+    ss->ssrc = static_cast<int>(random());
     ss->timeout = opts.timeout_sec;
     ss->wtime = ss->rtcp_wtime = getTick();
     ss->enabled = 1;
@@ -674,9 +669,10 @@ uint32_t c_reads, c_writes, c_failed_writes;
 
 uint64_t last_sd;
 
-int enqueue_rtp_header(streams *sid, struct iovec *iov, int liov,
-                       int iiov_rtp_header, char *rtp_buf) {
-    int i, total_len = 0, len = 0;
+size_t enqueue_rtp_header(streams *sid, struct iovec *iov, int liov,
+                          int iiov_rtp_header, char *rtp_buf) {
+    int i;
+    size_t total_len = 0, len = 0;
     struct timespec ts;
     uint32_t timestamp;
 
@@ -684,11 +680,11 @@ int enqueue_rtp_header(streams *sid, struct iovec *iov, int liov,
         total_len += iov[i].iov_len;
 
     clock_gettime(CLOCK_MONOTONIC, &ts);
-    timestamp =
+    timestamp = static_cast<uint32_t>(
         (uint32_t)(90000 *
                    ((ts.tv_sec * 1000000ll + ts.tv_nsec / 1000) / 1000000ll)) +
         (9 * ((ts.tv_sec * 1000000ll + ts.tv_nsec / 1000) % 1000000ll)) /
-            100; // 90 kHz Clock
+            100); // 90 kHz Clock
 
     if (sid->type == STREAM_RTSP_TCP) {
         rtp_buf[0] = 0x24;
@@ -710,8 +706,8 @@ int enqueue_rtp_header(streams *sid, struct iovec *iov, int liov,
 }
 
 int send_rtcp(int s_id, int64_t ctime) {
-    int len, rv = 0;
-    int total_len = 0;
+    int rv = 0;
+    size_t len, total_len = 0;
     char dad[1000];
     char ra[50];
     unsigned char rtcp_buf[1600];
@@ -728,7 +724,7 @@ int send_rtcp(int s_id, int64_t ctime) {
           (((unsigned long long)tv.tv_usec << 32) / 1000000ULL);
 
     char *description = describe_adapter(s_id, sid->adapter, dad, sizeof(dad));
-    unsigned int la = strlen(description);
+    size_t la = strlen(description);
     if (la > sizeof(rtcp_buf) - 78)
         la = sizeof(rtcp_buf) - 80;
     len = la + 16;
@@ -788,7 +784,7 @@ int send_rtcp(int s_id, int64_t ctime) {
     }
 
     sid->rtcp_wtime = ctime;
-    DEBUGM("%s: sent %d bytes for sid %d, handle %d seq %d => %s:%d",
+    DEBUGM("%s: sent %zu bytes for sid %d, handle %d seq %d => %s:%d",
            __FUNCTION__, total_len, sid->sid, sid->rsock, sid->seq - 1,
            get_stream_rhost(sid->sid, ra, sizeof(ra)),
            get_stream_rport(sid->sid));
@@ -809,7 +805,7 @@ int flush_stream(streams *sid, struct iovec *iov, int iiov, int64_t ctime) {
         int srt_failed = 0;
         for (int i = 0; i < iiov && !srt_failed; i++) {
             const char *data = (const char *)iov[i].iov_base;
-            int remaining = iov[i].iov_len;
+            int remaining = static_cast<int>(iov[i].iov_len);
             while (remaining > 0 && !srt_failed) {
                 int chunk = remaining > MAX_UDP_PACKET_SIZE
                                 ? MAX_UDP_PACKET_SIZE
@@ -859,7 +855,7 @@ int flush_stream(streams *sid, struct iovec *iov, int iiov, int64_t ctime) {
 
     if (rv > 0) {
         sid->sp++;
-        sid->sb += rv;
+        sid->sb += static_cast<uint32_t>(rv);
     }
     return rv;
 }
@@ -883,7 +879,7 @@ int check_new_transponder(adapter *ad, int rlen) {
                 LOG("Got the new transponder %04X %d, position %d, %jd ms "
                     "after tune",
                     tid, tid, i, getTick() - ad->tune_time);
-                memmove(ad->buf, ad->buf + i, rlen - i);
+                memmove(ad->buf, ad->buf + i, static_cast<size_t>(rlen - i));
                 return rlen - i;
             } else
                 LOGM("Got old transponder id %04X %d, position %d, %jd ms "
@@ -896,7 +892,7 @@ int check_new_transponder(adapter *ad, int rlen) {
 
 int check_cc(adapter *ad) {
     int i;
-    char cc, cc_before;
+    int cc, cc_before;
     SPid *p;
     int pid;
     int packet_no_sid = 0;
@@ -981,7 +977,7 @@ int check_cc(adapter *ad) {
 
 void check_cc2(adapter *ad) {
     int i;
-    char cc, cc_before;
+    int cc, cc_before;
     SPid *p;
     int pid;
     unsigned char *b;
@@ -1035,11 +1031,11 @@ int process_packets_for_stream(streams *sid, adapter *ad) {
     int i, st_id = sid->sid;
     SPid *p;
     uint8_t *b;
-    int max_iov = TCP_MAX_IOV;
+    constexpr int max_iov = TCP_MAX_IOV;
     char pids[8193];
     struct iovec iov[max_iov + 1];
     char rtp_buf[16 * (max_iov + 1)];
-    int rtp_pos = 0;
+    size_t rtp_pos = 0;
     int iiov = 1;
     int last_rtp_header = 0;
     int64_t rtime = ad->rtime;
@@ -1147,7 +1143,7 @@ int process_packets_for_stream(streams *sid, adapter *ad) {
     if ((sid->type == STREAM_RTSP_UDP || sid->type == STREAM_RTSP_TCP))
         enqueue_rtp_header(sid, iov, iiov, last_rtp_header, rtp_buf + rtp_pos);
 
-    LOGM("Processing done sid %d at pos %d, rtp header %d, rtp_pos %d, "
+    LOGM("Processing done sid %d at pos %d, rtp header %d, rtp_pos %zu, "
          "total_len "
          "%d, rlen %d",
          st_id, iiov, last_rtp_header, rtp_pos, total_len, ad->rlen);
@@ -1332,9 +1328,10 @@ int calculate_bw(sockets *s) {
                 "MB, ns/read %jd, r: %d, w: %d fw: %d, tt: %jd ms, memory "
                 "%jd "
                 "MB",
-                c_bw, c_bw_dmx, 1.0 * c_buffered / 1048576,
-                1.0 * c_dropped / 1048576, c_ns_read, c_reads, c_writes,
-                c_failed_writes, c_tt, get_allocated_memory() / 1048576);
+                c_bw, c_bw_dmx, 1.0 * static_cast<double>(c_buffered) / 1048576,
+                1.0 * static_cast<double>(c_dropped) / 1048576, c_ns_read,
+                c_reads, c_writes, c_failed_writes, c_tt,
+                get_allocated_memory() / 1048576);
         }
         bw = 0;
         bw_dmx = 0;
@@ -1484,7 +1481,7 @@ char *get_stream_rhost(int s_id, char *dest, int ld) {
     dest[0] = 0;
     if (!sid)
         return dest;
-    return get_sockaddr_host(sid->sa, dest, ld);
+    return get_sockaddr_host(sid->sa, dest, static_cast<socklen_t>(ld));
 }
 
 int get_stream_rport(int s_id) {
@@ -1561,28 +1558,28 @@ int get_stream_buffered_size(int s_id) {
     sockets *s = get_sockets(sid->rsock_id);
     if (!s)
         return 0;
-    return fifo_used(&s->fifo);
+    return static_cast<int>(fifo_used(&s->fifo));
 }
 
 // Slot readers for the status API; a null slot reads as zero/empty.
 static int get_st_enabled(int i) {
     if (i < 0 || i >= MAX_STREAMS)
         return 0;
-    streams *sid = streams_pool[i];
+    streams *sid = streams_pool[static_cast<size_t>(i)];
     return sid ? sid->enabled.load() : 0;
 }
 
 static int get_st_play(int i) {
     if (i < 0 || i >= MAX_STREAMS)
         return 0;
-    streams *sid = streams_pool[i];
+    streams *sid = streams_pool[static_cast<size_t>(i)];
     return sid ? sid->do_play : 0;
 }
 
 static int get_st_adapter(int i) {
     if (i < 0 || i >= MAX_STREAMS)
         return 0;
-    streams *sid = streams_pool[i];
+    streams *sid = streams_pool[static_cast<size_t>(i)];
     return sid ? sid->adapter : 0;
 }
 
@@ -1590,7 +1587,7 @@ static char *get_st_useragent(int i, char *dest, int max_size) {
     dest[0] = 0;
     if (i < 0 || i >= MAX_STREAMS)
         return dest;
-    streams *sid = streams_pool[i];
+    streams *sid = streams_pool[static_cast<size_t>(i)];
     if (sid)
         _strncpy(dest, sid->useragent, max_size - 1);
     return dest;

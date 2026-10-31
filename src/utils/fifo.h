@@ -1,6 +1,7 @@
 #ifndef FIFO_H
 #define FIFO_H
 
+#include <stddef.h>
 #include <stdint.h>
 
 // Circular Buffer/Ring Buffer implementation:
@@ -18,24 +19,24 @@ typedef struct fifo {
     void *data;
 } SFIFO;
 
-int _create_fifo(SFIFO *f, int no, const char *file, int line);
+int _create_fifo(SFIFO *f, size_t no, const char *file, int line);
 void free_fifo(SFIFO *f);
-static inline int fifo_available(SFIFO *f) {
+static inline size_t fifo_available(SFIFO *f) {
     return f->size - (f->write_index - f->read_index);
 }
 
-static inline int fifo_used(SFIFO *f) { return f->write_index - f->read_index; }
-static inline void fifo_skip_bytes(SFIFO *f, uint32_t len) {
+static inline size_t fifo_used(SFIFO *f) {
+    return f->write_index - f->read_index;
+}
+static inline void fifo_skip_bytes(SFIFO *f, size_t len) {
     if (f->size > 0)
         f->read_index += len;
 }
 
-int fifo_push_force(SFIFO *fifo, void *src, unsigned int len, int force);
+size_t fifo_push_force(SFIFO *fifo, void *src, size_t len, int force);
 
-uint32_t fifo_pop_offset(SFIFO *fifo, void *dst, unsigned int len,
-                         uint64_t *offset);
-uint32_t fifo_peek(SFIFO *fifo, void **dst, unsigned int len,
-                   unsigned int relative_offset);
+size_t fifo_pop_offset(SFIFO *fifo, void *dst, size_t len, uint64_t *offset);
+size_t fifo_peek(SFIFO *fifo, void **dst, size_t len, size_t relative_offset);
 
 uint32_t fifo_peek_32(SFIFO *fifo, uint64_t offset);
 

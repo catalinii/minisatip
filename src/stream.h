@@ -110,7 +110,7 @@ extern SegmentedPool<streams *, STREAMS_BUCKETS> streams_pool;
 static inline streams *get_sid_nw(int i) {
     if (i < 0 || i >= MAX_STREAMS)
         return NULL;
-    streams *sid = streams_pool[i];
+    streams *sid = streams_pool[static_cast<size_t>(i)];
     return (sid && sid->enabled) ? sid : NULL;
 }
 

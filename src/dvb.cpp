@@ -177,9 +177,9 @@ extern const EnumMap<fe_guard_interval_t>
                {"1128", GUARD_INTERVAL_1_128},
                {"19128", GUARD_INTERVAL_19_128},
                {"19256", GUARD_INTERVAL_19_256},
-               {"pn420", (fe_guard_interval_t)8},
-               {"pn595", (fe_guard_interval_t)9},
-               {"pn945", (fe_guard_interval_t)10}});
+               {"pn420", GUARD_INTERVAL_PN420},
+               {"pn595", GUARD_INTERVAL_PN595},
+               {"pn945", GUARD_INTERVAL_PN945}});
 
 extern const EnumMap<fe_transmit_mode_t>
     fe_tmode_map({{"2k", TRANSMISSION_MODE_2K},
@@ -474,7 +474,7 @@ void copy_dvb_parameters(transponder *s, transponder *d) {
 // based on the modulation. The top is the standard OK signal value in dB.
 float get_db_snr_map(transponder *tp) {
     float db_map;
-    int top = 800; // Default factor: 80dB value ==> 100%
+    float top = 800; // Default factor: 80dB value ==> 100%
 
     fe_delivery_system_t sys = tp->sys.value_or(SYS_UNDEFINED);
     fe_modulation_t mtype = tp->mtype.value_or(QAM_AUTO);
@@ -831,7 +831,7 @@ float get_db_snr_map(transponder *tp) {
         LOG("get_db_snr_map -> Modulation SNR scale unkown!!");
     }
 
-    db_map = top / 10.0; // top is dB*10
+    db_map = top / 10; // top is dB*10
     LOGM(
         "get_db_snr_map -> src=%d, fe=%d, msys=%d, mtype=%d, fec=%d, db_map=%f",
         tp->diseqc.value_or(0), tp->fe.value_or(0), (int)sys, (int)mtype,
@@ -989,7 +989,7 @@ int send_diseqc(adapter *ad, int fd, int pos, int pos_change, int pol,
     cmd.msg[3] =
         0xf0 | (((posc << 2) & 0x0c) | (hiband ? 1 : 0) | (pol ? 2 : 0));
     uncmd.msg[1] = d->addr;
-    uncmd.msg[3] = 0xf0 | (posu & 0x0f);
+    uncmd.msg[3] = static_cast<uint8_t>(0xf0 | (posu & 0x0f));
 
     LOGM("send_diseqc fd %d, pos = %d (c %d u %d), pol = %d, hiband = %d", fd,
          pos, posc, posu, pol, hiband);
@@ -1041,14 +1041,15 @@ int send_unicable(adapter *ad, int fd, int freq, int pos, int pol, int hiband,
     t = (freq + d->ufreq + 2) / 4 - 350;
 
     cmd.msg[1] = d->addr;
-    cmd.msg[3] = ((t & 0x0300) >> 8) | (d->uslot << 5) | (pos ? 0x10 : 0) |
-                 (hiband ? 4 : 0) | (pol ? 8 : 0);
-    cmd.msg[4] = t & 0xff;
+    cmd.msg[3] = static_cast<uint8_t>(((t & 0x0300) >> 8) | (d->uslot << 5) |
+                                      (pos ? 0x10 : 0) | (hiband ? 4 : 0) |
+                                      (pol ? 8 : 0));
+    cmd.msg[4] = static_cast<uint8_t>(t & 0xff);
 
     if (d->pin > 0 && d->pin < 256) {
         cmd.msg_len = 6;
         cmd.msg[2] = 0x5C;
-        cmd.msg[5] = d->pin;
+        cmd.msg[5] = static_cast<uint8_t>(d->pin);
     }
 
     LOGM("send_unicable fd %d, freq %d, ufreq %d, pos = %d, pol = %d, hiband = "
@@ -1087,14 +1088,14 @@ int send_jess(adapter *ad, int fd, int freq, int pos, int pol, int hiband,
     //	int t = (freq / 1000) - 100;
     int t = freq - 100;
 
-    cmd.msg[1] = d->uslot << 3;
-    cmd.msg[1] |= ((t >> 8) & 0x07);
-    cmd.msg[2] = (t & 0xff);
-    cmd.msg[3] = ((pos & 0x3f) << 2) | (pol ? 2 : 0) | (hiband ? 1 : 0);
+    cmd.msg[1] = static_cast<uint8_t>((d->uslot << 3) | ((t >> 8) & 0x07));
+    cmd.msg[2] = static_cast<uint8_t>(t & 0xff);
+    cmd.msg[3] = static_cast<uint8_t>(((pos & 0x3f) << 2) | (pol ? 2 : 0) |
+                                      (hiband ? 1 : 0));
     if (d->pin > 0 && d->pin < 256) {
         cmd.msg_len = 5;
         cmd.msg[0] = 0x71;
-        cmd.msg[4] = d->pin;
+        cmd.msg[4] = static_cast<uint8_t>(d->pin);
     }
 
     LOGM("send_jess fd %d, freq %d, ufreq %d, pos = %d, pol = %d, hiband = %d, "
@@ -1238,7 +1239,7 @@ int setup_switch(adapter *ad, bool force) {
     {                                                                          \
         if ((opt_val).has_value()) {                                           \
             p_cmd[iProp].cmd = (prop);                                         \
-            p_cmd[iProp++].u.data = (opt_val).value();                         \
+            p_cmd[iProp++].u.data = static_cast<uint32_t>((opt_val).value());  \
         } else {                                                               \
             p_cmd[iProp].cmd = (prop);                                         \
             p_cmd[iProp++].u.data = (def_val);                                 \
@@ -1249,13 +1250,13 @@ int setup_switch(adapter *ad, bool force) {
     {                                                                          \
         if ((val).has_value()) {                                               \
             p_cmd[iProp].cmd = (prop);                                         \
-            p_cmd[iProp++].u.data = (val).value();                             \
+            p_cmd[iProp++].u.data = static_cast<uint32_t>((val).value());      \
         }                                                                      \
     }
 
 int dvb_tune(int aid, transponder *tp) {
     int64_t bclear, bpol;
-    int iProp = 0;
+    uint32_t iProp = 0;
     adapter *ad = get_adapter(aid);
     int fd_frontend;
 
@@ -1265,7 +1266,7 @@ int dvb_tune(int aid, transponder *tp) {
     struct dvb_frontend_event ev;
 
     struct dtv_property p_clear[] = {
-        {.cmd = DTV_CLEAR},
+        {.cmd = DTV_CLEAR, .reserved = {}, .u = {}, .result = 0},
     };
 
     struct dtv_properties cmdseq_clear = {.num = 1, .props = p_clear};
@@ -1544,7 +1545,7 @@ int dvb_set_pid(adapter *ad, int i_pid) {
     char buf[100];
     int fd;
     int hw, demux;
-    uint64_t ctime = getTick();
+    int64_t ctime = getTick();
 
     hw = ad->pa;
     demux = ad->fn;
@@ -1561,7 +1562,7 @@ int dvb_set_pid(adapter *ad, int i_pid) {
     struct dmx_pes_filter_params s_filter_params;
 
     memset(&s_filter_params, 0, sizeof(s_filter_params));
-    s_filter_params.pid = i_pid;
+    s_filter_params.pid = static_cast<uint16_t>(i_pid);
     s_filter_params.input = DMX_IN_FRONTEND;
     s_filter_params.output = DMX_OUT_TS_TAP;
     s_filter_params.flags = DMX_IMMEDIATE_START;
@@ -1587,7 +1588,7 @@ int dvb_set_pid(adapter *ad, int i_pid) {
 }
 
 int dvb_del_filters(adapter *ad, int fd, int pid) {
-    uint64_t ctime = getTick();
+    int64_t ctime = getTick();
     if (fd < 0)
         LOG_AND_RETURN(0, "DMX_STOP on an invalid handle %d, pid %d", fd, pid);
     // Best effort: the fd is unconditionally closed below, which releases the
@@ -1613,7 +1614,7 @@ int dvb_del_filters(adapter *ad, int fd, int pid) {
 
 // useful on devices where DVR is not used
 
-static int dvb_demux_set_pes_filter(adapter *ad, int fd, int i_pid) {
+static int dvb_demux_set_pes_filter(adapter *ad, int fd, uint16_t i_pid) {
     struct dmx_pes_filter_params s_filter_params;
 
     memset(&s_filter_params, 0, sizeof(s_filter_params));
@@ -1639,9 +1640,10 @@ int dvb_demux_set_pid(adapter *ad, int i_pid) {
 
     if (i_pid > 8192)
         LOG_AND_RETURN(-1, "pid %d > 8192 for adapter %d", i_pid, ad->id);
+    uint16_t p = static_cast<uint16_t>(i_pid);
 
     if (ad->active_demux_pids++ == 0) {
-        if (dvb_demux_set_pes_filter(ad, fd, i_pid)) {
+        if (dvb_demux_set_pes_filter(ad, fd, p)) {
             ad->active_demux_pids--;
             return -1;
         }
@@ -1651,13 +1653,12 @@ int dvb_demux_set_pid(adapter *ad, int i_pid) {
         return fd;
     }
 
-    uint16_t p = i_pid;
     if (ioctl(fd, DMX_ADD_PID, &p) < 0) {
         int err = errno;
         LOG0("failed to add pid %d to fd %d maximum pids %d: errno %d, %s", p,
              fd, ad->active_pids, err, strerror(err));
         if (err == EINVAL && !dvb_demux_shared_pid_count(ad) &&
-            !dvb_demux_set_pes_filter(ad, fd, i_pid)) {
+            !dvb_demux_set_pes_filter(ad, fd, p)) {
             // Shared demux fd unused by others, so no PES filter exists: the
             // counter disagrees with the driver (stale after reopen); set it.
             LOG("AD %d [demux %d %d], recovered stale demux counter, setting "
@@ -1683,7 +1684,7 @@ int dvb_demux_del_filters(adapter *ad, int fd, int pid) {
     if (pid > 8192)
         LOG_AND_RETURN(-1, "pid %d > 8192 for adapter %d", pid, ad->id);
 
-    uint16_t p = pid;
+    uint16_t p = static_cast<uint16_t>(pid);
     int rv = 0;
     if (ioctl(fd, DMX_REMOVE_PID, &p) < 0) {
         LOG0("failed to remove pid %d to fd %d: errno %d, %s", p, fd, errno,
@@ -1714,7 +1715,8 @@ int dvb_psi_read(int socket, void *buf, int len, sockets *ss, int *rb) {
     //	if(len < sizeof(section) * 1.1)
     //		return 1;
     memset(section, 0, sizeof(section));
-    r = read(socket, section + 1, sizeof(section) - 1); // section[0] = 0
+    r = static_cast<int>(
+        read(socket, section + 1, sizeof(section) - 1)); // section[0] = 0
     if (r <= 0) {
         //		LOG("%s: read %d, errno %d", __FUNCTION__, r, errno);
         if (errno == EOVERFLOW)
@@ -1782,7 +1784,7 @@ int dvb_set_psi_filter(adapter *ad, int i_pid) {
 
     struct dmx_sct_filter_params sct;
     memset(&sct, 0, sizeof(sct));
-    sct.pid = i_pid;
+    sct.pid = static_cast<uint16_t>(i_pid);
     sct.timeout = 0;
     sct.flags = DMX_IMMEDIATE_START;
 
@@ -1853,7 +1855,7 @@ fe_delivery_system_t dvb_delsys(int aid, int fd, fe_delivery_system_t *sys) {
     struct dvb_frontend_info fe_info;
 
     static struct dtv_property enum_cmdargs[] = {
-        {.cmd = DTV_ENUM_DELSYS},
+        {.cmd = DTV_ENUM_DELSYS, .reserved = {}, .u = {}, .result = 0},
     };
     enum_cmdargs[0].u.data = 0;
     static struct dtv_properties enum_cmdseq = {
@@ -1876,7 +1878,7 @@ fe_delivery_system_t dvb_delsys(int aid, int fd, fe_delivery_system_t *sys) {
     LOG("Detected adapter %d handle %d DVB Card Name: %s", aid, fd,
         fe_info.name);
 
-    int nsys = enum_cmdargs[0].u.buffer.len;
+    int nsys = static_cast<int>(enum_cmdargs[0].u.buffer.len);
 
     if (nsys < 1) {
 
@@ -1948,8 +1950,9 @@ std::string dvb_name(int aid, int fd) {
 int64_t get_strength_decibels(int64_t init_strength) {
     int64_t strength_db;
 
-    strength_db = (init_strength + 100 * 1000) * 65535.0 /
-                  (100 * 1000); // dBm value + 100 ==> %  ( -97 dBm => 3%)
+    strength_db = static_cast<int64_t>(
+        static_cast<double>(init_strength + 100 * 1000) * 65535.0 /
+        (100 * 1000)); // dBm value + 100 ==> %  ( -97 dBm => 3%)
 
     return strength_db;
 }
@@ -1957,7 +1960,8 @@ int64_t get_strength_decibels(int64_t init_strength) {
 int64_t get_strength_percent(int64_t init_strength) {
     int64_t strength_pc;
 
-    strength_pc = init_strength * 655.35; // (X * 65535) / 100.0
+    strength_pc = static_cast<int64_t>(static_cast<double>(init_strength) *
+                                       655.35); // (X * 65535) / 100.0
 
     return strength_pc;
 }
@@ -1965,9 +1969,10 @@ int64_t get_strength_percent(int64_t init_strength) {
 int64_t get_snr_decibels(int64_t init_snr, int64_t *snrd, float db_snr_map) {
     float tf;
 
-    tf = init_snr * 65535.0 / (1000 * db_snr_map);
+    tf = static_cast<float>(static_cast<double>(init_snr) * 65535.0 /
+                            (1000 * db_snr_map));
     if (tf < 65535.0)
-        *snrd = tf;
+        *snrd = static_cast<int64_t>(tf);
     else
         *snrd = 65535;
     init_snr = init_snr / 100;
@@ -1980,7 +1985,8 @@ int64_t get_snr_decibels(int64_t init_snr, int64_t *snrd, float db_snr_map) {
 int64_t get_snr_percent(int64_t init_snr) {
     int64_t snr_pc;
 
-    snr_pc = init_snr * 655.35; // (X * 65535) / 100.0
+    snr_pc = static_cast<int64_t>(static_cast<double>(init_snr) *
+                                  655.35); // (X * 65535) / 100.0
 
     return snr_pc;
 }
@@ -2018,9 +2024,9 @@ void adapt_signal(adapter *ad, uint16_t *strength, uint16_t *snr,
         db_new = get_snr_decibels(snr_init, &snr_new, ad->db_snr_map);
     }
 
-    *strength = (int)strength_new;
-    *snr = (int)snr_new;
-    *db = (int)db_new;
+    *strength = static_cast<uint16_t>(strength_new);
+    *snr = static_cast<uint16_t>(snr_new);
+    *db = static_cast<uint16_t>(db_new);
 
     LOGM("adapt_signal adapter %d: strength %d (raw: %jd),"
          "snr %d (raw: %jd), dB %d (raw: %jd)",
@@ -2047,7 +2053,7 @@ static int8_t strength_warned[MAX_ADAPTERS];
 
 // Matched in the same order as eDVBFrontend::calculateSignalQuality, as some
 // of these names are substrings of the others.
-static int dvb_snr_calibration(const char *name) {
+static int8_t dvb_snr_calibration(const char *name) {
     if (strstr(name, "Vuplus DVB-C NIM(BCM3158)"))
         return SNR_CALIB_BCM3158_VU;
     if (strstr(name, "BCM4506") || strstr(name, "BCM4505") ||
@@ -2182,14 +2188,18 @@ int get_signal_new(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
                    uint16_t *snr, uint16_t *db, bool *status_valid) {
     *status_valid = false;
 #if DVBAPIVERSION >= 0x050A
-    *status = *snr = *ber = *strength = 0;
+    *ber = *strength = 0;
+    *status = *snr = 0;
     *db = 65535;
     int64_t strengthd = 0, snrd = 0, init_strength = 0, init_snr = 0;
     const char *strength_s = "(none)", *snr_s = "(none)";
     static struct dtv_property enum_cmdargs[] = {
-        {.cmd = DTV_STAT_SIGNAL_STRENGTH},
-        {.cmd = DTV_STAT_CNR},
-        {.cmd = DTV_STAT_ERROR_BLOCK_COUNT},
+        {.cmd = DTV_STAT_SIGNAL_STRENGTH, .reserved = {}, .u = {}, .result = 0},
+        {.cmd = DTV_STAT_CNR, .reserved = {}, .u = {}, .result = 0},
+        {.cmd = DTV_STAT_ERROR_BLOCK_COUNT,
+         .reserved = {},
+         .u = {},
+         .result = 0},
     };
     enum_cmdargs[0].u.data = 0;
     enum_cmdargs[1].u.data = 0;
@@ -2212,7 +2222,7 @@ int get_signal_new(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
 
     if (enum_cmdargs[0].u.st.stat[0].scale == FE_SCALE_RELATIVE) {
         strength_s = "%";
-        strengthd = enum_cmdargs[0].u.st.stat[0].uvalue;
+        strengthd = static_cast<int64_t>(enum_cmdargs[0].u.st.stat[0].uvalue);
     } else if (enum_cmdargs[0].u.st.stat[0].scale == FE_SCALE_DECIBEL) {
         strength_s = "dBm";
         init_strength = enum_cmdargs[0].u.st.stat[0].svalue; // dBm / 1000
@@ -2221,11 +2231,12 @@ int get_signal_new(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
 
     if (enum_cmdargs[1].u.st.stat[0].scale == FE_SCALE_RELATIVE) {
         snr_s = "%";
-        snrd = enum_cmdargs[1].u.st.stat[0].uvalue;
+        snrd = static_cast<int64_t>(enum_cmdargs[1].u.st.stat[0].uvalue);
     } else if (enum_cmdargs[1].u.st.stat[0].scale == FE_SCALE_DECIBEL) {
         snr_s = "dB";
         init_snr = enum_cmdargs[1].u.st.stat[0].svalue; // dB * 1000
-        *db = (int)get_snr_decibels(init_snr, &snrd, ad->db_snr_map);
+        *db = static_cast<uint16_t>(
+            get_snr_decibels(init_snr, &snrd, ad->db_snr_map));
     }
     *ber = enum_cmdargs[2].u.st.stat[0].uvalue & 0x7FFF;
     *status_valid = dvb_read_status(ad, status);
@@ -2235,8 +2246,8 @@ int get_signal_new(adapter *ad, int *status, uint32_t *ber, uint16_t *strength,
          ad->id, *status, init_strength, strength_s, strengthd, init_snr, snr_s,
          snrd, *ber, *db);
 
-    *strength = (int)strengthd;
-    *snr = (int)snrd;
+    *strength = static_cast<uint16_t>(strengthd);
+    *snr = static_cast<uint16_t>(snrd);
     return 0;
 
 #else
@@ -2304,7 +2315,7 @@ int dvb_get_signal(adapter *ad) {
     uint32_t ber = 0;
     bool status_valid = false;
 
-    if (ad->strength_multiplier || ad->snr_multiplier) {
+    if (ad->strength_multiplier != 0 || ad->snr_multiplier != 0) {
         // DVBv5 stats are the default; on genuine failure use v3 and skip
         // v5 until the next tune (like TVH).
         if (ad->new_gs != OLD_SIGNAL &&
@@ -2325,12 +2336,12 @@ int dvb_get_signal(adapter *ad) {
             status = 1;
         LOGM("Signal metrics are not retrieved as both multipliers are 0");
     }
-    if (ad->strength_multiplier)
-        strength = strength * ad->strength_multiplier;
+    if (ad->strength_multiplier != 0)
+        strength = static_cast<uint16_t>(strength * ad->strength_multiplier);
     else
         strength = 65535;
-    if (ad->snr_multiplier)
-        snr = snr * ad->snr_multiplier;
+    if (ad->snr_multiplier != 0)
+        snr = static_cast<uint16_t>(snr * ad->snr_multiplier);
     else
         snr = 65535;
 
@@ -2406,10 +2417,7 @@ void find_dvb_adapter() {
                 //				}
                 LOGM("%s: adding %d %d to the list of devices", __FUNCTION__, i,
                      j);
-                if (!a[na])
-                    a[na] = adapter_alloc();
-
-                ad = a[na];
+                ad = get_or_alloc_adapter(na);
                 ad->pa = i;
                 ad->fn = j;
 
@@ -2447,8 +2455,8 @@ void find_dvb_adapter() {
             }
         }
     for (; na < MAX_ADAPTERS; na++)
-        if (a[na])
-            a[na]->pa = a[na]->fn = -1;
+        if ((ad = get_adapter_slot(na)))
+            ad->pa = ad->fn = -1;
 }
 
 #endif // #ifndef DISABLE_LINUXDVB

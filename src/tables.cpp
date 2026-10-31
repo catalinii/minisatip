@@ -89,7 +89,7 @@ int add_ca(SCA_op *op) {
 }
 // Clear one PMT's tables masks for a CA bit. Takes the PMT lock;
 // nest-safe (recursive) for callers already holding it.
-void tables_clear_pmt_ca_masks(SPMT *pmt, uint64_t mask, int clear_disabled) {
+void tables_clear_pmt_ca_masks(SPMT *pmt, int mask, int clear_disabled) {
     if (!pmt)
         return;
     std::lock_guard<SMutex> lock(pmt->mutex);
@@ -171,7 +171,7 @@ void add_caid_mask(int ica, int aid, int caid, int mask) {
 }
 
 int tables_init_ca_for_device(int i, adapter *ad) {
-    uint64_t mask = (1ULL << i);
+    int mask = (1 << i);
     int rv = 0;
     if (i < 0 || i >= nca)
         return 0;
@@ -220,14 +220,14 @@ int match_ca_caid(int ica, int aid, int caid) {
 void close_pmt_for_ca(int i, adapter *ad, SPMT *pmt) {
     if (i < 0 || i >= nca)
         return;
-    uint64_t mask = 1ULL << i;
+    int mask = 1 << i;
     if (!ad)
         ad = get_adapter(pmt->adapter);
     if (!ad)
         return;
     // del_ca() clears the masks from the socket thread: pre-check on a
     // snapshot, the locked re-check below stays authoritative.
-    uint64_t registered;
+    int registered;
     {
         std::lock_guard<SMutex> lock(pmt->mutex);
         registered = pmt->ca_registered_mask;
@@ -263,13 +263,13 @@ int close_pmt_for_cas(adapter *ad, SPMT *pmt) {
 }
 
 int send_pmt_to_ca(int i, adapter *ad, SPMT *pmt) {
-    uint64_t mask;
+    int mask;
     int rv = 0, result = 0;
-    mask = 1ULL << i;
+    mask = 1 << i;
 
     // del_ca() clears the masks from the socket thread: pre-check on a
     // snapshot, the locked re-check below stays authoritative.
-    uint64_t disabled, sent, registered;
+    int disabled, sent, registered;
     {
         std::lock_guard<SMutex> lock(pmt->mutex);
         disabled = pmt->disabled_ca_mask;
@@ -338,14 +338,14 @@ int send_pmt_to_ca(int i, adapter *ad, SPMT *pmt) {
 int send_pmt_to_cas(adapter *ad, SPMT *pmt) {
     int i, rv = 1;
     if (pmt->caids > 0) {
-        uint64_t sent, disabled;
+        int sent, disabled;
         {
             std::lock_guard<SMutex> lock(pmt->mutex);
             sent = pmt->ca_mask;
             disabled = pmt->disabled_ca_mask;
         }
         LOG("Sending PMT %d to all CAs: ad_ca_mask %X, "
-            "pmt_ca_mask %jX, disabled_ca_mask %jX",
+            "pmt_ca_mask %X, disabled_ca_mask %X",
             pmt->id, ad ? ad->ca_mask.load() : -2, sent, disabled);
         for (i = 0; i < nca; i++)
             if (ca[i].enabled)
@@ -356,9 +356,9 @@ int send_pmt_to_cas(adapter *ad, SPMT *pmt) {
 }
 
 void tables_add_pid(adapter *ad, SPMT *pmt, int pid) {
-    uint64_t mask;
+    int mask;
     for (int i = 0; i < nca; i++) {
-        mask = 1ULL << i;
+        mask = 1 << i;
         SCA_op *op = ca[i].op.load();
         if (ca[i].enabled && (pmt->ca_mask & mask) && op->ca_add_pid)
             op->ca_add_pid(ad, pmt, pid);
@@ -366,9 +366,9 @@ void tables_add_pid(adapter *ad, SPMT *pmt, int pid) {
 }
 
 void tables_del_pid(adapter *ad, SPMT *pmt, int pid) {
-    uint64_t mask;
+    int mask;
     for (int i = 0; i < nca; i++) {
-        mask = 1ULL << i;
+        mask = 1 << i;
         SCA_op *op = ca[i].op.load();
         if (ca[i].enabled && (pmt->ca_mask & mask) && op->ca_del_pid)
             op->ca_del_pid(ad, pmt, pid);
@@ -397,7 +397,7 @@ void init_ca_device(SCA *c) {
 }
 
 int tables_close_device(adapter *ad) {
-    uint64_t mask = 1;
+    int mask = 1;
     int rv = 0;
 
     for (int i = 0; i < nca; i++) {

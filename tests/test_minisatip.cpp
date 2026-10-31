@@ -27,7 +27,7 @@
 
 int test_get_command_line_string() {
     int argc = 4;
-    char *argv[] = {"./minisatip", "-f", "-l", "general,ca"};
+    const char *argv[] = {"./minisatip", "-f", "-l", "general,ca"};
     char *actual_command_line = get_command_line_string(argc, argv);
     const char *expected_command_line = "./minisatip -f -l general,ca";
 

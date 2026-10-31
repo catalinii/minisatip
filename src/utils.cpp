@@ -142,10 +142,11 @@ int check_strs(std::string_view s, const char *const v[], int dv) {
     return n;
 }
 
-std::string_view header_parameter(const std::vector<std::string_view> &arg,
-                                  int i) // get the value of a header parameter
+std::string_view
+header_parameter(const std::vector<std::string_view> &arg,
+                 size_t i) // get the value of a header parameter
 {
-    if (i >= (int)arg.size())
+    if (i >= arg.size())
         return "";
 
     std::string_view current = arg[i];
@@ -153,7 +154,7 @@ std::string_view header_parameter(const std::vector<std::string_view> &arg,
         return "";
 
     if (current.back() == ':') {
-        if (i + 1 < (int)arg.size())
+        if (i + 1 < arg.size())
             return arg[i + 1];
         return "";
     }
@@ -163,8 +164,8 @@ std::string_view header_parameter(const std::vector<std::string_view> &arg,
         return current.substr(colon_pos + 1);
     }
 
-    if (i + 1 < (int)arg.size() && arg[i + 1] == ":") {
-        if (i + 2 < (int)arg.size())
+    if (i + 1 < arg.size() && arg[i + 1] == ":") {
+        if (i + 2 < arg.size())
             return arg[i + 2];
     }
 
@@ -182,7 +183,7 @@ int parse_float(std::string_view s, int mul) {
                        (int)s.size(), s.data(), mul);
     }
 
-    f = atof(std::string(s).c_str());
+    f = static_cast<float>(atof(std::string(s).c_str()));
     double d = (double)f * mul;
     if (!(d >= INT_MIN && d <= INT_MAX))
         return 0;
@@ -273,7 +274,8 @@ void posix_signal_handler(int sig, siginfo_t *siginfo,
 
 int /* Returns 0 on success, -1 on error */
 becomeDaemon() {
-    int maxfd, fd, fdi, fdo, pid = -1;
+    long maxfd;
+    int fd, fdi, fdo, pid = -1;
     __attribute__((unused)) int rv;
     struct stat sb;
     FILE *f;
@@ -383,7 +385,7 @@ void process_file(void *sock, char *s, int len, char *ctype) {
     uint32_t io = 0;
     sockets *so = (sockets *)sock;
     __attribute__((unused)) int rv;
-    LOG("processing_file %p len %d:", s, len);
+    LOG("processing_file %p len %d:", static_cast<void *>(s), len);
     for (i = 0; i < len; i++) {
         lv = 0;
         if (s[i] == '$')
@@ -391,8 +393,9 @@ void process_file(void *sock, char *s, int len, char *ctype) {
         if (lv == 0) {
             outp[io++] = s[i];
         } else {
-            le = var_eval(s + i, lv, outp + io, sizeof(outp) - io - 10);
-            io += le;
+            le = var_eval(s + i, lv, outp + io,
+                          static_cast<int>(sizeof(outp) - io - 10));
+            io += static_cast<uint32_t>(le);
             i += lv;
         }
         if (io > sizeof(outp) - 100) {
@@ -445,14 +448,16 @@ char *readfile(std::string_view fn, char *ctype, int *len) {
         close(fd);
         return NULL;
     }
-    nl = sb.st_size;
-    mem = (char *)mmap(0, nl, PROT_READ, MAP_SHARED, fd, 0);
+    nl = static_cast<int>(sb.st_size);
+    mem =
+        (char *)mmap(0, static_cast<size_t>(nl), PROT_READ, MAP_SHARED, fd, 0);
     if (mem == MAP_FAILED) {
         close(fd);
         LOG_AND_RETURN(NULL, "mmap failed for file %s", ffn);
     }
     close(fd);
-    LOG("opened %s fd %d at %p - %d bytes", ffn, fd, mem, nl);
+    LOG("opened %s fd %d at %p - %d bytes", ffn, fd, static_cast<void *>(mem),
+        nl);
 
     *len = nl;
     if (ctype) {
@@ -491,7 +496,9 @@ char *readfile(std::string_view fn, char *ctype, int *len) {
     return mem;
 }
 
-int closefile(char *mem, int len) { return munmap((void *)mem, len); }
+int closefile(char *mem, int len) {
+    return munmap((void *)mem, static_cast<size_t>(len));
+}
 
 pthread_t get_tid() { return pthread_self(); }
 
@@ -567,12 +574,12 @@ int init_utils(char *arg0) {
     return 0;
 }
 
-void _hexdump(const char *desc, void *addr, int len) {
+void _hexdump(const char *desc, void *addr, ptrdiff_t len) {
     // Each character needs roughly 5 bytes to print. Worst case scenario is
     // that one character ends up on a new line, requiring 74 bytes to print.
-    int i, pos = 0, bl = (len * 5) + 74;
+    int i, pos = 0;
+    ptrdiff_t bl = (len * 5) + 74;
     char buff[17];
-    char buf[bl];
     unsigned char *pc = (unsigned char *)addr;
 
     if (len == 0) {
@@ -580,10 +587,11 @@ void _hexdump(const char *desc, void *addr, int len) {
         return;
     }
     if (len < 0) {
-        LOG("%s: NEGATIVE LENGTH: %i\n", desc, len);
+        LOG("%s: NEGATIVE LENGTH: %td\n", desc, len);
         return;
     }
-    memset(buf, 0, bl - 1);
+    std::vector<char> out(static_cast<size_t>(bl));
+    char *buf = out.data();
     // Process every byte in the data.
     for (i = 0; i < len; i++) {
         // Multiple of 16 means new line (with line offset).
@@ -604,7 +612,7 @@ void _hexdump(const char *desc, void *addr, int len) {
         if ((pc[i] < 0x20) || (pc[i] > 0x7e))
             buff[i % 16] = '.';
         else
-            buff[i % 16] = pc[i];
+            buff[i % 16] = static_cast<char>(pc[i]);
         buff[(i % 16) + 1] = '\0';
     }
 
@@ -667,7 +675,7 @@ static uint32_t crc_tab[256] = {
     0x933eb0bb, 0x97ffad0c, 0xafb010b1, 0xab710d06, 0xa6322bdf, 0xa2f33668,
     0xbcb4666d, 0xb8757bda, 0xb5365d03, 0xb1f740b4};
 
-uint32_t crc_32(const uint8_t *data, int datalen) {
+uint32_t crc_32(const uint8_t *data, ptrdiff_t datalen) {
     uint32_t crc = 0xFFFFFFFF;
     if (datalen < 0)
         return crc;
@@ -709,19 +717,18 @@ int buffer_to_ts(uint8_t *dest, int dstsize, uint8_t *src, int srclen,
                            "%d, srclen %d",
                            pid, len, dstsize, srclen)
         b = dest + len;
-        *cc = ((*cc) + 1) % 16;
+        *cc = static_cast<int16_t>(((*cc) + 1) % 16);
         b[0] = 0x47;
-        b[1] = pid >> 8;
+        copy16(b, 1, pid);
         if (pos == 0)
             b[1] |= 0x40;
-        b[2] = pid & 0xFF;
-        b[3] = 0x10 | *cc;
+        b[3] = static_cast<uint8_t>(0x10 | *cc);
         left = srclen > 184 ? 184 : srclen;
-        memcpy(b + 4, src + pos, left);
+        memcpy(b + 4, src + pos, static_cast<size_t>(left));
         pos += left;
         srclen -= left;
         if (left < 184)
-            memset(b + left + 4, -1, 184 - left);
+            memset(b + left + 4, -1, static_cast<size_t>(184 - left));
         if (opts.debug & DEFAULT_LOG) {
             LOG("pid %d, left -> %d, len %d, cc %d", pid, left, len, *cc);
             hexdump("packet -> ", b, 188);
@@ -762,7 +769,7 @@ int mkdir_recursive(const char *path) {
 }
 
 // https://trac.streamboard.tv/oscam/browser/trunk/oscam-time.c#L172
-void sleep_msec(uint32_t msec) {
+void sleep_msec(int msec) {
     // does not interfere with signals like sleep and usleep do
     struct timespec req_ts;
     req_ts.tv_sec = msec / 1000;
@@ -794,7 +801,7 @@ int get_random(unsigned char *dest, int len) {
         return -1;
     }
 
-    if (read(fd, dest, len) != len) {
+    if (read(fd, dest, static_cast<size_t>(len)) != len) {
         LOG("cannot read from %s", urnd);
         close(fd);
         return -2;
@@ -814,8 +821,10 @@ uint32_t get_random_uint32() {
 }
 
 void _strncpy(char *dst, const char *src, int n) {
-    strncpy(dst, src, n);
-    dst[n - 1] = 0;
+    if (n <= 0)
+        return;
+    if (!memccpy(dst, src, 0, static_cast<size_t>(n - 1)))
+        dst[n - 1] = 0;
 }
 
 /**

@@ -142,7 +142,7 @@ struct RtspFixture {
 // the adapter, so adapter-level and delta pids agree.
 static void add_pid(RtspFixture &fx, int pid) {
     satipc_set_pid(&fx.ad, pid);
-    fx.ad.pids[fx.pid_slots].pid = static_cast<int16_t>(pid);
+    fx.ad.pids[fx.pid_slots].pid = pid;
     fx.ad.pids[fx.pid_slots].flags = PID_STATE_ACTIVE;
     fx.pid_slots++;
 }

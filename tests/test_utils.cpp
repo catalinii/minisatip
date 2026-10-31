@@ -82,7 +82,7 @@ int test_fifo() {
     fifo_push_force(&f3, in_buf, 50, 1); // write_index = 50, read_index = 0
     uint64_t offset = 30;                // 20 bytes available at offset 30
     char out_buf[50] = {0};
-    uint32_t popped = fifo_pop_offset(&f3, out_buf, 50, &offset);
+    size_t popped = fifo_pop_offset(&f3, out_buf, 50, &offset);
     ASSERT_EQUAL(
         popped, 20,
         "Expected fifo_pop_offset to cap to write_index - offset (20 bytes)");

@@ -138,7 +138,7 @@ int test_update_pids() {
     ad.enabled = 1;
     for (int i = 0; i < 8; i++) {
         ad.pids[i].flags = static_cast<char>(i % 4);
-        ad.pids[i].pid = static_cast<int16_t>(i);
+        ad.pids[i].pid = i;
         ad.pids[i].packets = static_cast<uint32_t>(i);
     }
     update_pids(0);

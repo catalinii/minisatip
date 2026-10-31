@@ -72,7 +72,8 @@ void _log(const char *file, int line, const char *fmt, ...) {
         len1 < (int)sizeof(output[0]) ? len1 : (int)sizeof(output[0]) - 1;
     both = 0;
     va_start(arg, fmt);
-    len += vsnprintf(output[idx] + len, sizeof(output[0]) - len, fmt, arg);
+    len += vsnprintf(output[idx] + len,
+                     sizeof(output[0]) - static_cast<size_t>(len), fmt, arg);
     va_end(arg);
 
     if (strcmp(output[idx] + len1, output[1 - idx] + len1) == 0)

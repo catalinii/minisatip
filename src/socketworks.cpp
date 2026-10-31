@@ -90,15 +90,15 @@ int fill_sockaddr(USockAddr *serv, char *host, int port, int ipv4_only) {
     {
         family = AF_INET;
         serv->sin.sin_addr.s_addr = htonl(INADDR_ANY);
-        serv->sin.sin_family = family;
-        serv->sin.sin_port = htons(port);
+        serv->sin.sin_family = AF_INET;
+        serv->sin.sin_port = htons(static_cast<uint16_t>(port));
     } else if (!family) // LISTEN on IPv6 AND IPv4
     {
         family = AF_INET6;
-        serv->sin6.sin6_family = family;
+        serv->sin6.sin6_family = AF_INET6;
         serv->sin6.sin6_flowinfo = 0;
         serv->sin6.sin6_addr = in6addr_any;
-        serv->sin6.sin6_port = htons(port);
+        serv->sin6.sin6_port = htons(static_cast<uint16_t>(port));
     }
     return family;
 }
@@ -114,10 +114,10 @@ int validate_bind_dev(char *dev) {
 }
 
 // Resolves the IPv4 address of a local device via ioctl.
-int get_dev_ip(char *dev, char *buf, int len) {
+int get_dev_ip(char *dev, char *buf, socklen_t len) {
     struct ifreq ifr;
     int sock, rv = -1;
-    if (!dev || !dev[0] || !buf || len < (int)INET_ADDRSTRLEN ||
+    if (!dev || !dev[0] || !buf || len < INET_ADDRSTRLEN ||
         strlen(dev) >= sizeof(ifr.ifr_name))
         return -1;
     sock = socket(AF_INET, SOCK_DGRAM, 0);
@@ -186,7 +186,7 @@ int set_socket_bind_dev(int sock) {
         return -1;
     }
     if (setsockopt(sock, SOL_SOCKET, SO_BINDTODEVICE, opts.bind_dev,
-                   strlen(opts.bind_dev) + 1) < 0) {
+                   static_cast<socklen_t>(strlen(opts.bind_dev) + 1)) < 0) {
         if (errno == EPERM || errno == EACCES) {
             LOG("No permission to bind socket %d to %s, using IP binding", sock,
                 opts.bind_dev);
@@ -555,7 +555,7 @@ int sockets_accept(int socket __attribute__((unused)),
         return 1;
     }
     if (ss->action != NULL) {
-        ss->action(sockets_pool[ni]);
+        ss->action(sockets_pool[static_cast<size_t>(ni)]);
     }
     set_linux_socket_timeout(new_sock);
 
@@ -563,7 +563,7 @@ int sockets_accept(int socket __attribute__((unused)),
 }
 
 int sockets_read(int socket, void *buf, size_t len, sockets *ss, int *rv) {
-    *rv = read(socket, buf, len);
+    *rv = static_cast<int>(read(socket, buf, len));
     if (*rv > 0 && ss->type == TYPE_DVR && (opts.debug & LOG_DMX))
         _dump_packets("read ->", (unsigned char *)buf, *rv, ss->rlen);
 
@@ -572,7 +572,8 @@ int sockets_read(int socket, void *buf, size_t len, sockets *ss, int *rv) {
 
 int sockets_recv(int socket, void *buf, size_t len, sockets *ss, int *rv) {
     int slen = sizeof(ss->sa);
-    *rv = recvfrom(socket, buf, len, 0, &ss->sa.sa, (socklen_t *)&slen);
+    *rv = static_cast<int>(
+        recvfrom(socket, buf, len, 0, &ss->sa.sa, (socklen_t *)&slen));
     // 0 is totally acceptable for UDP
     return (*rv >= 0);
 }
@@ -645,10 +646,12 @@ int sockets_add(int sock, USockAddr *sa, int sid, int type, socket_action a,
 int sockets_del(int sock) {
     int so;
     sockets *ss;
-    if (sock < 0 || sock >= MAX_SOCKS || !sockets_pool[sock])
+    if (sock < 0 || sock >= MAX_SOCKS)
         return 0;
 
-    ss = sockets_pool[sock];
+    ss = sockets_pool[static_cast<size_t>(sock)];
+    if (!ss)
+        return 0;
     std::unique_lock<SMutex> lock(ss->mutex);
     if (!ss->enabled)
         return 0;
@@ -828,15 +831,16 @@ void *select_and_execute(void *arg) {
                     c_time = getTick();
                     ss->iteration++;
                     ss->revents = p.revents;
-                    int buffered = fifo_used(&ss->fifo);
+                    size_t buffered = fifo_used(&ss->fifo);
 
-                    DEBUGM("event on socket index %d handle %d type %d "
-                           "buffered %d (poll fd: %d, events: %d, revents: %d)",
-                           ss->id, ss->sock, ss->type, buffered, p.fd, p.events,
-                           p.revents);
+                    DEBUGM(
+                        "event on socket index %d handle %d type %d "
+                        "buffered %zu (poll fd: %d, events: %d, revents: %d)",
+                        ss->id, ss->sock, ss->type, buffered, p.fd, p.events,
+                        p.revents);
 
                     if ((p.revents & POLLOUT) && buffered) {
-                        LOGM("start flush sock id %d, buffered %d", ss->id,
+                        LOGM("start flush sock id %d, buffered %zu", ss->id,
                              buffered);
                         flush_socket(ss);
 
@@ -888,8 +892,9 @@ void *select_and_execute(void *arg) {
                         old_rlen = master->rlen;
 
                         if (ss->read)
-                            read_ok =
-                                ss->read(ss->sock, pos, pos_len, ss, &rlen);
+                            read_ok = ss->read(ss->sock, pos,
+                                               static_cast<size_t>(pos_len), ss,
+                                               &rlen);
 
                         err = 0;
                         if (!read_ok)
@@ -1087,13 +1092,13 @@ void set_socket_new_buffer(int sid, int len) {
 
     buf = ss->buf;
 
-    ss->buf = (uint8_t *)malloc(len);
+    ss->buf = (uint8_t *)malloc(static_cast<size_t>(len));
     if (!ss->buf) {
         ss->buf = buf;
         return;
     }
     ss->lbuf = len;
-    memcpy(ss->buf, buf, ss->rlen);
+    memcpy(ss->buf, buf, static_cast<size_t>(ss->rlen));
     ss->flags = ss->flags | 1;
 }
 
@@ -1150,7 +1155,7 @@ void set_socket_receive_buffer(int sock, int len) {
         LOG("receive socket buffer size is %d bytes", len);
 }
 
-char *get_sock_shost(int fd, char *dest, int ld) {
+char *get_sock_shost(int fd, char *dest, socklen_t ld) {
     USockAddr sin;
     socklen_t len = sizeof(sin);
     if (getsockname(fd, &sin.sa, &len))
@@ -1174,7 +1179,7 @@ int get_sockaddr_port(USockAddr s) {
     return 0;
 }
 
-char *get_sockaddr_host(USockAddr s, char *dest, int ld) {
+char *get_sockaddr_host(USockAddr s, char *dest, socklen_t ld) {
     void *p = (void *)&s.sin.sin_addr;
     dest[0] = 0;
     memset(dest, 0, ld);
@@ -1225,25 +1230,25 @@ struct mmsghdr {
 #endif
 
 #if defined(__APPLE__) || defined(__SH4__) || defined(NEEDS_SENDMMSG_SHIM)
-int sendmmsg0(int rsock, struct mmsghdr *msg, int len) {
-    int i;
-    for (i = 0; i < len; i++)
-        writev(rsock, msg[i].msg_hdr.msg_iov, msg[i].msg_hdr.msg_iovlen);
-    return len;
+int sendmmsg0(int rsock, struct mmsghdr *msg, unsigned int len) {
+    for (unsigned int i = 0; i < len; i++)
+        writev(rsock, msg[i].msg_hdr.msg_iov,
+               static_cast<int>(msg[i].msg_hdr.msg_iovlen));
+    return static_cast<int>(len);
 }
 #define sendmmsg(a, b, c, d) sendmmsg0(a, b, c)
 #endif
 
 int writev_udp(int rsock, struct iovec *iov, int iiov) {
     struct mmsghdr msg[1024];
-    int i, j = 0, last_i = 0, retval, total_iov = 0;
-    int total_len = 0;
+    int i, j = 0, last_i = 0, retval;
+    size_t total_iov = 0, total_len = 0;
     memset(msg, 0, sizeof(msg));
 
     for (i = 0; i < iiov; i++) {
         if (iov[i].iov_len < 188) {
             if (j > 0)
-                msg[j - 1].msg_hdr.msg_iovlen = i - last_i;
+                msg[j - 1].msg_hdr.msg_iovlen = static_cast<size_t>(i - last_i);
 
             msg[j].msg_hdr.msg_iov = iov + i;
             last_i = i;
@@ -1251,8 +1256,8 @@ int writev_udp(int rsock, struct iovec *iov, int iiov) {
         }
     }
     if (j > 0)
-        msg[j - 1].msg_hdr.msg_iovlen = i - last_i;
-    retval = sendmmsg(rsock, msg, j, 0);
+        msg[j - 1].msg_hdr.msg_iovlen = static_cast<size_t>(i - last_i);
+    retval = sendmmsg(rsock, msg, static_cast<unsigned int>(j), 0);
     if (retval == -1)
         LOG("sendmmsg(): errno %d: %s", errno, strerror(errno))
     else if (retval != j)
@@ -1260,9 +1265,9 @@ int writev_udp(int rsock, struct iovec *iov, int iiov) {
 
     for (i = 0; i < retval; i++)
         total_iov += msg[i].msg_hdr.msg_iovlen;
-    for (i = 0; i < total_iov; i++)
-        total_len += iov[i].iov_len;
-    return total_len;
+    for (size_t k = 0; k < total_iov; k++)
+        total_len += iov[k].iov_len;
+    return static_cast<int>(total_len);
 }
 
 // returns -1 or -EWOULDBLOCK
@@ -1274,7 +1279,7 @@ int my_writev(sockets *s, struct iovec *iov, int iiov) {
 
     len = 0;
     for (i = 0; i < iiov; i++)
-        len += iov[i].iov_len;
+        len += static_cast<int>(iov[i].iov_len);
 
     DEBUGM("start writev handle %d, iiov %d, len %d", s->sock, iiov, len);
     if (opts.log & DEFAULT_LOG)
@@ -1284,7 +1289,7 @@ int my_writev(sockets *s, struct iovec *iov, int iiov) {
         if ((s->type == TYPE_UDP || s->type == TYPE_RTP) && len > 1450)
             rv = writev_udp(s->sock, iov, iiov);
         else
-            rv = writev(s->sock, iov, iiov);
+            rv = static_cast<int>(writev(s->sock, iov, iiov));
     }
     _errno = errno;
 
@@ -1334,19 +1339,20 @@ int my_writev(sockets *s, struct iovec *iov, int iiov) {
 #define MAX_PRIO_DATA (1024 * 1024)
 
 int socket_enque_highprio(sockets *s, struct iovec *iov, int iovcnt) {
-    int len = 0, i, pos = 0;
+    int i;
+    size_t len = 0, pos = 0;
     for (i = 0; i < iovcnt; i++)
         len += iov[i].iov_len;
 
     pos = s->prio_data_len;
     if (len > MAX_PRIO_DATA - pos) {
-        LOG("sock %d: dropping %d bytes of high priority data, %d queued",
+        LOG("sock %d: dropping %zu bytes of high priority data, %zu queued",
             s->id, len, pos);
         return -1;
     }
     uint8_t *data = (uint8_t *)realloc(s->prio_data, pos + len);
     if (!data) {
-        LOG("sock %d: no memory to queue %d bytes", s->id, len);
+        LOG("sock %d: no memory to queue %zu bytes", s->id, len);
         return -1;
     }
     s->prio_data = data;
@@ -1367,10 +1373,10 @@ int find_next_rtsp_header(SFIFO *fifo) {
     while (offset < fifo->write_index - 8) {
         if ((((fifo_peek_32(fifo, offset) & 0xFFFF0000) == 0x24000000) &&
              (fifo_peek_32(fifo, offset + 4) & 0xFFFF0000) == 0x80210000))
-            return offset - fifo->read_index;
+            return static_cast<int>(offset - fifo->read_index);
         if ((((fifo_peek_32(fifo, offset) & 0xFFFF0000) == 0x24010000) &&
              (fifo_peek_32(fifo, offset + 4) & 0xFFFF0000) == 0x80C80000))
-            return offset - fifo->read_index;
+            return static_cast<int>(offset - fifo->read_index);
         offset++;
     }
     return -1;
@@ -1378,13 +1384,13 @@ int find_next_rtsp_header(SFIFO *fifo) {
 
 // copies the data from a iov structure to the fifo, starting with offset
 // if offset is 0 the entire data is copied.
-int copy_iovec_to_fifo(SFIFO *fifo, u_int32_t offset, struct iovec *iov,
+int copy_iovec_to_fifo(SFIFO *fifo, size_t offset, struct iovec *iov,
                        int iovcnt) {
-    int len = 0, i;
-    int64_t available;
+    int i;
+    size_t len = 0, available;
     int size = opts.max_sbuf * 1048576;
 
-    if (create_fifo(fifo, size))
+    if (create_fifo(fifo, static_cast<size_t>(size)))
         LOG_AND_RETURN(0, "Unable to allocate the FIFO with size %d", size);
     available = fifo_available(fifo);
 
@@ -1400,7 +1406,7 @@ int copy_iovec_to_fifo(SFIFO *fifo, u_int32_t offset, struct iovec *iov,
         }
         offset = (offset > iov[i].iov_len) ? offset - iov[i].iov_len : 0;
     }
-    return available - fifo_available(fifo);
+    return static_cast<int>(available - fifo_available(fifo));
 }
 
 // if we need the user tuned to a new freq, drop all the data that is in
@@ -1412,9 +1418,10 @@ void flush_enqued_data_if_neededf_needed(sockets *s) {
 
     int off = find_next_rtsp_header(&s->fifo);
     if (off >= 0) {
+        uint64_t end = s->fifo.read_index + static_cast<uint64_t>(off);
         LOG("sock %d dropping %jd enqueued bytes (offset %d)", s->id,
-            s->fifo.write_index - (s->fifo.read_index + off), off);
-        s->fifo.write_index = s->fifo.read_index + off;
+            s->fifo.write_index - end, off);
+        s->fifo.write_index = end;
     }
     s->flush_enqued_data = 0;
 }
@@ -1432,7 +1439,7 @@ int sockets_writev_prio(int sock_id, struct iovec *iov, int iovcnt,
     if (!s)
         return -1;
     for (i = 0; i < iovcnt; i++)
-        len += iov[i].iov_len;
+        len += static_cast<int>(iov[i].iov_len);
     if (len == 0)
         return 0;
 
@@ -1464,7 +1471,7 @@ int sockets_writev_prio(int sock_id, struct iovec *iov, int iovcnt,
     if (!copied) {
         if ((s->overflow == 0) || (opts.log & DEFAULT_LOG))
             LOG("Insufficient bandwidth: sock %d: overflow %d bytes, total "
-                "%.1f MB, len %d, offset %d, rv %d, available %d",
+                "%.1f MB, len %d, offset %d, rv %d, available %zu",
                 s->id, len - offset, s->overflow / 1048576.0, len, offset, rv,
                 fifo_available(&s->fifo));
         s->overflow += len - offset;
@@ -1475,24 +1482,24 @@ int sockets_writev_prio(int sock_id, struct iovec *iov, int iovcnt,
     if (copied + offset != len)
         LOG("Unhandled sock %d data: copied %d offset %d len %d", s->id, copied,
             offset, len);
-    LOGM("got %d bytes, offset %d, rv %d, buffered %d bytes - used %d", len,
+    LOGM("got %d bytes, offset %d, rv %d, buffered %d bytes - used %zu", len,
          offset, rv, copied, fifo_used(&s->fifo));
     s->buffered_bytes += copied;
     buffered_bytes += copied;
     return offset;
 }
 
-int sockets_write(int sock_id, void *buf, int len) {
+int sockets_write(int sock_id, void *buf, size_t len) {
     struct iovec iov[1];
     iov[0].iov_base = buf;
     iov[0].iov_len = len;
     return sockets_writev(sock_id, iov, 1);
 }
 
-int flush_socket_all(sockets *s, int used) {
+int flush_socket_all(sockets *s, size_t used) {
     struct iovec iov[2];
     int i = 0, rv = 0;
-    uint64_t ctime = getTick();
+    int64_t ctime = getTick();
 
     if (used == 0)
         return 0;
@@ -1500,7 +1507,7 @@ int flush_socket_all(sockets *s, int used) {
     iov[0].iov_len = fifo_peek(&s->fifo, &iov[0].iov_base, used, 0);
     i = 1;
     // the entire FIFO can be read using 2 pointers
-    if (iov[0].iov_len < (uint32_t)used) {
+    if (iov[0].iov_len < used) {
         iov[1].iov_len = fifo_peek(&s->fifo, &iov[1].iov_base,
                                    used - iov[0].iov_len, iov[0].iov_len);
         i++;
@@ -1509,9 +1516,9 @@ int flush_socket_all(sockets *s, int used) {
 
     if (rv <= 0)
         return rv;
-    fifo_skip_bytes(&s->fifo, rv);
+    fifo_skip_bytes(&s->fifo, static_cast<size_t>(rv));
 
-    LOGM("SOCK %d: flushed %d (out of %d) bytes in %jd "
+    LOGM("SOCK %d: flushed %d (out of %zu) bytes in %jd "
          "ms",
          s->id, rv, used, getTick() - ctime);
 
@@ -1520,12 +1527,12 @@ int flush_socket_all(sockets *s, int used) {
 
 int flush_socket_prio(sockets *s) {
     struct iovec iov[2];
-    uint64_t ctime = getTick();
+    int64_t ctime = getTick();
     int rv = 0;
     int left = find_next_rtsp_header(&s->fifo);
     memset(iov, 0, sizeof(iov));
     if (left > 0) {
-        if ((rv = flush_socket_all(s, left)) >= 0)
+        if ((rv = flush_socket_all(s, static_cast<size_t>(left))) >= 0)
             left -= rv;
     }
 
@@ -1538,15 +1545,16 @@ int flush_socket_prio(sockets *s) {
     iov[0].iov_base = s->prio_data;
     iov[0].iov_len = s->prio_data_len;
     rv = my_writev(s, iov, 1);
-    LOG("sock %d, flushed %d bytes of priority data from %d", s->id, rv,
+    LOG("sock %d, flushed %d bytes of priority data from %zu", s->id, rv,
         s->prio_data_len);
     if (rv <= 0)
         return 1;
-    if ((rv > 0) && (rv != s->prio_data_len)) {
-        LOG("sock %d incomplete priority data write %d left %d in %jd ms",
-            s->id, rv, s->prio_data_len - rv, getTick() - ctime);
-        memmove(s->prio_data, s->prio_data + rv, s->prio_data_len - rv);
-        s->prio_data_len -= rv;
+    size_t sent = static_cast<size_t>(rv);
+    if (sent != s->prio_data_len) {
+        LOG("sock %d incomplete priority data write %d left %zu in %jd ms",
+            s->id, rv, s->prio_data_len - sent, getTick() - ctime);
+        memmove(s->prio_data, s->prio_data + rv, s->prio_data_len - sent);
+        s->prio_data_len -= sent;
         return 1;
     }
     s->prio_data_len = 0;

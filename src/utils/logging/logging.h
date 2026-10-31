@@ -4,6 +4,7 @@
 #include "opts.h"
 
 #include <atomic>
+#include <stddef.h>
 #include <stdint.h>
 #include <sys/types.h>
 
@@ -11,9 +12,9 @@ void _log(const char *file, int line, const char *fmt, ...)
     __attribute__((format(printf, 3, 4)));
 void _dump_packets(const char *message, unsigned char *b, int len,
                    int packet_offset);
-void _hexdump(const char *desc, void *addr, int len);
+void _hexdump(const char *desc, void *addr, ptrdiff_t len);
 char *get_current_timestamp_log();
-uint32_t crc_32(const uint8_t *data, int datalen);
+uint32_t crc_32(const uint8_t *data, ptrdiff_t datalen);
 
 #define MAX_THREAD_INFO 135 // 128 + 7
 typedef struct {
@@ -49,36 +50,36 @@ extern __thread int thread_index;
     {                                                                          \
         thread_info[thread_index].last_log = a;                                \
         if ((level) & opts.log)                                                \
-            _log(__FILE__, __LINE__, a, ##__VA_ARGS__);                        \
+            _log(__FILE__, __LINE__, a __VA_OPT__(, ) __VA_ARGS__);            \
     }
 
-#define LOGM(a, ...) LOGL(DEFAULT_LOG, a, ##__VA_ARGS__)
+#define LOGM(a, ...) LOGL(DEFAULT_LOG, a __VA_OPT__(, ) __VA_ARGS__)
 
-#define LOG(a, ...) LOGL(1, a, ##__VA_ARGS__)
+#define LOG(a, ...) LOGL(1, a __VA_OPT__(, ) __VA_ARGS__)
 
 #define DEBUGL(level, a, ...)                                                  \
     {                                                                          \
         thread_info[thread_index].last_log = a;                                \
         if ((level) & opts.debug)                                              \
-            _log(__FILE__, __LINE__, a, ##__VA_ARGS__);                        \
+            _log(__FILE__, __LINE__, a __VA_OPT__(, ) __VA_ARGS__);            \
     }
-#define DEBUGM(a, ...) DEBUGL(DEFAULT_LOG, a, ##__VA_ARGS__)
+#define DEBUGM(a, ...) DEBUGL(DEFAULT_LOG, a __VA_OPT__(, ) __VA_ARGS__)
 
 #define LOG0(a, ...)                                                           \
     {                                                                          \
         thread_info[thread_index].last_log = a;                                \
-        _log(__FILE__, __LINE__, a, ##__VA_ARGS__);                            \
+        _log(__FILE__, __LINE__, a __VA_OPT__(, ) __VA_ARGS__);                \
     }
 
 #define FAIL(a, ...)                                                           \
     {                                                                          \
-        LOG0(a, ##__VA_ARGS__);                                                \
+        LOG0(a __VA_OPT__(, ) __VA_ARGS__);                                    \
         unlink(pid_file);                                                      \
         exit(1);                                                               \
     }
 #define LOG_AND_RETURN(rc, a, ...)                                             \
     {                                                                          \
-        LOG(a, ##__VA_ARGS__);                                                 \
+        LOG(a __VA_OPT__(, ) __VA_ARGS__);                                     \
         return rc;                                                             \
     }
 

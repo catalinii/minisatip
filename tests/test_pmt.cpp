@@ -989,6 +989,10 @@ int test_scan_pmt_only_starts_nothing() {
 // PMT starts.
 int test_active_pmt_list_capped_at_max() {
     adapter ad = {};
+    // Clear the slot on every return, early ASSERTs included
+    struct clear_a0 {
+        ~clear_a0() { a[0] = nullptr; }
+    } clear_guard;
     a[0] = &ad;
     ad.enabled = 1;
     ad.id = 0;
@@ -1336,7 +1340,7 @@ int test_sticky_claims_without_parse() {
         ad.pids[i].flags = PID_STATE_ACTIVE;
         ad.pids[i].pmt = -1;
         ad.pids[i].filter = -1;
-        ad.pids[i].sid.insert(static_cast<int16_t>(i < 2 ? 1 - i : 0));
+        ad.pids[i].sid.insert(i < 2 ? 1 - i : 0);
         if (i >= 2)
             ad.pids[i].sid.insert(1);
         ad.pids[i].order = orders[i];
@@ -1393,7 +1397,7 @@ int test_earlier_newcomer_steals_by_order() {
         ad.pids[i].flags = PID_STATE_ACTIVE;
         ad.pids[i].pmt = -1;
         ad.pids[i].filter = -1;
-        ad.pids[i].sid.insert(static_cast<int16_t>(i < 2 ? 1 - i : 0));
+        ad.pids[i].sid.insert(i < 2 ? 1 - i : 0);
         if (i >= 2)
             ad.pids[i].sid.insert(1);
         ad.pids[i].order = orders[i];
@@ -2179,14 +2183,13 @@ static int check_replay_issue_log(const int *order, const int *ecms, int necms,
         int id = pmt_add(0, rp->sid, 817);
         ASSERT(id >= 0, "replay PMT should be created");
         for (int k = 0; k < rp->nstreams; k++) {
-            int t = rp->stype[k];
+            uint8_t t = rp->stype[k];
             bool video = t == 2 || t == 27 || t == 36 || t == 15;
             bool audio = t == 129 || t == 3 || t == 4 || t == 17;
             pmt_add_stream_pid(pmt_slot(id), rp->spid[k], t, audio, video);
         }
         if (rp->caid)
-            pmt_add_caid(pmt_slot(id), static_cast<uint16_t>(rp->caid),
-                         static_cast<uint16_t>(rp->ecm), nullptr, 0);
+            pmt_add_caid(pmt_slot(id), rp->caid, rp->ecm, nullptr, 0);
         pmt_add_active_pmt(&ad, id);
         start_active_pmts(&ad);
     }
@@ -2262,8 +2265,7 @@ int test_1129_bein_shared_es() {
     for (int id : {ticari, bein}) {
         pmt_add_stream_pid(pmt_slot(id), 3301, 2, false, true);
         pmt_add_stream_pid(pmt_slot(id), 3401, 3, true, false);
-        pmt_add_caid(pmt_slot(id), 0x0664, static_cast<uint16_t>(0x1F00 + id),
-                     priv, 0);
+        pmt_add_caid(pmt_slot(id), 0x0664, 0x1F00 + id, priv, 0);
     }
     ad.active_pmts = 2;
     ad.active_pmt[0] = ticari;
@@ -2385,7 +2387,7 @@ int test_held_pids_without_client_stop_pmt() {
     for (i = 0; i < 3; i++) {
         ad.pids[i].pid = pids[i];
         ad.pids[i].flags = PID_STATE_ACTIVE;
-        ad.pids[i].pmt = static_cast<int16_t>(id);
+        ad.pids[i].pmt = id;
         ad.pids[i].filter = -1;
         ad.pids[i].sid.insert(DDCI_SID);
     }
@@ -2659,7 +2661,7 @@ int test_running_pmt_pid_deleted_on_unsubscribe() {
         ad.pids[i].pid = pids[i];
         ad.pids[i].flags = PID_STATE_ACTIVE;
         ad.pids[i].pmt = -1;
-        ad.pids[i].filter = static_cast<int16_t>(i == 0 ? fid : -1);
+        ad.pids[i].filter = i == 0 ? fid : -1;
         ad.pids[i].sid.insert(0);
         ad.pids[i].order = static_cast<uint32_t>(i + 1);
     }
@@ -2838,8 +2840,7 @@ int test_update_pids_tail_elects() {
     for (int id : {aid, bid}) {
         pmt_add_stream_pid(pmt_slot(id), 3301, 2, false, true);
         pmt_add_stream_pid(pmt_slot(id), 3401, 3, true, false);
-        pmt_add_caid(pmt_slot(id), 0x0664, static_cast<uint16_t>(0x1F00 + id),
-                     priv, 0);
+        pmt_add_caid(pmt_slot(id), 0x0664, 0x1F00 + id, priv, 0);
     }
     int fa = add_filter(0, 48, (void *)process_pmt, pmt_slot(aid), 0);
     int fb = add_filter(0, 52, (void *)process_pmt, pmt_slot(bid), 0);

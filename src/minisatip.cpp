@@ -588,9 +588,9 @@ By default every CAM supports 1 channels\n\
     exit(1);
 }
 
-char *get_command_line_string(int argc, char *argv[]) {
+char *get_command_line_string(int argc, const char *const argv[]) {
     int i;
-    size_t len = argc;
+    size_t len = static_cast<size_t>(argc);
 
     for (i = 0; i < argc; i++) {
         len += strlen(argv[i]) + 1;
@@ -611,7 +611,7 @@ char *get_command_line_string(int argc, char *argv[]) {
 void get_short_opts(char *short_opts, const struct option *long_opts) {
     int i = 0;
     while (long_opts[i].name) {
-        *short_opts++ = long_opts[i].val;
+        *short_opts++ = static_cast<char>(long_opts[i].val);
         if (long_opts[i].has_arg == required_argument)
             *short_opts++ = ':';
         else if (long_opts[i].has_arg == optional_argument) {
@@ -1033,13 +1033,13 @@ void set_options(int argc, char *argv[]) {
             if (sep1 != NULL) {
                 *sep1 = 0;
                 opts.netcv_if = optarg;
-                opts.netcv_count = parse_int(sep1 + 1);
+                opts.netcv_count = static_cast<uint8_t>(parse_int(sep1 + 1));
                 break;
             }
 
             // default interface is vlan4 as it is used on the REEL
             opts.netcv_if = (char *)"vlan4";
-            opts.netcv_count = parse_int(optarg);
+            opts.netcv_count = static_cast<uint8_t>(parse_int(optarg));
 #endif
             break;
         }
@@ -1129,7 +1129,7 @@ void set_options(int argc, char *argv[]) {
 
     if (!opts.http_host) {
         opts.http_host = (char *)malloc(MAX_HOST);
-        snprintf(opts.http_host, MAX_HOST, "%s:%u", lip, opts.http_port);
+        snprintf(opts.http_host, MAX_HOST, "%s:%d", lip, opts.http_port);
     }
 
     opts.rtsp_host = (char *)malloc(MAX_HOST);
@@ -1178,7 +1178,8 @@ void set_options(int argc, char *argv[]) {
 int read_rtsp(sockets *s) {
     if (!s->rlen) // nothing buffered (EOF), nothing to parse
         return 0;
-    int cseq, i, rlen;
+    int cseq, rlen;
+    size_t i;
     int sess_id = 0;
     char buf[2000];
     char ra[50];
@@ -1195,15 +1196,15 @@ int read_rtsp(sockets *s) {
             s->id, s->sid, s->rlen, rtsp_len, s->buf[4], s->buf[5],
             (s->rlen == rtsp_len + 4) ? "complete" : "fragment");
         if (s->rlen >= rtsp_len + 4) { // we did not receive the entire packet
-            memmove(s->buf, s->buf + rtsp_len + 4, s->rlen - (rtsp_len + 4));
+            memmove(s->buf, s->buf + rtsp_len + 4,
+                    static_cast<size_t>(s->rlen - (rtsp_len + 4)));
             s->rlen -= rtsp_len + 4;
             if (s->rlen == 0)
                 return 0;
         } else { // handle the remaining data as next fragment
             rtsp_len -= s->rlen - 4;
             s->rlen = 4;
-            s->buf[2] = rtsp_len >> 8;
-            s->buf[3] = rtsp_len & 0xFF;
+            copy16(s->buf, 2, rtsp_len);
             return 0;
         }
     }
@@ -1248,7 +1249,7 @@ int read_rtsp(sockets *s) {
             s->id, s->sid, rlen);
 
     if (s->sid < 0)
-        for (i = 0; i < (int)arg.size(); i++)
+        for (i = 0; i < arg.size(); i++)
             if (starts_with_case_insensitive(arg[i], "Session:")) {
                 sess_id = parse_int(header_parameter(arg, i));
                 s->sid = find_session_id(sess_id);
@@ -1277,7 +1278,7 @@ int read_rtsp(sockets *s) {
     std::string_view useragent_sv;
     std::string_view transport_sv;
 
-    for (i = 0; i < (int)arg.size(); i++)
+    for (i = 0; i < arg.size(); i++)
         if (starts_with_case_insensitive(arg[i], "CSeq:"))
             cseq = parse_int(header_parameter(arg, i));
         else if (starts_with_case_insensitive(arg[i], "Transport:")) {
@@ -1465,7 +1466,7 @@ int read_http(sockets *s) {
     char ra[50];
     char *space;
     int is_head = 0;
-    static const char *xml =
+    static constexpr char xml[] =
         "<?xml version=\"1.0\"?>"
         "<root xmlns=\"urn:schemas-upnp-org:device-1-0\" configId=\"1\">"
         "<specVersion><major>1</major><minor>1</minor></specVersion>"
@@ -1541,7 +1542,7 @@ int read_http(sockets *s) {
     opts.datetime_current[24] = ' ';
     opts.datetime_current[25] = '\0';
 
-    double seconds = difftime(now, opts.start_time);
+    int seconds = static_cast<int>(difftime(now, opts.start_time));
     int days = seconds / 60 / 60 / 24;
     seconds -= days * 24 * 60 * 60;
     int hours = seconds / 60 / 60;
@@ -1736,10 +1737,10 @@ int ssdp_notify(sockets *s, int alive) {
         strcatf(buf, ptr, "\r\n\r\n");
 
         LOGM("%s packet %d:\n%s", op, i + 1, buf);
-        int wb = sendto(s->sock, buf, ptr, MSG_NOSIGNAL, &ssdp_sa.sa,
-                        SOCKADDR_SIZE(ssdp_sa));
+        ssize_t wb = sendto(s->sock, buf, static_cast<size_t>(ptr),
+                            MSG_NOSIGNAL, &ssdp_sa.sa, SOCKADDR_SIZE(ssdp_sa));
         if (wb != ptr)
-            LOG("incomplete ssdp_discovery: wrote %d out of %d: error %d: %s",
+            LOG("incomplete ssdp_discovery: wrote %zd out of %d: error %d: %s",
                 wb, ptr, errno, strerror(errno));
         ptr = 0;
     }
@@ -1761,23 +1762,25 @@ int ssdp_byebye(sockets *s) { return ssdp_notify(s, 0); }
 
 int ssdp;
 int ssdp_reply(sockets *s) {
-    const char *reply = "HTTP/1.1 200 OK\r\n"
-                        "CACHE-CONTROL: max-age=1800\r\n"
-                        "DATE: %s\r\n"
-                        "EXT:\r\n"
-                        "LOCATION: http://%s/%s\r\n"
-                        "SERVER: Linux/1.0 UPnP/1.1 %s/%s\r\n"
-                        "ST: urn:ses-com:device:SatIPServer:1\r\n"
-                        "USN: uuid:%s::urn:ses-com:device:SatIPServer:1\r\n"
-                        "BOOTID.UPNP.ORG: %d\r\n"
-                        "CONFIGID.UPNP.ORG: 0\r\n"
-                        "DEVICEID.SES.COM: %d\r\n\r\n\0";
-    const char *device_id_conflict = "M-SEARCH * HTTP/1.1\r\n"
-                                     "HOST: %s:1900\r\n"
-                                     "MAN: \"ssdp:discover\"\r\n"
-                                     "ST: urn:ses-com:device:SatIPServer:1\r\n"
-                                     "USER-AGENT: Linux/1.0 UPnP/1.1 %s/%s\r\n"
-                                     "DEVICEID.SES.COM: %d\r\n\r\n\0";
+    static constexpr char reply[] =
+        "HTTP/1.1 200 OK\r\n"
+        "CACHE-CONTROL: max-age=1800\r\n"
+        "DATE: %s\r\n"
+        "EXT:\r\n"
+        "LOCATION: http://%s/%s\r\n"
+        "SERVER: Linux/1.0 UPnP/1.1 %s/%s\r\n"
+        "ST: urn:ses-com:device:SatIPServer:1\r\n"
+        "USN: uuid:%s::urn:ses-com:device:SatIPServer:1\r\n"
+        "BOOTID.UPNP.ORG: %d\r\n"
+        "CONFIGID.UPNP.ORG: 0\r\n"
+        "DEVICEID.SES.COM: %d\r\n\r\n";
+    static constexpr char device_id_conflict[] =
+        "M-SEARCH * HTTP/1.1\r\n"
+        "HOST: %s:1900\r\n"
+        "MAN: \"ssdp:discover\"\r\n"
+        "ST: urn:ses-com:device:SatIPServer:1\r\n"
+        "USER-AGENT: Linux/1.0 UPnP/1.1 %s/%s\r\n"
+        "DEVICEID.SES.COM: %d\r\n\r\n";
     char *man, *man_sd, *didsescom, *ruuid, *rdid;
     char buf[500];
     char ra[50];
@@ -1814,10 +1817,10 @@ int ssdp_reply(sockets *s) {
             LOG("A new device joined the network with the same Device ID:  %s, "
                 "asking to change DEVICEID.SES.COM",
                 get_sockaddr_host(s->sa, ra, sizeof(ra)));
-            int wb = sendto(ssdp, buf, ptr, MSG_NOSIGNAL, &s->sa.sa,
-                            SOCKADDR_SIZE(s->sa));
+            ssize_t wb = sendto(ssdp, buf, static_cast<size_t>(ptr),
+                                MSG_NOSIGNAL, &s->sa.sa, SOCKADDR_SIZE(s->sa));
             if (wb != ptr)
-                LOG("incomplete ssdp_reply notify: wrote %d out of %d: error "
+                LOG("incomplete ssdp_reply notify: wrote %zd out of %d: error "
                     "%d: %s",
                     wb, ptr, errno, strerror(errno));
         }
@@ -1858,10 +1861,10 @@ int ssdp_reply(sockets *s) {
          ssdp, get_sockaddr_host(s->sa, ra, sizeof(ra)),
          get_sockaddr_port(s->sa), opts.bootid, did, opts.http_host, buf);
     // use ssdp (unicast) even if received to multicast address
-    int wb =
-        sendto(ssdp, buf, ptr, MSG_NOSIGNAL, &s->sa.sa, SOCKADDR_SIZE(s->sa));
+    ssize_t wb = sendto(ssdp, buf, static_cast<size_t>(ptr), MSG_NOSIGNAL,
+                        &s->sa.sa, SOCKADDR_SIZE(s->sa));
     if (wb != ptr)
-        LOG("incomplete ssdp_reply: wrote %d out of %d: error %d: %s", wb, ptr,
+        LOG("incomplete ssdp_reply: wrote %zd out of %d: error %d: %s", wb, ptr,
             errno, strerror(errno));
     return 0;
 }
@@ -2128,7 +2131,7 @@ void http_response(sockets *s, int rc, const char *ah, const char *desc,
     desc1 = desc;
     resp[sizeof(resp) - 1] = 0;
     if (!lr)
-        lr = strlen(desc);
+        lr = static_cast<int>(strlen(desc));
     else {
         binary = 1;
         desc1 = (char *)"";
@@ -2170,7 +2173,7 @@ void http_response(sockets *s, int rc, const char *ah, const char *desc,
     iov[0].iov_len = strlen(resp);
     if (binary) {
         iov[1].iov_base = const_cast<char *>(desc);
-        iov[1].iov_len = lr;
+        iov[1].iov_len = static_cast<size_t>(lr);
     }
     sockets_writev_prio(s->id, iov, binary ? 2 : 1, 1);
 }
