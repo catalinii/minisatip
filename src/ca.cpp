@@ -500,7 +500,7 @@ int dh_dhph_signature(uint8_t *out, uint8_t *nonce, uint8_t *dhph,
     return RSA_private_encrypt_wrapper(pkey, 0x12e, dest, out);
 }
 
-int verify_cb(int, X509_STORE_CTX *ctx) {
+int verify_cb(int ok, X509_STORE_CTX *ctx) {
     if (X509_STORE_CTX_get_error(ctx) == X509_V_ERR_CERT_NOT_YET_VALID) {
         time_t now = time(NULL);
         struct tm *t = localtime(&now);
@@ -512,7 +512,7 @@ int verify_cb(int, X509_STORE_CTX *ctx) {
 
     if (X509_STORE_CTX_get_error(ctx) == X509_V_ERR_CERT_HAS_EXPIRED)
         return 1;
-    return 0;
+    return ok;
 }
 
 EVP_PKEY *rsa_privatekey_open(const char *filename) {
@@ -1965,9 +1965,9 @@ static int check_ci_certificates(struct cc_ctrl_data *cc_data) {
             open(ci_cert_file, O_CREAT | O_WRONLY | O_TRUNC, S_IRUSR | S_IWUSR);
         if (fd < 0)
             LOG_AND_RETURN(-1, "opening %s for writing failed", ci_cert_file);
-        ssize_t ret = write(fd, element_get_ptr(cc_data, 16),
-                            element_get_buf(cc_data, NULL, 16));
-        if (ret)
+        size_t cert_len = element_get_buf(cc_data, NULL, 16);
+        ssize_t ret = write(fd, element_get_ptr(cc_data, 16), cert_len);
+        if (ret != static_cast<ssize_t>(cert_len))
             LOG("write cert failed");
         close(fd);
         /* display strings in der cert file */
