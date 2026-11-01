@@ -292,7 +292,7 @@ static void ddci_enigma_set_tsclk(ddci_device_t *d) {
     cur[0] = 0;
     if (!cf || !cf.getline(cur, sizeof(cur)) || !cur[0])
         return;
-    snprintf(d->tsclk_saved, sizeof(d->tsclk_saved), "%s", cur);
+    snprintf(d->tsclk_saved, sizeof(d->tsclk_saved), "%.15s", cur);
     if (best == cur)
         return;
     std::ofstream out(path);
@@ -474,13 +474,6 @@ int ddci_close_dev(adapter *ad) {
 SCA_op ddci;
 
 int ddci_close_adapter(adapter *) { return 0; }
-
-// Loopback teardown stops the push and returns the CI input.
-static int ddci_close_loopback(adapter *a) {
-    ddci_push_stop(ddci_devices[a->id]);
-    ddci_enigma_route_none(ddci_devices[a->id]);
-    return 0;
-}
 
 extern SMutex ca_mask_mutex;
 
@@ -1361,17 +1354,12 @@ int push_ts_to_adapter(ddci_device_t *d, adapter *ad, uint16_t *mapping) {
         "fifo %jd",
         popped, i, ad->rlen, ad->lbuf,
         d->fifo.write_index - d->read_index[ad->id]);
-    // Popped bytes prove the CAM drains; log the first flow only.
-    if (popped > 0 && !d->last_tap_tick.load(std::memory_order_relaxed)) {
-        LOG("DDCI %d: tap flowing", d->id);
-        d->last_tap_tick.store(getTick(), std::memory_order_relaxed);
-    }
     return 0;
 }
 
 // Push loop: loopback copies one chunk per cycle like enigma
 // filepush; hardware DDCI writevs straight off the ring.
-void ddci_push_loop(int id) {
+static void ddci_push_loop(int id) {
     ddci_device_t *d =
         (id >= 0 && id < MAX_ADAPTERS) ? ddci_devices[id] : nullptr;
     if (!d)
@@ -1412,25 +1400,30 @@ void ddci_push_loop(int id) {
         size_t off = 0;
         bool fatal = false;
         while (off < n && !d->push_stop.load()) {
-            // Hardware re-peeks every attempt, so a wrapped queue
-            // overwrite can not race an in-flight vector.
-            struct iovec io[2] = {};
-            int iop = 0;
-            if (!d->loopback) {
-                std::lock_guard<std::mutex> lock(d->push_mutex);
-                io[0].iov_len = fifo_peek(&d->push_backlog, &io[0].iov_base,
-                                          (unsigned)(n - off), (unsigned)off);
-                iop = 1;
-                if (io[0].iov_len < n - off) {
-                    io[1].iov_len =
-                        fifo_peek(&d->push_backlog, &io[1].iov_base,
-                                  (unsigned)(n - off - io[0].iov_len),
-                                  (unsigned)(off + io[0].iov_len));
-                    iop = 2;
+            ssize_t w;
+            if (d->loopback) {
+                w = write(ad->fe, chunk + off, n - off);
+            } else {
+                // Hardware re-peeks every attempt, so a wrapped queue
+                // overwrite can not race an in-flight vector.
+                struct iovec io[2] = {};
+                int iop;
+                {
+                    std::lock_guard<std::mutex> lock(d->push_mutex);
+                    io[0].iov_len =
+                        fifo_peek(&d->push_backlog, &io[0].iov_base,
+                                  (unsigned)(n - off), (unsigned)off);
+                    iop = 1;
+                    if (io[0].iov_len < n - off) {
+                        io[1].iov_len =
+                            fifo_peek(&d->push_backlog, &io[1].iov_base,
+                                      (unsigned)(n - off - io[0].iov_len),
+                                      (unsigned)(off + io[0].iov_len));
+                        iop = 2;
+                    }
                 }
+                w = writev(ad->fe, io, iop);
             }
-            ssize_t w = d->loopback ? write(ad->fe, chunk + off, n - off)
-                                    : writev(ad->fe, io, iop);
             if (w > 0)
                 off += (size_t)w;
             else if (w < 0 && errno == EINTR)
