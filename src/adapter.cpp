@@ -114,7 +114,9 @@ adapter *adapter_alloc() {
     ad->drop_encrypted = opts.drop_encrypted;
 
     ad->lbuf = opts.adapter_buffer;
-    ad->buf = (unsigned char *)malloc(static_cast<size_t>(ad->lbuf + 10));
+    // Slack past lbuf: content decrypt reads up to 16 bytes past the
+    // last packet, keep it mapped.
+    ad->buf = (unsigned char *)malloc(static_cast<size_t>(ad->lbuf + 64));
 
 #ifndef DISABLE_PMT
     // filter for pid 0
@@ -141,7 +143,7 @@ void adapter_resize_buffers() {
         if (!ad || !ad->buf || ad->lbuf == opts.adapter_buffer)
             continue;
         nb = (unsigned char *)realloc(
-            ad->buf, static_cast<size_t>(opts.adapter_buffer + 10));
+            ad->buf, static_cast<size_t>(opts.adapter_buffer + 64));
         if (!nb) {
             LOG("could not resize the buffer of adapter %d from %d to %d "
                 "bytes",
