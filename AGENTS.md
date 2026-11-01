@@ -7,3 +7,4 @@ Instructions for all AI coding agents working in this repository.
 - Never expand a comment beyond 2 lines; shorten or split the code instead.
 - Write new C++ in C++23 style (CMAKE_CXX_STANDARD 23).
 - Prefer C++ constructs over C constructs.
+- When pushing a branch, rebase it over origin/master first.
