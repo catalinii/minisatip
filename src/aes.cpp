@@ -70,7 +70,10 @@ void dvbaes_set_cw(SCW *cw, SPMT *) {
         LOG("EVP_DecryptInit_ex failed for ECB mode");
 }
 
+static SMutex aes_mutex;
+
 void dvbaes_decrypt_stream(SCW *cw, SPMT_batch *batch, int batch_len) {
+    std::lock_guard<SMutex> lock(aes_mutex);
     EVP_CIPHER_CTX *ctx = (EVP_CIPHER_CTX *)cw->key;
     int i, out_len;
     unsigned int j, len;
@@ -128,6 +131,7 @@ int decrypt(void *context, unsigned char *ciphertext, int ciphertext_len,
 }
 
 void dvbaes_cbc_decrypt_stream(SCW *cw, SPMT_batch *batch, int batch_len) {
+    std::lock_guard<SMutex> lock(aes_mutex);
     int i;
     uint32_t len;
     uint8_t decryptedtext[400];
