@@ -1732,9 +1732,10 @@ int ddci_read_sec_data(sockets *s) {
     size_t left = 0;
     int rlen = ad->rlen;
 
-    if ((left = fifo_push_force(&d->fifo, b, rlen, 1)) == 0)
-        LOG("dropping %d bytes for ddci_adapter %d", left, d->id);
-    DEBUGM("pushed %d bytes to the adapter buffer from %d [write_index %jd]",
+    if ((left = fifo_push_force(&d->fifo, b, static_cast<size_t>(rlen), 1)) ==
+        0)
+        LOG("dropping %zu bytes for ddci_adapter %d", left, d->id);
+    DEBUGM("pushed %zu bytes to the adapter buffer from %d [write_index %jd]",
            left, rlen, d->fifo.write_index);
     dump_packets("DDCI ->FIFO ", (uint8_t *)d->fifo.data, 188, 0);
     dump_packets("SOURCE ", b, 188, 0);
