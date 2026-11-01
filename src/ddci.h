@@ -23,7 +23,7 @@
 // Push ring bytes; absorbs input while kicks re-prime a dead pull.
 #define DDCI_PUSH_BACKLOG_MAX (12 * 1024 * 1024)
 
-// Push bytes per call; enigma filepush feeds 188KB a cycle.
+// Push bytes per cycle; enigma filepush default buffersize.
 #define DDCI_PUSH_CHUNK (188 * 1024)
 // Micro-kick backstop: EAGAIN past this long means the playpump
 // congestion latch is stuck, re-prime it via close/open.
@@ -37,11 +37,6 @@ inline bool ddci_kick_due(int64_t stall_ms, size_t backlog,
     return since_kick_ms > DDCI_KICK_MIN_MS &&
            (stall_ms > DDCI_KICK_STALL_MS || backlog > DDCI_KICK_BACKLOG);
 }
-// Drain cap: past 4MB/s the playpump descriptors exhaust inside
-// one 30ms reclaim window and the congestion latch deadlocks.
-#define DDCI_PUSH_RATE_BPS (4 * 1024 * 1024)
-#define DDCI_PUSH_BURST (8 * 1024)
-
 // Mapping-table key: adapter in the high 16 bits, pid below.
 #define MAKE_KEY(ad, pid) (((ad) << 16) | (pid))
 
@@ -94,7 +89,8 @@ typedef struct ddci_device {
     int ci_slot;          // claimed /dev/ciN, -1 until bound
     char tsclk_saved[16]; // prior ciN_tsclk, restored on release
     SFIFO push_backlog;   // queued push bytes, oldest first
-    // Push thread: non-blocking writes move the fifo to the dvr.
+    // Push thread: loopback writes a copied chunk, hardware
+    // writevs off the ring; EAGAIN retries until stop or room.
     std::thread push_thread;
     std::mutex push_mutex;
     std::condition_variable push_cv;
@@ -102,12 +98,7 @@ typedef struct ddci_device {
     std::atomic<bool> push_running{false};
     std::atomic<int64_t> last_push_write{0};
     std::atomic<int64_t> last_tap_tick{0};
-    // Token bucket, push thread only: smooths the drain rate.
-    int64_t push_tokens{0};
-    std::chrono::steady_clock::time_point push_last;
-    // Micro-kick clock, adapter thread only; stop sheds unless kicking.
-    int64_t last_kick{0};
-    bool push_shed_on_stop{true};
+    int64_t last_kick{0}; // micro-kick clock, adapter thread only
     std::unordered_map<int, ddci_mapping_table_t> mapping;
     std::unordered_set<int> emm_pids; // MAKE_KEY(ad,pid), never swept
     SFIFO fifo;
