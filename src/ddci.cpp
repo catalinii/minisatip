@@ -255,7 +255,7 @@ static int ddci_enigma_slot(ddci_device_t *d) {
 }
 
 std::string ddci_tsclk_pick(const std::string &choices) {
-    // extra_high garbles older CAM TS inputs, so high is max.
+    // Driver rejects extra_high (dmesg "invalid tsclk"), so high is max.
     for (size_t pos = choices.find("high"); pos != std::string::npos;
          pos = choices.find("high", pos + 1)) {
         bool left_ok = pos == 0 || choices[pos - 1] == ' ' ||
