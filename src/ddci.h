@@ -97,7 +97,6 @@ typedef struct ddci_device {
     std::atomic<bool> push_stop{false};
     std::atomic<bool> push_running{false};
     std::atomic<int64_t> last_push_write{0};
-    std::atomic<int64_t> last_tap_tick{0};
     int64_t last_kick{0}; // micro-kick clock, adapter thread only
     std::unordered_map<int, ddci_mapping_table_t> mapping;
     std::unordered_set<int> emm_pids; // MAKE_KEY(ad,pid), never swept
@@ -121,8 +120,6 @@ int ddci_pick_free_pair(const int *demux, int ndemux, const int *dvr, int ndvr,
                         const int *fe, int nfe, const int *used, int nused);
 
 int ddci_pick_free_slot();
-// Push loop: move the fifo to the dvr, retrying EAGAIN for room.
-void ddci_push_loop(int id);
 // Starts the push thread once; the queue feeds it.
 void ddci_push_start(ddci_device_t *d);
 // Stops the push thread, shedding the backlog; safe to call twice.
