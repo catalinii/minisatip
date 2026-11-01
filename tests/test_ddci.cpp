@@ -65,7 +65,7 @@ extern std::unordered_map<int, Sddci_channel> channels;
 
 int pmt_del(int id);
 int del_pmt_mapping_table(ddci_device_t *d, int ad, int pmt);
-int CAPMT_add_PMT(uint8_t *capmt, int len, SPMT *pmt, int cmd_id,
+int CAPMT_add_PMT(uint8_t *capmt, int len, SPMT *pmt, uint8_t cmd_id,
                   int added_only, int ca_id);
 
 // Forward declarations
@@ -2003,7 +2003,6 @@ int test_capmt_lists_pmt_pids() {
 }
 
 int test_dvbca_ci_adapter_no_routing() {
-    extern SCA ca[MAX_CA];
     SPMT *pmt0;
     adapter ad = {0};
     ca_device_t dev;
@@ -2045,7 +2044,7 @@ int test_dvbca_ci_adapter_no_routing() {
     return 0;
 }
 
-extern void set_disable(int i, int v);
+extern void set_disable(int i, bool v);
 
 int test_ddci_pick_free_slot() {
     adapter ad = {0};
