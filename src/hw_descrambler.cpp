@@ -375,7 +375,7 @@ void hw_set_cw(SCW *cw, SPMT *pmt) {
         struct ca_descr_data data_cmd{};
         data_cmd.index = slot;
         data_cmd.parity = parity;
-        data_cmd.data_type = 0; // 0 = CW / Key
+        data_cmd.data_type = 1; // 1 = key (enigma2 CA_DATA_KEY)
         data_cmd.data_len = 16;
         data_cmd.data = cw->cw;
         const int res_key = ioctl(k->ca_fd, CA_SET_DESCR_DATA, &data_cmd);
@@ -389,7 +389,7 @@ void hw_set_cw(SCW *cw, SPMT *pmt) {
             data_cmd = {};
             data_cmd.index = slot;
             data_cmd.parity = parity;
-            data_cmd.data_type = 1; // 1 = IV
+            data_cmd.data_type = 0; // 0 = IV (enigma2 CA_DATA_IV)
             data_cmd.data_len = 16;
             data_cmd.data = cw->iv;
             const int res_iv = ioctl(k->ca_fd, CA_SET_DESCR_DATA, &data_cmd);
