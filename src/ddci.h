@@ -36,11 +36,6 @@ static_assert(DDCI_PUSH_CHUNK % 188 == 0, "chunk stays frame-aligned");
 // congestion latch is stuck, re-prime it via close/open.
 #define DDCI_KICK_STALL_MS 1000
 #define DDCI_KICK_MIN_MS 500
-// Kick only on stalled writes; a deep backlog with a draining
-// writer is healthy buffering, not a wedge (Digi 4K: 365KB).
-inline bool ddci_kick_due(int64_t stall_ms, int64_t since_kick_ms) {
-    return since_kick_ms > DDCI_KICK_MIN_MS && stall_ms > DDCI_KICK_STALL_MS;
-}
 // Mapping-table key: adapter in the high 16 bits, pid below.
 #define MAKE_KEY(ad, pid) (((ad) << 16) | (pid))
 
@@ -144,9 +139,6 @@ int ddci_is_loopback(int id);
 int ddci_loopback_owns_slot(int slot);
 // CI slot claimed by loopback id; -1 when it claims none.
 int ddci_loopback_slot_for(int id);
-void ddci_enigma_route_pvr(ddci_device_t *d);
-// Highest tsclk in a choices file; empty when none qualifies.
-std::string ddci_tsclk_pick(const std::string &choices);
 int add_pid_mapping_table(int ad, int pid, int pmt, ddci_device_t *d,
                           int force_add_pid);
 int push_ts_to_adapter(ddci_device_t *d, adapter *ad, uint16_t *mapping);
