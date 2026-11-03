@@ -31,14 +31,13 @@
 int _create_fifo(SFIFO *f, size_t no, const char *file, int line) {
     if (f->size > 0)
         return 0;
-    void *data = malloc(no);
-    if (!data) {
-        LOG_AND_RETURN(1, "Could not allocate FIFO %zu", no);
-    }
+    memset(f, 0, sizeof(SFIFO));
     f->file = file;
     f->line = line;
-    f->data = data;
-    fifo_reset(f);
+    f->data = malloc(no);
+    if (!f->data) {
+        LOG_AND_RETURN(1, "Could not allocate FIFO %zu", no);
+    }
     f->size = no;
     return 0;
 }
@@ -48,11 +47,7 @@ void free_fifo(SFIFO *f) {
         return;
 
     free(f->data);
-    f->data = nullptr;
-    f->file = nullptr;
-    f->line = 0;
-    fifo_reset(f);
-    f->size = 0;
+    memset(f, 0, sizeof(SFIFO));
     return;
 }
 
@@ -61,21 +56,19 @@ void free_fifo(SFIFO *f) {
 // as it does not account for read index
 size_t fifo_push_force(SFIFO *fifo, void *src, size_t len, int force) {
     size_t size = fifo->size;
-    if (len == 0 || len > size)
-        return 0;
-    uint64_t wi = fifo->write_index;
-    uint64_t ri = fifo->read_index;
-    size_t available = size - (wi - ri);
+    size_t available = fifo_available(fifo);
 
+    if (len > size)
+        return 0;
     // Full without force: report 0, the caller owns
     // the reporting policy for refused bytes.
     if (!force && (len > available))
         return 0;
-    if ((ri > 0) && (len > available))
+    if ((fifo->read_index > 0) && (len > available))
         LOG("Overwriting %zu bytes in the FIFO created at %s:%d",
             len - available, fifo->file, fifo->line);
 
-    size_t off = wi % size;
+    size_t off = fifo->write_index % size;
     size_t l = min(len, size - off);
 
     memcpy((char *)fifo->data + off, src, l);
@@ -88,20 +81,20 @@ size_t fifo_push_force(SFIFO *fifo, void *src, size_t len, int force) {
 // pops maximum len bytes from the buffer from the offset passed as pointer
 size_t fifo_pop_offset(SFIFO *fifo, void *dst, size_t len, uint64_t *offset) {
     uint64_t size = fifo->size;
-    uint64_t wi = fifo->write_index;
     size_t l;
-    if (wi <= *offset)
+    if (fifo->write_index <= *offset)
         return 0;
 
-    if ((*offset < wi - size) && (wi > size)) {
+    if ((*offset < fifo->write_index - size) && (fifo->write_index > size)) {
         if (*offset > 0) {
             LOG("Lost %jd bytes in fifo created at %s:%d",
-                (intmax_t)(wi - size - *offset), fifo->file, fifo->line);
+                (intmax_t)(fifo->write_index - size - *offset), fifo->file,
+                fifo->line);
         }
 
-        *offset = wi - size;
+        *offset = fifo->write_index - size;
     }
-    size_t available = wi - *offset;
+    size_t available = fifo->write_index - *offset;
 
     if (len > available)
         len = available;
@@ -116,51 +109,18 @@ size_t fifo_pop_offset(SFIFO *fifo, void *dst, size_t len, uint64_t *offset) {
     return len;
 }
 
-// Pops from the fifo's own read index, advancing it past the copy.
-size_t fifo_pop(SFIFO *fifo, void *dst, size_t len) {
-    uint64_t size = fifo->size;
-    uint64_t wi = fifo->write_index;
-    uint64_t ri = fifo->read_index;
-    if (wi <= ri)
-        return 0;
-
-    if ((ri < wi - size) && (wi > size)) {
-        if (ri > 0) {
-            LOG("Lost %jd bytes in fifo created at %s:%d",
-                (intmax_t)(wi - size - ri), fifo->file, fifo->line);
-        }
-
-        ri = wi - size;
-    }
-    size_t available = wi - ri;
-
-    if (len > available)
-        len = available;
-
-    size_t off = ri % size;
-    size_t l = min(len, size - off);
-
-    memcpy(dst, (char *)fifo->data + off, l);
-    if (len > l)
-        memcpy((char *)dst + l, fifo->data, len - l);
-    fifo->read_index = ri + len;
-    return len;
-}
-
 // returns a pointer to the internal buffer with the size as the return value
 // to get the entire buffer it's needed 2 calls:
 // - first returns from the read_index + relative_offset until the end of buffer
 // - second returns the pointer for the remaining size
 size_t fifo_peek(SFIFO *fifo, void **dst, size_t len, size_t relative_offset) {
     size_t size = fifo->size;
-    uint64_t ri = fifo->read_index;
-    uint64_t wi = fifo->write_index;
     size_t l;
 
-    if (ri + relative_offset > wi)
+    if (fifo->read_index + relative_offset > fifo->write_index)
         return 0;
 
-    size_t off = (ri + relative_offset) % size;
+    size_t off = (fifo->read_index + relative_offset) % size;
     l = min(len, size - off);
     *dst = (char *)fifo->data + off;
     return l;
@@ -168,8 +128,7 @@ size_t fifo_peek(SFIFO *fifo, void **dst, size_t len, size_t relative_offset) {
 
 uint32_t fifo_peek_32(SFIFO *fifo, uint64_t offset) {
     uint8_t *data = (uint8_t *)fifo->data;
-    uint64_t wi = fifo->write_index;
-    if (wi - offset < LEN_SIZE)
+    if (fifo->write_index - offset < LEN_SIZE)
         return 0;
     uint64_t size = fifo->size;
     return ((unsigned int)data[(offset + 0) % size] << 24) |
