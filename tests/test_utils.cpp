@@ -86,6 +86,18 @@ int test_fifo() {
     ASSERT_EQUAL(offset, 50, "Expected offset to advance to write_index (50)");
     free_fifo(&f3);
 
+    // Degenerate pushes refuse: empty and oversized alike.
+    SFIFO f4{};
+    create_fifo(&f4, 10);
+    char any[11] = {0};
+    ASSERT(0 == fifo_push(&f4, any, 0), "Expected empty push to refuse");
+    ASSERT(0 == fifo_push(&f4, any, sizeof(any)),
+           "Expected oversized push to refuse");
+    ASSERT(0 == fifo_push_force(&f4, any, sizeof(any), 1),
+           "Expected oversized force push to refuse");
+    ASSERT_EQUAL(fifo_used(&f4), 0, "Expected refused pushes to write nothing");
+    free_fifo(&f4);
+
     return 0;
 }
 
