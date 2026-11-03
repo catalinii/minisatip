@@ -338,6 +338,21 @@ int test_obtain_churn() {
     return 0;
 }
 
+int test_fifo_reset() {
+    SFIFO f{};
+    char buf[] = {0, 1, 2, 3, 4, 5};
+    create_fifo(&f, 10);
+
+    ASSERT(sizeof(buf) == fifo_push(&f, buf, sizeof(buf)), "push works");
+    fifo_reset(&f);
+    ASSERT(fifo_used(&f) == 0, "reset empties");
+    ASSERT(f.read_index == 0 && f.write_index == 0, "indices zeroed");
+    ASSERT(sizeof(buf) == fifo_push(&f, buf, sizeof(buf)), "refill works");
+    ASSERT(fifo_used(&f) == sizeof(buf), "refill counted");
+    free_fifo(&f);
+    return 0;
+}
+
 int main() {
     opts.log = 255;
     strcpy(thread_info[thread_index].thread_name, "test_utils");
@@ -347,6 +362,7 @@ int main() {
     TEST_FUNC(test_mkdir_recursive(), "testing directory creation");
     TEST_FUNC(test_readfile_content_type(), "testing readfile content types");
     TEST_FUNC(test_fifo(), "testing fifo");
+    TEST_FUNC(test_fifo_reset(), "testing fifo reset");
     TEST_FUNC(test_is_rtsp_response(), "testing is_rtsp_response");
     TEST_FUNC(test_split(), "testing split");
     TEST_FUNC(test_strip(), "testing strip");
