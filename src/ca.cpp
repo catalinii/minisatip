@@ -2399,8 +2399,8 @@ static int ci_ccmgr_cc_sac_data_req(ca_session_t *session, const uint8_t *data,
         return 0;
     }
 
-    // Re-auth polls (5,30) carry no keys: keep working CWs until
-    // rotation replaces them, or decrypt dies every 70 seconds.
+    disable_cws_for_all_pmts(d);
+
     copy32r(serial, data, rp);
     LOGM("serial sac data req: %d", serial);
 

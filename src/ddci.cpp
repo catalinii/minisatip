@@ -299,21 +299,6 @@ static void ddci_enigma_set_tsclk(ddci_device_t *d) {
     d->tsclk_saved[0] = 0;
 }
 
-static void ddci_enigma_restore_tsclk(ddci_device_t *d) {
-    if (!opts.enigma || !d || !d->tsclk_saved[0])
-        return;
-    int slot = ddci_enigma_slot(d);
-    if (slot < 0)
-        return;
-    char path[64];
-    snprintf(path, sizeof(path), "/proc/stb/tsmux/ci%d_tsclk", slot);
-    std::ofstream out(path);
-    if (out << d->tsclk_saved)
-        LOG("DDCI %d: CI slot %d tsclk restored to %s", d->id, slot,
-            d->tsclk_saved);
-    d->tsclk_saved[0] = 0;
-}
-
 static bool ddci_choices_has(const std::string &choices, const char *word) {
     size_t len = strlen(word);
     for (size_t pos = choices.find(word); pos != std::string::npos;
@@ -1564,17 +1549,18 @@ size_t ddci_push_queue(ddci_device_t *d, uint8_t *psi, size_t psi_len,
     {
         std::lock_guard<std::mutex> lock(d->push_mutex);
         SFIFO *f = &d->push_backlog;
-        auto try_push = [&](void *base, size_t len) {
-            if (fifo_available(f) < len) {
-                dropped += len;
-                return;
-            }
-            queued += fifo_push(f, base, len);
-        };
-        if (psi && psi_len > 0)
-            try_push(psi, psi_len);
-        for (int k = 0; k < iop; k++)
-            try_push(io[k].iov_base, io[k].iov_len);
+        // fifo_push is all-or-nothing without force: short
+        // returns are full-ring drops, counted, never partial.
+        if (psi && psi_len > 0) {
+            size_t q = fifo_push(f, psi, psi_len);
+            queued += q;
+            dropped += psi_len - q;
+        }
+        for (int k = 0; k < iop; k++) {
+            size_t q = fifo_push(f, io[k].iov_base, io[k].iov_len);
+            queued += q;
+            dropped += io[k].iov_len - q;
+        }
         // Report drops as throttled totals, not per event.
         if (dropped > 0) {
             d->push_dropped += dropped;
@@ -2202,7 +2188,6 @@ void ddci_free(adapter *ad) {
     if (!d)
         return;
     ddci_push_stop(d);
-    ddci_enigma_restore_tsclk(d);
     save_channels();
 }
 

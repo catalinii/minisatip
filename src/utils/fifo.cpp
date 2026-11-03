@@ -69,12 +69,10 @@ size_t fifo_push_force(SFIFO *fifo, void *src, size_t len, int force) {
     uint64_t ri = fifo->read_index.load(std::memory_order_acquire);
     size_t available = size - (wi - ri);
 
-    if (!force && (len > available)) {
-        LOG("Not enough space in FIFO created at %s:%d: need %zu, "
-            "available %zu",
-            fifo->file, fifo->line, len, available);
+    // Full without force: report 0, the caller owns
+    // the reporting policy for refused bytes.
+    if (!force && (len > available))
         return 0;
-    }
     if ((ri > 0) && (len > available))
         LOG("Overwriting %zu bytes in the FIFO created at %s:%d",
             len - available, fifo->file, fifo->line);
