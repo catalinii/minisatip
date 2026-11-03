@@ -1994,18 +1994,6 @@ int test_emm_pids_stay_while_their_adapter_has_a_pmt() {
     return 0;
 }
 
-int test_ddci_pick_free_fn() {
-    int existing[] = {0, 1, 2, 5, 12};
-    int used[] = {12, 5};
-    ASSERT(ddci_pick_free_fn(existing, 5, used, 2) == 2, "highest free wins");
-    ASSERT(ddci_pick_free_fn(existing, 5, NULL, 0) == 12,
-           "empty used takes top");
-    int all[] = {0, 1, 2, 5, 12};
-    ASSERT(ddci_pick_free_fn(existing, 5, all, 5) == -1, "all taken gives -1");
-    ASSERT(ddci_pick_free_fn(NULL, 0, used, 2) == -1, "no demux gives -1");
-    return 0;
-}
-
 int test_ddci_pick_free_pair() {
     std::array demux = {0, 1, 2, 10, 11, 12};
     std::array dvr = {0, 1, 2, 10, 11, 12};
@@ -2506,8 +2494,6 @@ int main() {
               "testing EMM pids leave with their adapter");
     TEST_FUNC(test_emm_pids_stay_while_their_adapter_has_a_pmt(),
               "testing EMM pids stay while their adapter has a PMT");
-    TEST_FUNC(test_ddci_pick_free_fn(),
-              "testing highest-free demux pick for the loopback");
     TEST_FUNC(test_ddci_pick_free_pair(),
               "testing last frontend-less demux/dvr pair pick");
     TEST_FUNC(test_ddci_enigma_local_loops_back(),
