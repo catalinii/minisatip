@@ -1,20 +1,16 @@
 #ifndef FIFO_H
 #define FIFO_H
 
-#include <atomic>
 #include <stddef.h>
 #include <stdint.h>
 
 // Ring buffer with 64-bit never-wrapping indices; peek exposes
 // the internal buffer for 0-copy writes straight into the ring.
-// Indices are atomic for cross-thread producers/consumers, but
-// compound push/peek/skip sequences still need external locking.
-
-typedef struct fifo {
+typedef struct fifo { // plain indices: cross-thread users lock
     const char *file;
     int line;
-    std::atomic<uint64_t> read_index;
-    std::atomic<uint64_t> write_index;
+    uint64_t read_index;
+    uint64_t write_index;
     uint64_t size;
     void *data;
 } SFIFO;
@@ -22,17 +18,15 @@ typedef struct fifo {
 int _create_fifo(SFIFO *f, size_t no, const char *file, int line);
 void free_fifo(SFIFO *f);
 static inline size_t fifo_available(SFIFO *f) {
-    return f->size - (f->write_index.load(std::memory_order_acquire) -
-                      f->read_index.load(std::memory_order_acquire));
+    return f->size - (f->write_index - f->read_index);
 }
 
 static inline size_t fifo_used(SFIFO *f) {
-    return f->write_index.load(std::memory_order_acquire) -
-           f->read_index.load(std::memory_order_acquire);
+    return f->write_index - f->read_index;
 }
 static inline void fifo_skip_bytes(SFIFO *f, size_t len) {
     if (f->size > 0)
-        f->read_index.fetch_add(len, std::memory_order_release);
+        f->read_index += len;
 }
 
 // Returns bytes queued; 0 when refused (full without force).
