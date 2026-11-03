@@ -2243,10 +2243,8 @@ int process_pmt(int filter, unsigned char *b, int, void *opaque) {
             break;
         }
 
-        if (!is_audio && !is_video)
-            continue;
-
-        // Add stream-level descriptors from elementary stream info
+        // Store descriptors for every stream: non-AV streams
+        // (data, secondary audio) carry CA descriptors too.
         pmt_add_stream_pid_descriptors(pmt, pmt->stream_pids[stream_pid_id],
                                        pmt_b + i + 5, es_len);
     }

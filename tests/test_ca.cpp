@@ -244,6 +244,42 @@ int test_create_capmt_single_clear() {
     return 0;
 }
 
+descriptor_t create_descriptor(const uint8_t *data);
+
+// Encrypted non-AV streams reach the CAM too: without selection
+// it only decrypts them opportunistically (Rai 4K second audio).
+int test_capmt_includes_non_av_ca_stream() {
+    int pmt_id = pmt_add(0, 0x100, 0x101);
+    SPMT *pmt = get_pmt(pmt_id);
+    pmt_add_caid(pmt, 0x183E, 0x107, nullptr, 0);
+    pmt_add_stream_pid(pmt, 0x501, 2, false, true);
+    size_t data_id = pmt_add_stream_pid(pmt, 0x269, 6, false, false);
+    const uint8_t raw[] = {0x09, 4, 0x18, 0x3E, 0xE1, 0x07};
+    pmt->stream_pids[data_id].descriptors.push_back(create_descriptor(raw));
+
+    SCAPMT scapmt = {};
+    scapmt.pmt_id = pmt_id;
+    scapmt.other_id[0] = scapmt.other_id[1] = PMT_INVALID;
+    scapmt.version = 1;
+    scapmt.sid = 0x1234;
+
+    uint8_t capmt[1500];
+    int len = create_capmt(&scapmt, CLM_ONLY, capmt, sizeof(capmt),
+                           CMD_ID_OK_DESCRAMBLING, 0);
+    ASSERT(len > 0, "create_capmt failed");
+    bool found_video = false, found_data = false;
+    for (int off = 6; off + 5 <= len;) {
+        int pid = (capmt[off + 1] << 8) | capmt[off + 2];
+        int eslen = (capmt[off + 3] << 8) | capmt[off + 4];
+        found_video |= (pid == 0x501);
+        found_data |= (pid == 0x269);
+        off += 5 + eslen;
+    }
+    ASSERT(found_video, "video stream missing from CAPMT");
+    ASSERT(found_data, "non-AV CA stream missing from CAPMT");
+    return 0;
+}
+
 // The CAPMT content hash ignores version and list-management but
 // flips on any other byte, so identical updates are skipped.
 int test_capmt_content_hash_masks_version_and_listmgmt() {
@@ -2845,6 +2881,8 @@ int main() {
               "testing the CAPMT hash masks version and listmgmt");
     TEST_FUNC(test_create_capmt_single_clear(),
               "testing create_capmt with single PMT without CA descriptors");
+    TEST_FUNC(test_capmt_includes_non_av_ca_stream(),
+              "testing CAPMT selects encrypted non-AV streams");
     TEST_FUNC(test_create_capmt_single_pmt_scrambled(),
               "testing create_capmt with single PMT with program-level CA "
               "descriptors");
