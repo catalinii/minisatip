@@ -26,6 +26,7 @@
 #include <net/if.h>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <poll.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1392,7 +1393,6 @@ static void ddci_push_loop(int id, int fe) {
     for (;;) {
         struct iovec iov[2];
         int iocnt = 0, first = 0;
-        uint64_t gen = 0;
         size_t n = 0;
         {
             std::unique_lock<std::mutex> lock(d->push_mutex);
@@ -1408,7 +1408,6 @@ static void ddci_push_loop(int id, int fe) {
             n = have;
             if (n > DDCI_PUSH_CHUNK)
                 n = DDCI_PUSH_CHUNK;
-            gen = d->push_gen;
             iov[0].iov_len =
                 fifo_peek(&d->push_backlog, &iov[0].iov_base, n, 0);
             iocnt = 1;
@@ -1462,12 +1461,11 @@ static void ddci_push_loop(int id, int fe) {
         }
         if (off > 0)
             d->last_push_write.store(getTick(), std::memory_order_relaxed);
-        // Consume only when no shed intervened; a shed already
-        // dropped this span, skipping would eat fresh bytes.
+        // Resets run only with the thread joined or never
+        // started, so the written span skips as-is.
         {
             std::lock_guard<std::mutex> lock(d->push_mutex);
-            if (gen == d->push_gen)
-                fifo_skip_bytes(&d->push_backlog, off);
+            fifo_skip_bytes(&d->push_backlog, off);
         }
         // Fatal error: exit for the kick to restart us.
         if (fatal)
@@ -1556,30 +1554,43 @@ void ddci_push_stop(ddci_device_t *d) {
     size_t left = fifo_used(f);
     if (left > 0) {
         LOG("DDCI %d: push stop shedding %zu backlog bytes", d->id, left);
-        d->push_dropped += left;
+        d->shed_bytes += left;
     }
     fifo_reset(f);
 }
 
-// Tune shed: join the thread (fd stays open), drop the stale
-// backlog counted, restart. No peek survives the join to tear.
-void ddci_push_reshed(adapter *ad, ddci_device_t *d) {
+// Tune shed, output side: drain the stopped demux and drop
+// queued output; the push fifo keeps flowing untouched.
+void ddci_output_shed(adapter *ad, ddci_device_t *d) {
     if (!ad || !d)
         return;
-    // Same ad->mutex as kick/close: joins never overlap, and the
-    // queue's try-lock kick skips while a shed is in flight.
-    std::lock_guard<SMutex> lock(ad->mutex);
-    ddci_push_join(d, nullptr);
-    std::lock_guard<std::mutex> plock(d->push_mutex);
-    SFIFO *f = &d->push_backlog;
-    size_t left = fifo_used(f);
-    if (left > 0) {
-        LOG("DDCI %d: tune shedding %zu backlog bytes", d->id, left);
-        d->push_dropped += left;
+    // poll-gated: the demux fd blocks, and the demux is stopped
+    // at idle->active, so the drain always terminates.
+    size_t drained = 0;
+    if (ad->dvr >= 0) {
+        uint8_t tmp[188 * 100];
+        pollfd pfd = {ad->dvr, POLLIN, 0};
+        while (drained < DDCI_SHED_DRAIN_MAX && poll(&pfd, 1, 0) > 0) {
+            ssize_t r = read(ad->dvr, tmp, sizeof(tmp));
+            if (r <= 0)
+                break;
+            drained += static_cast<size_t>(r);
+        }
     }
-    fifo_reset(f);
-    d->push_gen++;
-    ddci_push_start(d);
+    // Reset last: anything the socket thread raced in lands in
+    // the fifo first, so the trailing reset wipes it too.
+    size_t left = 0;
+    {
+        std::lock_guard<SMutex> lock(d->mutex);
+        left = fifo_used(&d->fifo);
+        fifo_reset(&d->fifo);
+        memset(d->read_index, 0, sizeof(d->read_index));
+        d->shed_bytes += drained + left;
+    }
+    ad->drop_buffer = 1; // read_dmx() flushes the socket residue
+    if (drained + left > 0)
+        LOG("DDCI %d: tune shed %zu demux + %zu fifo bytes", d->id, drained,
+            left);
 }
 
 // Queues fresh PSI first, then TS; pieces that do not fit are
@@ -1786,11 +1797,11 @@ int ddci_set_pid(adapter *ad, int pid) {
 #ifndef DISABLE_LINUXDVB
     // Loopback reads the real DVR; hardware DDCI needs no demux filters.
     if (opts.enigma && ddci_is_loopback(ad->id)) {
-        // Idle -> active: shed the previous tune's backlog so the
-        // fresh tune starts clean.
+        // Idle -> active: shed stale output so the fresh tune
+        // starts clean; the push side keeps flowing.
         if (ad->active_demux_pids <= 0) {
             if (ddci_device_t *dd = get_ddci(ad->id))
-                ddci_push_reshed(ad, dd);
+                ddci_output_shed(ad, dd);
         }
         int rc = dvb_demux_set_pid(ad, pid);
         LOGM("%s: loopback %d add pid %d -> %d", __FUNCTION__, ad->id, pid, rc);
