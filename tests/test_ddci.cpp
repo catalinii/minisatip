@@ -2060,7 +2060,7 @@ int test_capmt_lists_pmt_pids() {
     ASSERT(out[o2] == 6, "audio type second");
     ASSERT(((out[o2 + 1] << 8) | out[o2 + 2]) == 602, "audio pid verbatim");
 
-    ddci_devices[0] = NULL;
+    ddci_devices[0] = nullptr;
     a[0] = nullptr;
     a[8] = nullptr;
     return 0;
@@ -2073,7 +2073,7 @@ int test_dvbca_ci_adapter_no_routing() {
     memset(&dev, 0, sizeof(dev));
     for (int i = 0; i < MAX_ADAPTERS; i++) {
         a[i] = nullptr;
-        ca_devices[i] = NULL;
+        ca_devices[i] = nullptr;
     }
     create_adapter(&ad, 8);
     pmt0 = create_pmt(8, 600, 601, 602, 0x100, 0x100);
@@ -2103,7 +2103,7 @@ int test_dvbca_ci_adapter_no_routing() {
 
     opts.enigma = 0;
     del_ca(&dvbca);
-    ca_devices[8] = NULL;
+    ca_devices[8] = nullptr;
     a[8] = nullptr;
     return 0;
 }
@@ -2149,7 +2149,7 @@ int test_ddci_push_queue_order() {
     ASSERT(bl_have(&d) == 564, "backlog holds the queued bytes");
     // PSI rides first even though the TS arrived in the same call.
     uint8_t out[564];
-    void *p = NULL;
+    void *p = nullptr;
     size_t first = fifo_peek(&d.push_backlog, &p, sizeof(out), 0);
     ASSERT(first == sizeof(out), "single-segment peek");
     memcpy(out, p, first);
@@ -2194,7 +2194,7 @@ int test_ddci_push_thread_roundtrip() {
     for (size_t i = 0; i < sizeof(msg); i++)
         msg[i] = (uint8_t)(i * 31 + 7);
     struct iovec io[1] = {{msg, sizeof(msg)}};
-    size_t queued = ddci_push_queue(&d, NULL, 0, io, 1);
+    size_t queued = ddci_push_queue(&d, nullptr, 0, io, 1);
     struct pollfd pfd = {fds[0], POLLIN, 0};
     int ready = poll(&pfd, 1, 5000);
     // Join before asserting: a live thread must never see teardown.
@@ -2213,7 +2213,7 @@ int test_ddci_push_thread_roundtrip() {
     close(fds[1]);
     ad2.fe = -1;
     free_fifo(&d.push_backlog);
-    ddci_devices[2] = NULL;
+    ddci_devices[2] = nullptr;
     a[2] = nullptr;
     return 0;
 }
@@ -2255,7 +2255,7 @@ int test_ddci_push_eagain_retries() {
     for (size_t i = 0; i < sizeof(msg); i++)
         msg[i] = (uint8_t)(i * 31 + 7);
     struct iovec io[1] = {{msg, sizeof(msg)}};
-    size_t queued = ddci_push_queue(&d, NULL, 0, io, 1);
+    size_t queued = ddci_push_queue(&d, nullptr, 0, io, 1);
     // Full device: the thread retries until a read drains it.
     // Drain it whole: a half-freed slot still reads full.
     size_t drained = 0;
@@ -2284,7 +2284,7 @@ int test_ddci_push_eagain_retries() {
     close(fds[1]);
     ad2.fe = -1;
     free_fifo(&d.push_backlog);
-    ddci_devices[2] = NULL;
+    ddci_devices[2] = nullptr;
     a[2] = nullptr;
     return 0;
 }
@@ -2311,7 +2311,7 @@ int test_ddci_push_stop_sheds_stall() {
     uint8_t msg[1024];
     memset(msg, 0x5A, sizeof(msg));
     struct iovec io[1] = {{msg, sizeof(msg)}};
-    size_t queued = ddci_push_queue(&d, NULL, 0, io, 1);
+    size_t queued = ddci_push_queue(&d, nullptr, 0, io, 1);
     usleep(200000);
     // No read ever comes: stop still joins instead of hanging.
     ddci_push_stop(&d);
@@ -2322,7 +2322,65 @@ int test_ddci_push_stop_sheds_stall() {
     close(fds[1]);
     ad2.fe = -1;
     free_fifo(&d.push_backlog);
-    ddci_devices[2] = NULL;
+    ddci_devices[2] = nullptr;
+    a[2] = nullptr;
+    return 0;
+}
+
+int test_ddci_push_reshed_sheds_and_restarts() {
+    ddci_device_t d = {};
+    adapter ad2 = {};
+    d.id = 2;
+    d.enabled = 1;
+    d.loopback = 1;
+    create_fifo(&d.push_backlog, DDCI_PUSH_BACKLOG_MAX);
+    memset(ddci_devices, 0, sizeof(ddci_devices));
+    ddci_devices[2] = &d;
+    create_adapter(&ad2, 2);
+    int fds[2];
+    ASSERT(pipe(fds) == 0, "pipe as mock dvr");
+    int flags = fcntl(fds[1], F_GETFL, 0);
+    ASSERT(fcntl(fds[1], F_SETFL, flags | O_NONBLOCK) == 0, "nonblock push");
+    ad2.fe = fds[1];
+    ASSERT(fcntl(fds[1], F_SETPIPE_SZ, 4096) == 4096, "one-slot pipe");
+    size_t held = bl_fill_pipe(fds[1]);
+    ASSERT(held >= 4096, "pipe holds filler");
+    ddci_push_start(&d);
+    uint8_t stale[1024];
+    memset(stale, 0x5A, sizeof(stale));
+    struct iovec io[1] = {{stale, sizeof(stale)}};
+    ASSERT(ddci_push_queue(&d, nullptr, 0, io, 1) == sizeof(stale), "queued");
+    uint64_t gen = d.push_gen;
+    // Stalled mid-peek: reshed joins, sheds counted, restarts.
+    ddci_push_reshed(&ad2, &d);
+    ASSERT(bl_have(&d) == 0, "reshed sheds the stale backlog");
+    ASSERT(d.push_dropped == sizeof(stale), "shed bytes counted");
+    ASSERT(d.push_gen == gen + 1, "shed retires the generation");
+    ASSERT(d.push_running.load(), "thread restarted");
+    // Drain the filler, fresh bytes must flow on the new tune.
+    uint8_t drain[4096];
+    size_t drained = 0;
+    while (drained < held) {
+        ssize_t r = read(fds[0], drain, sizeof(drain));
+        ASSERT(r > 0, "filler drains");
+        drained += (size_t)r;
+    }
+    uint8_t fresh[1024];
+    for (size_t i = 0; i < sizeof(fresh); i++)
+        fresh[i] = (uint8_t)(i * 31 + 7);
+    struct iovec io2[1] = {{fresh, sizeof(fresh)}};
+    ASSERT(ddci_push_queue(&d, nullptr, 0, io2, 1) == sizeof(fresh),
+           "fresh queued");
+    uint8_t got[sizeof(fresh)];
+    ASSERT(bl_read_exact(fds[0], got, sizeof(got)) == sizeof(got),
+           "fresh bytes flow after reshed");
+    ASSERT(memcmp(got, fresh, sizeof(fresh)) == 0, "fresh intact, no stale");
+    ddci_push_stop(&d);
+    close(fds[0]);
+    close(fds[1]);
+    ad2.fe = -1;
+    free_fifo(&d.push_backlog);
+    ddci_devices[2] = nullptr;
     a[2] = nullptr;
     return 0;
 }
@@ -2382,8 +2440,8 @@ int test_ddci_enigma_local_loops_back() {
     channels.clear();
     filters.destroy_all();
     del_ca(&dvbca);
-    ddci_devices[0] = NULL;
-    ca_devices[0] = NULL;
+    ddci_devices[0] = nullptr;
+    ca_devices[0] = nullptr;
     a[0] = nullptr;
     a[8] = nullptr;
     return 0;
@@ -2418,8 +2476,8 @@ int test_ddci_two_loopbacks_own_distinct_slots() {
 
     opts.enigma = 0;
     ASSERT(!ddci_loopback_owns_slot(0), "non-enigma owns nothing");
-    ddci_devices[10] = NULL;
-    ddci_devices[11] = NULL;
+    ddci_devices[10] = nullptr;
+    ddci_devices[11] = nullptr;
     return 0;
 }
 
@@ -2508,6 +2566,8 @@ int main() {
               "testing push EAGAIN retries after a drain");
     TEST_FUNC(test_ddci_push_stop_sheds_stall(),
               "testing push stop sheds a stall");
+    TEST_FUNC(test_ddci_push_reshed_sheds_and_restarts(),
+              "testing tune reshed sheds counted and restarts");
     TEST_FUNC(test_ddci_push_kick_due(), "testing push micro-kick trigger");
     TEST_FUNC(test_ddci_tsclk_pick(), "testing tsclk choice pick");
     TEST_FUNC(test_capmt_lists_pmt_pids(),
