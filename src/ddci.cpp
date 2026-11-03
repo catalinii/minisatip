@@ -1537,8 +1537,7 @@ void ddci_push_stop(ddci_device_t *d) {
     if (left > 0)
         LOG("DDCI %d: push stop shedding %jd backlog bytes", d->id,
             (intmax_t)left);
-    f->read_index.store(f->write_index.load(std::memory_order_acquire),
-                        std::memory_order_release);
+    f->read_index = f->write_index;
 }
 
 // Queues fresh PSI first, then TS; pieces that do not fit are
@@ -1750,10 +1749,7 @@ int ddci_set_pid(adapter *ad, int pid) {
         if (ad->active_demux_pids <= 0) {
             if (ddci_device_t *dd = get_ddci(ad->id)) {
                 std::lock_guard<std::mutex> lock(dd->push_mutex);
-                dd->push_backlog.read_index.store(
-                    dd->push_backlog.write_index.load(
-                        std::memory_order_acquire),
-                    std::memory_order_release);
+                dd->push_backlog.read_index = dd->push_backlog.write_index;
                 // Retire in-flight peeks: the push thread voids
                 // its skip when the generation moved on.
                 dd->push_gen++;
@@ -1798,12 +1794,16 @@ int ddci_read_sec_data(sockets *s) {
     size_t left = 0;
     int rlen = ad->rlen;
 
-    if ((left = fifo_push_force(&d->fifo, b, static_cast<size_t>(rlen), 1)) ==
-        0)
-        LOG("dropping %zu bytes for ddci_adapter %d", left, d->id);
+    // Same mutex as the pop side: plain fifo indices
+    // need mutual exclusion across the ddci thread.
+    {
+        std::lock_guard<SMutex> lock(d->mutex);
+        if ((left = fifo_push_force(&d->fifo, b, static_cast<size_t>(rlen),
+                                    1)) == 0)
+            LOG("dropping %zu bytes for ddci_adapter %d", left, d->id);
+    }
     DEBUGM("pushed %zu bytes to the adapter buffer from %d [write_index %jd]",
-           left, rlen,
-           (intmax_t)d->fifo.write_index.load(std::memory_order_acquire));
+           left, rlen, (intmax_t)d->fifo.write_index);
     dump_packets("DDCI ->FIFO ", (uint8_t *)d->fifo.data, 188, 0);
     dump_packets("SOURCE ", b, 188, 0);
     return 0;
@@ -1895,9 +1895,7 @@ static int ddci_open_enigma(adapter *ad, ddci_device_t *d) {
     d->last_pat = 0;
     d->psi_changed = false;
     d->tid = d->ver = d->sdt_ver = d->sdt_data_mask = 0;
-    d->push_backlog.read_index.store(
-        d->push_backlog.write_index.load(std::memory_order_acquire),
-        std::memory_order_release);
+    d->push_backlog.read_index = d->push_backlog.write_index;
     d->enabled = 1;
     ad->enabled = 1;
     LOG("opened enigma loopback %d push dvr%d fd:%d read fd:%d source:%d",
@@ -1982,9 +1980,7 @@ int ddci_open_device(adapter *ad) {
     d->last_pat = 0;
     d->psi_changed = false;
     d->tid = d->ver = d->sdt_ver = d->sdt_data_mask = 0;
-    d->push_backlog.read_index.store(
-        d->push_backlog.write_index.load(std::memory_order_acquire),
-        std::memory_order_release);
+    d->push_backlog.read_index = d->push_backlog.write_index;
     d->enabled = 1;
     ad->enabled = 1;
     LOG("opened DDCI adapter %d fe:%d dvr:%d", ad->id, ad->fe, ad->dvr);
