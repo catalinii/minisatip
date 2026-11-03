@@ -909,7 +909,12 @@ int CAPMT_add_PMT(uint8_t *capmt, int len, SPMT *pmt, uint8_t cmd_id,
                  pmt->id, pmt->adapter, stream_pid.pid);
             continue;
         }
-        if (!stream_pid.is_audio && !stream_pid.is_video)
+        // Encrypted non-AV streams need selection too, or the
+        // CAM only decrypts them opportunistically (Rai 4K audio).
+        bool has_ca = std::any_of(
+            stream_pid.descriptors.cbegin(), stream_pid.descriptors.cend(),
+            [](const descriptor_t &x) { return x.is_ca_descriptor(); });
+        if (!stream_pid.is_audio && !stream_pid.is_video && !has_ca)
             continue;
         if (pos + 6 > len) {
             LOG("%s: truncating PMT %d stream list at %d bytes", __FUNCTION__,

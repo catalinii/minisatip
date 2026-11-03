@@ -1289,7 +1289,9 @@ int test_create_pmt() {
         pmt->stream_pids.size(), new_pmt->stream_pids.size(),
         "Number of streampids does not matches between generated PMT and "
         "read PMT");
-    ASSERT_EQUAL(pmt->caids, new_pmt->caids,
+    // Program caids plus the ES CA descriptor, now preserved
+    // for non-AV streams instead of dropped on re-parse.
+    ASSERT_EQUAL(pmt->caids + 1, new_pmt->caids,
                  "Number of caids does not matches "
                  "between generated PMT and read PMT");
 
