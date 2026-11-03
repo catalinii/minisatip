@@ -28,6 +28,10 @@ static inline void fifo_skip_bytes(SFIFO *f, size_t len) {
     if (f->size > 0)
         f->read_index += len;
 }
+static inline void fifo_reset(SFIFO *f) {
+    f->read_index = 0;
+    f->write_index = 0;
+}
 
 // Returns bytes queued; 0 when refused (full without force).
 size_t fifo_push_force(SFIFO *fifo, void *src, size_t len, int force);
