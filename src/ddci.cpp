@@ -26,7 +26,6 @@
 #include <net/if.h>
 #include <netdb.h>
 #include <netinet/in.h>
-#include <poll.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -254,18 +253,13 @@ static int ddci_enigma_slot(ddci_device_t *d) {
     return -1;
 }
 
+// Whole-word match in a choices file; mirrors enigma2 CI detection.
+static bool ddci_choices_has(const std::string &choices, const char *word);
+
 std::string ddci_tsclk_pick(const std::string &choices) {
     // Driver rejects extra_high (dmesg "invalid tsclk"), so high is max.
-    for (size_t pos = choices.find("high"); pos != std::string::npos;
-         pos = choices.find("high", pos + 1)) {
-        bool left_ok = pos == 0 || choices[pos - 1] == ' ' ||
-                       choices[pos - 1] == '\n' || choices[pos - 1] == '\t';
-        size_t end = pos + 4;
-        bool right_ok = end >= choices.size() || choices[end] == ' ' ||
-                        choices[end] == '\n' || choices[end] == '\t';
-        if (left_ok && right_ok)
-            return "high";
-    }
+    if (ddci_choices_has(choices, "high"))
+        return "high";
     return "";
 }
 
@@ -292,13 +286,17 @@ static void ddci_enigma_set_tsclk(ddci_device_t *d) {
     cur[0] = 0;
     if (!cf || !cf.getline(cur, sizeof(cur)) || !cur[0])
         return;
-    snprintf(d->tsclk_saved, sizeof(d->tsclk_saved), "%.15s", cur);
     if (best == cur)
         return;
+    snprintf(d->tsclk_saved, sizeof(d->tsclk_saved), "%.15s", cur);
     std::ofstream out(path);
-    if (out << best)
+    if (out << best) {
         LOG("DDCI %d: CI slot %d tsclk %s -> %s", d->id, slot, cur,
             best.c_str());
+        return;
+    }
+    LOG("DDCI %d: CI slot %d tsclk write %s failed", d->id, slot, best.c_str());
+    d->tsclk_saved[0] = 0;
 }
 
 static void ddci_enigma_restore_tsclk(ddci_device_t *d) {
@@ -316,6 +314,20 @@ static void ddci_enigma_restore_tsclk(ddci_device_t *d) {
     d->tsclk_saved[0] = 0;
 }
 
+static bool ddci_choices_has(const std::string &choices, const char *word) {
+    size_t len = strlen(word);
+    for (size_t pos = choices.find(word); pos != std::string::npos;
+         pos = choices.find(word, pos + 1)) {
+        bool left_ok = pos == 0 || isspace((unsigned char)choices[pos - 1]);
+        size_t end = pos + len;
+        bool right_ok =
+            end >= choices.size() || isspace((unsigned char)choices[end]);
+        if (left_ok && right_ok)
+            return true;
+    }
+    return false;
+}
+
 void ddci_enigma_route_pvr(ddci_device_t *d) {
     if (!opts.enigma || !d)
         return;
@@ -324,22 +336,27 @@ void ddci_enigma_route_pvr(ddci_device_t *d) {
         LOG("DDCI %d: no CI slot bound, skipping PVR route", d->id);
         return;
     }
-    set_ci_input_str(slot, "PVR");
-    ddci_enigma_set_tsclk(d);
-    LOG("DDCI %d: CI slot %d input routed to PVR", d->id, slot);
-}
-
-void ddci_enigma_route_none(ddci_device_t *d) {
-    if (!opts.enigma || !d)
-        return;
-    int slot = ddci_enigma_slot(d);
-    if (slot < 0) {
-        LOG("DDCI %d: no CI slot bound, skipping NONE route", d->id);
+    char path[64];
+    snprintf(path, sizeof(path), "/proc/stb/tsmux/ci%d_input_choices", slot);
+    std::ifstream ch(path);
+    std::string choices((std::istreambuf_iterator<char>(ch)),
+                        std::istreambuf_iterator<char>());
+    const char *input = nullptr;
+    if (ddci_choices_has(choices, "PVR"))
+        input = "PVR";
+    else if (ddci_choices_has(choices, "DVR"))
+        input = "DVR";
+    if (!input) {
+        LOG("DDCI %d: CI slot %d offers no PVR/DVR input, leaving routing",
+            d->id, slot);
         return;
     }
-    set_ci_input_str(slot, "NONE");
-    ddci_enigma_restore_tsclk(d);
-    LOG("DDCI %d: CI slot %d input routed to NONE", d->id, slot);
+    if (!set_ci_input_str(slot, input)) {
+        LOG("DDCI %d: CI slot %d input route to %s failed", d->id, slot, input);
+        return;
+    }
+    ddci_enigma_set_tsclk(d);
+    LOG("DDCI %d: CI slot %d input routed to %s", d->id, slot, input);
 }
 
 // DVR DMX_SET_SOURCE base; enigma honors the same override file.
@@ -473,7 +490,16 @@ int ddci_close_dev(adapter *ad) {
 }
 SCA_op ddci;
 
-int ddci_close_adapter(adapter *) { return 0; }
+// Shared close stub: joining here runs under ad->mutex, so a
+// reopen can never see a thread left over from close (F1/F3).
+int ddci_close_adapter(adapter *ad) {
+    if (!ad)
+        return 0;
+    ddci_device_t *d = ddci_devices[ad->id];
+    if (d && d->loopback)
+        ddci_push_stop(d);
+    return 0;
+}
 
 extern SMutex ca_mask_mutex;
 
@@ -1357,15 +1383,17 @@ int push_ts_to_adapter(ddci_device_t *d, adapter *ad, uint16_t *mapping) {
     return 0;
 }
 
-// Push loop: loopback copies one chunk per cycle like enigma
-// filepush; hardware DDCI writevs straight off the ring.
+// Push loop: writevs peeked ring segments like flush_socket_all,
+// no copy buffer. Loopback only; hardware writevs inline.
 static void ddci_push_loop(int id) {
     ddci_device_t *d =
         (id >= 0 && id < MAX_ADAPTERS) ? ddci_devices[id] : nullptr;
     if (!d)
         return;
-    uint8_t chunk[DDCI_PUSH_CHUNK];
     for (;;) {
+        struct iovec iov[2];
+        int iocnt = 0, first = 0;
+        uint64_t gen = 0;
         size_t n = 0;
         {
             std::unique_lock<std::mutex> lock(d->push_mutex);
@@ -1375,23 +1403,22 @@ static void ddci_push_loop(int id) {
             if (d->push_stop.load())
                 break;
             // Peek trusts the length; verify, the waiter promised used > 0.
-            int have = fifo_used(&d->push_backlog);
-            if (have <= 0)
+            size_t have = fifo_used(&d->push_backlog);
+            if (have == 0)
                 continue;
-            n = (size_t)have;
-            if (n > sizeof(chunk))
-                n = sizeof(chunk);
-            if (d->loopback) {
-                void *p = NULL;
-                size_t first = fifo_peek(&d->push_backlog, &p, (unsigned)n, 0);
-                memcpy(chunk, p, first);
-                if (first < n) {
-                    void *q = NULL;
-                    size_t second = fifo_peek(&d->push_backlog, &q,
-                                              (unsigned)(n - first), first);
-                    memcpy(chunk + first, q, second);
-                    n = first + second;
-                }
+            n = have;
+            if (n > DDCI_PUSH_CHUNK)
+                n = DDCI_PUSH_CHUNK;
+            gen = d->push_gen;
+            iov[0].iov_len =
+                fifo_peek(&d->push_backlog, &iov[0].iov_base, n, 0);
+            iocnt = 1;
+            // The entire chunk reads through at most 2 pointers.
+            if (iov[0].iov_len < n) {
+                iov[1].iov_len = fifo_peek(&d->push_backlog, &iov[1].iov_base,
+                                           n - iov[0].iov_len, iov[0].iov_len);
+                n = iov[0].iov_len + iov[1].iov_len;
+                iocnt = 2;
             }
         }
         adapter *ad = get_adapter_nw(id);
@@ -1399,42 +1426,33 @@ static void ddci_push_loop(int id) {
             break;
         size_t off = 0;
         bool fatal = false;
+        // The peeked span is stable unlocked: pushes never
+        // overwrite unread bytes, only this thread consumes.
         while (off < n && !d->push_stop.load()) {
-            ssize_t w;
-            if (d->loopback) {
-                w = write(ad->fe, chunk + off, n - off);
-            } else {
-                // Hardware re-peeks every attempt, so a wrapped queue
-                // overwrite can not race an in-flight vector.
-                struct iovec io[2] = {};
-                int iop;
-                {
-                    std::lock_guard<std::mutex> lock(d->push_mutex);
-                    io[0].iov_len =
-                        fifo_peek(&d->push_backlog, &io[0].iov_base,
-                                  (unsigned)(n - off), (unsigned)off);
-                    iop = 1;
-                    if (io[0].iov_len < n - off) {
-                        io[1].iov_len =
-                            fifo_peek(&d->push_backlog, &io[1].iov_base,
-                                      (unsigned)(n - off - io[0].iov_len),
-                                      (unsigned)(off + io[0].iov_len));
-                        iop = 2;
-                    }
+            ssize_t w = writev(ad->fe, iov + first, iocnt - first);
+            if (w > 0) {
+                off += static_cast<size_t>(w);
+                size_t left = static_cast<size_t>(w);
+                while (first < iocnt && left >= iov[first].iov_len) {
+                    left -= iov[first].iov_len;
+                    first++;
                 }
-                w = writev(ad->fe, io, iop);
-            }
-            if (w > 0)
-                off += (size_t)w;
-            else if (w < 0 && errno == EINTR)
+                // A fully written span leaves first == iocnt;
+                // off == n then, so nothing left to advance.
+                if (first < iocnt) {
+                    auto *base = static_cast<char *>(iov[first].iov_base);
+                    iov[first].iov_base = base + left;
+                    iov[first].iov_len -= left;
+                }
+            } else if (w < 0 && errno == EINTR)
                 continue;
             else if (w < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-                // Playpump full: 100us backoff, 10x faster retry.
+                // Playpump full: back off 100us like filepush.
                 std::this_thread::sleep_for(std::chrono::microseconds(100));
                 continue;
             } else {
                 // Kick/stop closed the fd, or teardown beat free:
-                // the chunk stays queued; EBADF stays quiet.
+                // written bytes stay queued; EBADF stays quiet.
                 bool stopped = d->push_stop.load();
                 fatal = !stopped;
                 if (!stopped && !(w < 0 && errno == EBADF))
@@ -1446,20 +1464,16 @@ static void ddci_push_loop(int id) {
         }
         if (off > 0)
             d->last_push_write.store(getTick(), std::memory_order_relaxed);
-        // Consume only written bytes; the rest stays queued.
+        // Consume only when no shed intervened; a shed already
+        // dropped this span, skipping would eat fresh bytes.
         {
             std::lock_guard<std::mutex> lock(d->push_mutex);
-            fifo_skip_bytes(&d->push_backlog, (uint32_t)off);
+            if (gen == d->push_gen)
+                fifo_skip_bytes(&d->push_backlog, off);
         }
-        // Fatal error: loopback exits for the kick to restart
-        // it; hardware pauses and retries, it has no backstop.
-        if (fatal) {
-            if (!d->loopback) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(10));
-                continue;
-            }
+        // Fatal error: exit for the kick to restart us.
+        if (fatal)
             break;
-        }
     }
     d->push_running.store(false);
     DEBUGM("DDCI %d: push loop exited", d->id);
@@ -1469,6 +1483,10 @@ static void ddci_push_loop(int id) {
 void ddci_push_start(ddci_device_t *d) {
     if (!d || d->push_running.exchange(true))
         return;
+    // Reap a previous incarnation that exited on its own, so the
+    // move-assign below never hits a joinable thread (terminate).
+    if (d->push_thread.joinable())
+        d->push_thread.join();
     d->push_stop.store(false);
     d->last_push_write.store(getTick(), std::memory_order_relaxed);
     d->push_thread = std::thread(ddci_push_loop, d->id);
@@ -1477,14 +1495,22 @@ void ddci_push_start(ddci_device_t *d) {
 // Stops the push thread under the mutex and joins it; the fd
 // closes first so a blocked writer fails out at once.
 static void ddci_push_join(ddci_device_t *d, adapter *ad) {
+    // Never started (hardware DDCI owns no thread): leave its fd alone.
+    if (!d->push_thread.joinable())
+        return;
     {
         std::lock_guard<std::mutex> lock(d->push_mutex);
         d->push_stop.store(true);
     }
     d->push_cv.notify_one();
-    if (ad && ad->fe >= 0) {
-        close(ad->fe);
-        ad->fe = -1;
+    // Live callers hold ad->mutex (kick, close path); guard the
+    // close/blank so any future caller stays atomic (recursive).
+    if (ad) {
+        std::lock_guard<SMutex> alock(ad->mutex);
+        if (ad->fe >= 0) {
+            close(ad->fe);
+            ad->fe = -1;
+        }
     }
     if (d->push_thread.joinable())
         d->push_thread.join();
@@ -1493,6 +1519,11 @@ static void ddci_push_join(ddci_device_t *d, adapter *ad) {
 // Micro-kick: close/open re-primes a dead CAM pull, backlog kept.
 void ddci_push_kick(adapter *ad, ddci_device_t *d) {
     if (!ad || !d || !ddci_is_loopback(d->id))
+        return;
+    // Serialize against close_adapter (same outer ad->mutex as the
+    // close path, push_mutex inner): no double-close or fd leak.
+    std::lock_guard<SMutex> lock(ad->mutex);
+    if (!ad->enabled)
         return;
     ddci_push_join(d, ad);
     char buf[100];
@@ -1521,29 +1552,40 @@ void ddci_push_stop(ddci_device_t *d) {
     if (left > 0)
         LOG("DDCI %d: push stop shedding %jd backlog bytes", d->id,
             (intmax_t)left);
-    f->read_index = f->write_index;
+    f->read_index.store(f->write_index.load(std::memory_order_acquire),
+                        std::memory_order_release);
 }
 
-// Queues fresh PSI first, then TS; a full ring sheds oldest.
+// Queues fresh PSI first, then TS; pieces that do not fit are
+// dropped and counted, never overwrite queued bytes.
 size_t ddci_push_queue(ddci_device_t *d, uint8_t *psi, size_t psi_len,
                        struct iovec *io, int iop) {
-    size_t queued = 0, backlog = 0;
+    size_t queued = 0, backlog = 0, dropped = 0;
     {
         std::lock_guard<std::mutex> lock(d->push_mutex);
-        if (psi && psi_len > 0)
-            queued += (size_t)fifo_push_force(&d->push_backlog, psi,
-                                              (unsigned)psi_len, 1);
-        for (int k = 0; k < iop; k++)
-            queued += (size_t)fifo_push_force(&d->push_backlog, io[k].iov_base,
-                                              (unsigned)io[k].iov_len, 1);
-        // Overwrites land past the ring: drop oldest so used stays in size.
         SFIFO *f = &d->push_backlog;
-        if (f->write_index - f->read_index > f->size) {
-            LOG("DDCI %d: push ring full, dropped %jd oldest bytes", d->id,
-                f->write_index - f->size - f->read_index);
-            f->read_index = f->write_index - f->size;
+        auto try_push = [&](void *base, size_t len) {
+            if (fifo_available(f) < len) {
+                dropped += len;
+                return;
+            }
+            queued += fifo_push(f, base, len);
+        };
+        if (psi && psi_len > 0)
+            try_push(psi, psi_len);
+        for (int k = 0; k < iop; k++)
+            try_push(io[k].iov_base, io[k].iov_len);
+        // Report drops as throttled totals, not per event.
+        if (dropped > 0) {
+            d->push_dropped += dropped;
+            int64_t now = getTick();
+            if (now - d->push_last_drop_log > 10000) {
+                d->push_last_drop_log = now;
+                LOG("DDCI %d: push ring full, dropped %jd bytes total", d->id,
+                    (intmax_t)d->push_dropped);
+            }
         }
-        backlog = (size_t)(f->write_index - f->read_index);
+        backlog = fifo_used(f);
         d->push_cv.notify_one();
     }
     // Loopback-only watchdog: only the enigma playpump needs
@@ -1564,8 +1606,9 @@ size_t ddci_push_queue(ddci_device_t *d, uint8_t *psi, size_t psi_len,
 
 int ddci_process_ts(adapter *ad, ddci_device_t *d) {
     unsigned char *b;
+    adapter *ad2 = get_adapter(d->id);
     int rlen = ad->rlen;
-    int ec = 0;
+    int bytes = 0, ec = 0;
     int iop = 0, iomax = ad->rlen / 188 + 100;
     int pid, dpid, i;
     std::vector<struct iovec> iov(static_cast<size_t>(iomax));
@@ -1590,6 +1633,10 @@ int ddci_process_ts(adapter *ad, ddci_device_t *d) {
             DEBUGM("Using pid %d in adapter %d as pid %d in DDCI %d", m.pid,
                    ad->id, m.ddci_pid, d->id);
         }
+
+    if (!ad2) {
+        return 0;
+    }
 
     if (ec == 0) {
         d->read_index[ad->id] = 0;
@@ -1621,24 +1668,51 @@ int ddci_process_ts(adapter *ad, ddci_device_t *d) {
             io[iop].iov_base = b;
             io[iop++].iov_len = DVB_FRAME;
         }
+        bytes += 188;
         DEBUGM("pos %d of %d, mapping pid %d to %d, buf pos %d", iop - 1,
                rlen / 188, pid, dpid, i / 188);
     }
-    // Queue PSI first, then TS; the FPGA tail stays last (#1437).
-    // The push thread drains the fifo to the dvr from here.
+    // Loopback queues PSI first for the push thread; hardware
+    // writevs straight to the device like before.
     if (iop > 0) {
         int psi_len = ddci_add_psi(d, psi, sizeof(psi) - 1, ad);
         hexdump("PSI -> ", psi, psi_len);
-        if (!d->loopback) {
+        if (d->loopback) {
+            // No null tail: it pads FPGA DMA granularity (#1437),
+            // the playpump consumes raw TS like filepush.
+            ddci_push_queue(d, psi, (size_t)psi_len, io, iop);
+        } else {
+            if (psi_len > 0) {
+                io[iop].iov_base = psi;
+                io[iop].iov_len = static_cast<size_t>(psi_len);
+                bytes += psi_len;
+                iop++;
+            }
+
+            // End every write with a null packet for the 128 byte
+            // FPGA read granularity (#1437).
             memset(null_tail, 0xFF, sizeof(null_tail));
             null_tail[0] = 0x47;
             null_tail[1] = 0x1F;
             null_tail[2] = 0xFF;
             null_tail[3] = 0x10;
             io[iop].iov_base = null_tail;
-            io[iop++].iov_len = DVB_FRAME;
+            io[iop].iov_len = DVB_FRAME;
+            bytes += DVB_FRAME;
+            iop++;
+
+            DEBUGM("writing %d bytes to DDCI device %d, fd %d, sock %d", bytes,
+                   d->id, ad2->fe, ad2->fe_sock);
+            ssize_t rb = writev(ad2->fe, io, iop);
+            if (rb != bytes)
+                LOG("%s: write incomplete to DDCI %d,fd %d, wrote %zd out of "
+                    "%d "
+                    "(iop %d%s), "
+                    "errno "
+                    "%d: %s",
+                    __FUNCTION__, ad2->id, ad2->fe, rb, bytes, iop,
+                    iop > 1024 ? " > IOV_MAX" : "", errno, strerror(errno));
         }
-        ddci_push_queue(d, psi, (size_t)psi_len, io, iop);
     }
     // mark the written TS packets as 8191 (0x1FFF)
     for (i = 0; i < iop; i++) {
@@ -1690,7 +1764,13 @@ int ddci_set_pid(adapter *ad, int pid) {
         if (ad->active_demux_pids <= 0) {
             if (ddci_device_t *dd = get_ddci(ad->id)) {
                 std::lock_guard<std::mutex> lock(dd->push_mutex);
-                dd->push_backlog.read_index = dd->push_backlog.write_index;
+                dd->push_backlog.read_index.store(
+                    dd->push_backlog.write_index.load(
+                        std::memory_order_acquire),
+                    std::memory_order_release);
+                // Retire in-flight peeks: the push thread voids
+                // its skip when the generation moved on.
+                dd->push_gen++;
             }
         }
         int rc = dvb_demux_set_pid(ad, pid);
@@ -1736,7 +1816,8 @@ int ddci_read_sec_data(sockets *s) {
         0)
         LOG("dropping %zu bytes for ddci_adapter %d", left, d->id);
     DEBUGM("pushed %zu bytes to the adapter buffer from %d [write_index %jd]",
-           left, rlen, d->fifo.write_index);
+           left, rlen,
+           (intmax_t)d->fifo.write_index.load(std::memory_order_acquire));
     dump_packets("DDCI ->FIFO ", (uint8_t *)d->fifo.data, 188, 0);
     dump_packets("SOURCE ", b, 188, 0);
     return 0;
@@ -1828,7 +1909,9 @@ static int ddci_open_enigma(adapter *ad, ddci_device_t *d) {
     d->last_pat = 0;
     d->psi_changed = false;
     d->tid = d->ver = d->sdt_ver = d->sdt_data_mask = 0;
-    d->push_backlog.read_index = d->push_backlog.write_index;
+    d->push_backlog.read_index.store(
+        d->push_backlog.write_index.load(std::memory_order_acquire),
+        std::memory_order_release);
     d->enabled = 1;
     ad->enabled = 1;
     LOG("opened enigma loopback %d push dvr%d fd:%d read fd:%d source:%d",
@@ -1880,7 +1963,9 @@ int ddci_open_device(adapter *ad) {
     int err;
     if ((err = set_linux_socket_nonblock(read_fd)))
         LOG("Failed to set socket %d nonblocking: %d", write_fd, err);
-    // write_fd stays blocking: the push thread writes in a loop.
+
+    if ((err = set_linux_socket_nonblock(write_fd)))
+        LOG("Failed to set socket %d nonblocking: %d", write_fd, err);
 #else
     int fd[2];
     if (pipe(fd) == -1) {
@@ -1911,11 +1996,12 @@ int ddci_open_device(adapter *ad) {
     d->last_pat = 0;
     d->psi_changed = false;
     d->tid = d->ver = d->sdt_ver = d->sdt_data_mask = 0;
-    d->push_backlog.read_index = d->push_backlog.write_index;
+    d->push_backlog.read_index.store(
+        d->push_backlog.write_index.load(std::memory_order_acquire),
+        std::memory_order_release);
     d->enabled = 1;
     ad->enabled = 1;
     LOG("opened DDCI adapter %d fe:%d dvr:%d", ad->id, ad->fe, ad->dvr);
-    ddci_push_start(d);
 
     return 0;
 }

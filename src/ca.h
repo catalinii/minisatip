@@ -231,7 +231,6 @@ struct ca_device {
     ca_session_t sessions[MAX_SESSIONS];
 
     int uri_mask;
-    int cc_version; // 1 for CI+ v1 (CSA keys), 2 for v2 (AES keys)
     char force_ci;
     int linked_adapter;
 
@@ -265,7 +264,7 @@ struct ca_device {
 
 extern ca_device_t *ca_devices[];
 
-void set_ci_input_str(int ci, const char *val);
+bool set_ci_input_str(int ci, const char *val);
 ca_device_t *alloc_ca_device();
 int ca_init(ca_device_t *d);
 void dvbca_init();

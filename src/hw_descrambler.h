@@ -47,7 +47,7 @@ struct ca_descr_data {
     unsigned int parity;    // 0: EVEN, 1: ODD
     unsigned int data_type; // 0: CW, 1: IV
     unsigned int data_len;  // Length (16 bytes for 128-bit key/IV)
-    unsigned char data[16];
+    unsigned char *data;    // Userspace pointer, driver copies data_len bytes
 };
 #endif
 
