@@ -36,7 +36,6 @@ static inline void fifo_reset(SFIFO *f) {
 // Returns bytes queued; 0 when refused (full without force).
 size_t fifo_push_force(SFIFO *fifo, void *src, size_t len, int force);
 
-size_t fifo_pop(SFIFO *fifo, void *dst, size_t len);
 size_t fifo_pop_offset(SFIFO *fifo, void *dst, size_t len, uint64_t *offset);
 size_t fifo_peek(SFIFO *fifo, void **dst, size_t len, size_t relative_offset);
 
@@ -44,5 +43,6 @@ uint32_t fifo_peek_32(SFIFO *fifo, uint64_t offset);
 
 #define create_fifo(f, x) _create_fifo(f, x, __FILE__, __LINE__)
 #define fifo_push(a, b, c) fifo_push_force(a, b, c, 0)
+#define fifo_pop(a, b, c) fifo_pop_offset(a, b, c, &((a)->read_index))
 #define create_fifo(f, x) _create_fifo(f, x, __FILE__, __LINE__)
 #endif
