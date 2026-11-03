@@ -38,8 +38,7 @@ int _create_fifo(SFIFO *f, size_t no, const char *file, int line) {
     f->file = file;
     f->line = line;
     f->data = data;
-    f->read_index = 0;
-    f->write_index = 0;
+    fifo_reset(f);
     f->size = no;
     return 0;
 }
@@ -52,8 +51,7 @@ void free_fifo(SFIFO *f) {
     f->data = nullptr;
     f->file = nullptr;
     f->line = 0;
-    f->read_index = 0;
-    f->write_index = 0;
+    fifo_reset(f);
     f->size = 0;
     return;
 }

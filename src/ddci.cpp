@@ -1547,13 +1547,12 @@ void ddci_push_stop(ddci_device_t *d) {
     // restarts on the same backlog.
     std::lock_guard<std::mutex> lock(d->push_mutex);
     SFIFO *f = &d->push_backlog;
-    int64_t left = (int64_t)(f->write_index - f->read_index);
+    size_t left = fifo_used(f);
     if (left > 0) {
-        LOG("DDCI %d: push stop shedding %jd backlog bytes", d->id,
-            (intmax_t)left);
-        d->push_dropped += (uint64_t)left;
+        LOG("DDCI %d: push stop shedding %zu backlog bytes", d->id, left);
+        d->push_dropped += left;
     }
-    f->read_index = f->write_index;
+    fifo_reset(f);
 }
 
 // Tune shed: join the thread (fd stays open), drop the stale
@@ -1567,12 +1566,12 @@ void ddci_push_reshed(adapter *ad, ddci_device_t *d) {
     ddci_push_join(d, nullptr);
     std::lock_guard<std::mutex> plock(d->push_mutex);
     SFIFO *f = &d->push_backlog;
-    int64_t left = (int64_t)(f->write_index - f->read_index);
+    size_t left = fifo_used(f);
     if (left > 0) {
-        LOG("DDCI %d: tune shedding %jd backlog bytes", d->id, (intmax_t)left);
-        d->push_dropped += (uint64_t)left;
+        LOG("DDCI %d: tune shedding %zu backlog bytes", d->id, left);
+        d->push_dropped += left;
     }
-    f->read_index = f->write_index;
+    fifo_reset(f);
     d->push_gen++;
     ddci_push_start(d);
 }
@@ -1931,7 +1930,7 @@ static int ddci_open_enigma(adapter *ad, ddci_device_t *d) {
         // Same push_mutex as every other backlog user; d->mutex
         // outer here matches the queue's nesting, P stays a leaf.
         std::lock_guard<std::mutex> plock(d->push_mutex);
-        d->push_backlog.read_index = d->push_backlog.write_index;
+        fifo_reset(&d->push_backlog);
     }
     d->enabled = 1;
     ad->enabled = 1;
@@ -2021,7 +2020,7 @@ int ddci_open_device(adapter *ad) {
         // Same push_mutex as every other backlog user; d->mutex
         // outer here matches the queue's nesting, P stays a leaf.
         std::lock_guard<std::mutex> plock(d->push_mutex);
-        d->push_backlog.read_index = d->push_backlog.write_index;
+        fifo_reset(&d->push_backlog);
     }
     d->enabled = 1;
     ad->enabled = 1;
