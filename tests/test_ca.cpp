@@ -2874,8 +2874,10 @@ int main() {
               "testing that a failed CAPMT write is retried");
     TEST_FUNC(test_loopback_capmt_sends_at_once(),
               "testing that loopback CAPMT is not held");
+#ifndef DISABLE_DDCI
     TEST_FUNC(test_loopback_owns_ci_slot(),
               "testing that the tuner yields its CI slot to the loopback");
+#endif
     TEST_FUNC(test_get_authdata_filename(), "testing filename helper function");
     TEST_FUNC(test_capmt_content_hash_masks_version_and_listmgmt(),
               "testing the CAPMT hash masks version and listmgmt");
