@@ -20,10 +20,12 @@
 
 #define DDCI_BUFFER (20000 * 188)
 
-// Push ring bytes; absorbs input while kicks re-prime a dead pull.
-#define DDCI_PUSH_BACKLOG_MAX (12 * 1024 * 1024)
+// Push ring bytes; 188-multiple, ~2MB (~500ms at 4MB/s).
+// Covers jitter plus the kick window; kicks shed anyway.
+#define DDCI_PUSH_BACKLOG_MAX (188 * 10240)
 
-// Push bytes per cycle; enigma filepush default buffersize.
+// Push bytes per cycle, kept a multiple of the 188B TS frame;
+// enigma filepush default buffersize.
 #define DDCI_PUSH_CHUNK (188 * 1024)
 // Micro-kick backstop: EAGAIN past this long means the playpump
 // congestion latch is stuck, re-prime it via close/open.

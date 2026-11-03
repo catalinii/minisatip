@@ -38,8 +38,8 @@ int _create_fifo(SFIFO *f, size_t no, const char *file, int line) {
     f->file = file;
     f->line = line;
     f->data = data;
-    f->read_index.store(0, std::memory_order_relaxed);
-    f->write_index.store(0, std::memory_order_relaxed);
+    f->read_index = 0;
+    f->write_index = 0;
     f->size = no;
     return 0;
 }
@@ -52,8 +52,8 @@ void free_fifo(SFIFO *f) {
     f->data = nullptr;
     f->file = nullptr;
     f->line = 0;
-    f->read_index.store(0, std::memory_order_relaxed);
-    f->write_index.store(0, std::memory_order_relaxed);
+    f->read_index = 0;
+    f->write_index = 0;
     f->size = 0;
     return;
 }
@@ -65,8 +65,8 @@ size_t fifo_push_force(SFIFO *fifo, void *src, size_t len, int force) {
     size_t size = fifo->size;
     if (len == 0 || len > size)
         return 0;
-    uint64_t wi = fifo->write_index.load(std::memory_order_acquire);
-    uint64_t ri = fifo->read_index.load(std::memory_order_acquire);
+    uint64_t wi = fifo->write_index;
+    uint64_t ri = fifo->read_index;
     size_t available = size - (wi - ri);
 
     // Full without force: report 0, the caller owns
@@ -83,14 +83,14 @@ size_t fifo_push_force(SFIFO *fifo, void *src, size_t len, int force) {
     memcpy((char *)fifo->data + off, src, l);
     if (len > l)
         memcpy(fifo->data, (char *)src + l, len - l);
-    fifo->write_index.fetch_add(len, std::memory_order_release);
+    fifo->write_index += len;
     return len;
 }
 
 // pops maximum len bytes from the buffer from the offset passed as pointer
 size_t fifo_pop_offset(SFIFO *fifo, void *dst, size_t len, uint64_t *offset) {
     uint64_t size = fifo->size;
-    uint64_t wi = fifo->write_index.load(std::memory_order_acquire);
+    uint64_t wi = fifo->write_index;
     size_t l;
     if (wi <= *offset)
         return 0;
@@ -121,8 +121,8 @@ size_t fifo_pop_offset(SFIFO *fifo, void *dst, size_t len, uint64_t *offset) {
 // Pops from the fifo's own read index, advancing it past the copy.
 size_t fifo_pop(SFIFO *fifo, void *dst, size_t len) {
     uint64_t size = fifo->size;
-    uint64_t wi = fifo->write_index.load(std::memory_order_acquire);
-    uint64_t ri = fifo->read_index.load(std::memory_order_acquire);
+    uint64_t wi = fifo->write_index;
+    uint64_t ri = fifo->read_index;
     if (wi <= ri)
         return 0;
 
@@ -145,7 +145,7 @@ size_t fifo_pop(SFIFO *fifo, void *dst, size_t len) {
     memcpy(dst, (char *)fifo->data + off, l);
     if (len > l)
         memcpy((char *)dst + l, fifo->data, len - l);
-    fifo->read_index.store(ri + len, std::memory_order_release);
+    fifo->read_index = ri + len;
     return len;
 }
 
@@ -155,8 +155,8 @@ size_t fifo_pop(SFIFO *fifo, void *dst, size_t len) {
 // - second returns the pointer for the remaining size
 size_t fifo_peek(SFIFO *fifo, void **dst, size_t len, size_t relative_offset) {
     size_t size = fifo->size;
-    uint64_t ri = fifo->read_index.load(std::memory_order_acquire);
-    uint64_t wi = fifo->write_index.load(std::memory_order_acquire);
+    uint64_t ri = fifo->read_index;
+    uint64_t wi = fifo->write_index;
     size_t l;
 
     if (ri + relative_offset > wi)
@@ -170,7 +170,7 @@ size_t fifo_peek(SFIFO *fifo, void **dst, size_t len, size_t relative_offset) {
 
 uint32_t fifo_peek_32(SFIFO *fifo, uint64_t offset) {
     uint8_t *data = (uint8_t *)fifo->data;
-    uint64_t wi = fifo->write_index.load(std::memory_order_acquire);
+    uint64_t wi = fifo->write_index;
     if (wi - offset < LEN_SIZE)
         return 0;
     uint64_t size = fifo->size;
