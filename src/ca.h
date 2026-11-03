@@ -13,6 +13,7 @@ static inline std::string get_json_mmi() {
 static inline void ca_clear_mmi_messages() {}
 #else
 #include "adapter.h"
+#include "ddci.h"
 #include "pmt.h"
 #include <openssl/evp.h>
 #include <openssl/rsa.h>
@@ -265,6 +266,9 @@ struct ca_device {
 extern ca_device_t *ca_devices[];
 
 bool set_ci_input_str(int ci, const char *val);
+void ddci_enigma_route_pvr(ddci_device_t *d);
+// Highest tsclk in a choices file; empty when none qualifies.
+std::string ddci_tsclk_pick(const std::string &choices);
 ca_device_t *alloc_ca_device();
 int ca_init(ca_device_t *d);
 void dvbca_init();
