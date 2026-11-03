@@ -1376,18 +1376,13 @@ int push_ts_to_adapter(ddci_device_t *d, adapter *ad, uint16_t *mapping) {
 
 // Push loop: writevs peeked ring segments like flush_socket_all,
 // no copy buffer. Loopback only; hardware writevs inline.
-static void ddci_push_loop(int id) {
+static void ddci_push_loop(int id, int fe) {
     ddci_device_t *d =
         (id >= 0 && id < MAX_ADAPTERS) ? ddci_devices[id] : nullptr;
     if (!d)
         return;
-    // Every fd replacement joins this thread first, so one
-    // load per incarnation stays valid; no per-chunk race.
-    int fe = -1;
-    if (adapter *aad = get_adapter_nw(id)) {
-        std::lock_guard<SMutex> alock(aad->mutex);
-        fe = aad->fe;
-    }
+    // fe arrives loaded: every replacement joins first, and the
+    // loop must never take ad->mutex (join runs under it).
     for (;;) {
         struct iovec iov[2];
         int iocnt = 0, first = 0;
@@ -1484,9 +1479,16 @@ void ddci_push_start(ddci_device_t *d) {
     // move-assign below never hits a joinable thread (terminate).
     if (d->push_thread.joinable())
         d->push_thread.join();
+    // Load fe before spawn: join runs under ad->mutex, so a
+    // thread loading it after spawn could deadlock the join.
+    int fe = -1;
+    if (adapter *ad = get_adapter_nw(d->id)) {
+        std::lock_guard<SMutex> alock(ad->mutex);
+        fe = ad->fe;
+    }
     d->push_stop.store(false);
     d->last_push_write.store(getTick(), std::memory_order_relaxed);
-    d->push_thread = std::thread(ddci_push_loop, d->id);
+    d->push_thread = std::thread(ddci_push_loop, d->id, fe);
 }
 
 // Stops the push thread under the mutex and joins it; the fd
@@ -1614,7 +1616,7 @@ size_t ddci_push_queue(ddci_device_t *d, uint8_t *psi, size_t psi_len,
         int64_t now = getTick();
         int64_t stall =
             now - d->last_push_write.load(std::memory_order_relaxed);
-        if (ddci_kick_due(stall, backlog, now - d->last_kick)) {
+        if (ddci_kick_due(stall, now - d->last_kick)) {
             LOGM("DDCI %d: kick stall=%jdms backlog=%zuKB", d->id,
                  (intmax_t)stall, backlog / 1024);
             d->last_kick = now;

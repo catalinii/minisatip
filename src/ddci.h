@@ -32,14 +32,11 @@ static_assert(DDCI_PUSH_CHUNK % 188 == 0, "chunk stays frame-aligned");
 // Micro-kick backstop: EAGAIN past this long means the playpump
 // congestion latch is stuck, re-prime it via close/open.
 #define DDCI_KICK_STALL_MS 1000
-#define DDCI_KICK_BACKLOG (256 * 1024)
 #define DDCI_KICK_MIN_MS 500
-// Kick when the writer stalls or the backlog outruns the drain,
-// at most one kick per DDCI_KICK_MIN_MS.
-inline bool ddci_kick_due(int64_t stall_ms, size_t backlog,
-                          int64_t since_kick_ms) {
-    return since_kick_ms > DDCI_KICK_MIN_MS &&
-           (stall_ms > DDCI_KICK_STALL_MS || backlog > DDCI_KICK_BACKLOG);
+// Kick only on stalled writes; a deep backlog with a draining
+// writer is healthy buffering, not a wedge (Digi 4K: 365KB).
+inline bool ddci_kick_due(int64_t stall_ms, int64_t since_kick_ms) {
+    return since_kick_ms > DDCI_KICK_MIN_MS && stall_ms > DDCI_KICK_STALL_MS;
 }
 // Mapping-table key: adapter in the high 16 bits, pid below.
 #define MAKE_KEY(ad, pid) (((ad) << 16) | (pid))
