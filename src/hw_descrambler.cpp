@@ -231,6 +231,13 @@ class HwSlotManager {
         auto *ca = get_state(physical_adapter_id);
         if (!ca)
             return;
+        // Siblings on this pa may still descramble: tear down
+        // only when no slot is held and no pids stay bound.
+        for (int id : ca->pmt_slots)
+            if (id != -1)
+                return;
+        if (!ca->bound_pids.empty())
+            return;
 
         if (ca->ca_fd >= 0) {
             LOG("hw_descrambler: closing shared ca_fd %d for physical adapter "
@@ -317,7 +324,29 @@ void hw_set_cw(SCW *cw, SPMT *pmt) {
         pmt->id, pmt->adapter, ad->pa, ad->fn, k->slot_index,
         k->num_descramblers, cw->algo, cw->parity);
 
-    // 1. Configure Hardware Descrambler Algorithm Mode using pmt.h CA_ALGO_*
+    // 1. Bind PMT PIDs to Hardware Descrambler Slot first: the
+    // driver only accepts a mode for a slot with pids bound.
+    int bound = 0;
+    for (std::size_t i = 0; i < pmt->stream_pids.size(); ++i) {
+        struct ca_pid pid_cmd{};
+        pid_cmd.pid = static_cast<unsigned>(pmt->stream_pids[i].pid);
+        pid_cmd.index = k->slot_index;
+        const int res_pid = ioctl(k->ca_fd, CA_SET_PID, &pid_cmd);
+        LOG("hw_descrambler: CA_SET_PID ioctl (pid=%u, slot=%d) -> result=%d%s",
+            pid_cmd.pid, pid_cmd.index, res_pid,
+            res_pid < 0 ? std::strerror(errno) : " SUCCESS");
+        if (res_pid == 0)
+            bound++;
+    }
+    // No pid bound: programming a key would arm an unbound
+    // slot, so stop before MODE/DATA.
+    if (!pmt->stream_pids.empty() && bound == 0) {
+        LOG("hw_descrambler: no pid bound for PMT %d, key not programmed",
+            pmt_id);
+        return;
+    }
+
+    // 2. Configure Hardware Descrambler Algorithm Mode using pmt.h CA_ALGO_*
     // values
     struct ca_descr_mode mode_cmd{};
     mode_cmd.index = slot;
@@ -329,17 +358,6 @@ void hw_set_cw(SCW *cw, SPMT *pmt) {
         "-> result=%d%s",
         mode_cmd.index, mode_cmd.algo, mode_cmd.cipher_mode, res_mode,
         res_mode < 0 ? std::strerror(errno) : " SUCCESS");
-
-    // 2. Bind PMT PIDs to Hardware Descrambler Slot
-    for (std::size_t i = 0; i < pmt->stream_pids.size(); ++i) {
-        struct ca_pid pid_cmd{};
-        pid_cmd.pid = static_cast<unsigned>(pmt->stream_pids[i].pid);
-        pid_cmd.index = k->slot_index;
-        const int res_pid = ioctl(k->ca_fd, CA_SET_PID, &pid_cmd);
-        LOG("hw_descrambler: CA_SET_PID ioctl (pid=%d, slot=%d) -> result=%d%s",
-            pid_cmd.pid, pid_cmd.index, res_pid,
-            res_pid < 0 ? std::strerror(errno) : " SUCCESS");
-    }
 
     // 3. Program Control Word (CW) and IV into Hardware Registers
     if (cw->algo == CA_ALGO_DVBCSA) {
@@ -359,7 +377,7 @@ void hw_set_cw(SCW *cw, SPMT *pmt) {
         data_cmd.parity = parity;
         data_cmd.data_type = 0; // 0 = CW / Key
         data_cmd.data_len = 16;
-        std::memcpy(data_cmd.data, cw->cw, 16);
+        data_cmd.data = cw->cw;
         const int res_key = ioctl(k->ca_fd, CA_SET_DESCR_DATA, &data_cmd);
         LOG("hw_descrambler: CA_SET_DESCR_DATA (AES Key) ioctl (slot=%d, "
             "parity=%d) -> result=%d%s",
@@ -373,7 +391,7 @@ void hw_set_cw(SCW *cw, SPMT *pmt) {
             data_cmd.parity = parity;
             data_cmd.data_type = 1; // 1 = IV
             data_cmd.data_len = 16;
-            std::memcpy(data_cmd.data, cw->iv, 16);
+            data_cmd.data = cw->iv;
             const int res_iv = ioctl(k->ca_fd, CA_SET_DESCR_DATA, &data_cmd);
             LOG("hw_descrambler: CA_SET_DESCR_DATA (AES IV) ioctl (slot=%d, "
                 "parity=%d) -> result=%d%s",

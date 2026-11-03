@@ -85,12 +85,15 @@ typedef struct ddci_device {
     int sdt_data_mask; // channels with real SDT data at last SDT generation
     int16_t pat_cc, sdt_cc, eit_cc;
     char disable_cat;
-    char loopback;        // enigma DVR loopback, no sec/ci hardware
-    int ci_slot;          // claimed /dev/ciN, -1 until bound
-    char tsclk_saved[16]; // prior ciN_tsclk, restored on release
-    SFIFO push_backlog;   // queued push bytes, oldest first
-    // Push thread: loopback writes a copied chunk, hardware
-    // writevs off the ring; EAGAIN retries until stop or room.
+    char loopback;                 // enigma DVR loopback, no sec/ci hardware
+    int ci_slot;                   // claimed /dev/ciN, -1 until bound
+    char tsclk_saved[16];          // prior ciN_tsclk, restored on release
+    SFIFO push_backlog;            // queued push bytes, oldest first
+    uint64_t push_gen{0};          // backlog generation, push_mutex only
+    uint64_t push_dropped{0};      // bytes refused while full, push_mutex only
+    int64_t push_last_drop_log{0}; // last ring-full report, push_mutex only
+    // Push thread, loopback only: writevs peeked ring segments;
+    // EAGAIN retries until stop or room.
     std::thread push_thread;
     std::mutex push_mutex;
     std::condition_variable push_cv;
@@ -136,7 +139,6 @@ int ddci_loopback_owns_slot(int slot);
 // CI slot claimed by loopback id; -1 when it claims none.
 int ddci_loopback_slot_for(int id);
 void ddci_enigma_route_pvr(ddci_device_t *d);
-void ddci_enigma_route_none(ddci_device_t *d);
 // Highest tsclk in a choices file; empty when none qualifies.
 std::string ddci_tsclk_pick(const std::string &choices);
 int add_pid_mapping_table(int ad, int pid, int pmt, ddci_device_t *d,
