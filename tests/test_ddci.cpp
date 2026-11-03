@@ -1731,6 +1731,112 @@ int test_ddci_least_used_device() {
     return 0;
 }
 
+// Copied from Wireshark, PID 1 from 10934V @ 0.8W: EMM pids 48, 193, 194, 49
+static uint8_t emm_cat[] = {
+    0x01, 0xb0, 0x21, 0xff, 0xff, 0xc5, 0x00, 0x00, 0x09, 0x04, 0x0b, 0x00,
+    0xe0, 0x30, 0x09, 0x04, 0x09, 0x3e, 0xe0, 0xc1, 0x09, 0x04, 0x09, 0x40,
+    0xe0, 0xc2, 0x09, 0x04, 0x18, 0x8a, 0xe0, 0x31, 0xd9, 0x66, 0x34, 0x3b};
+
+// One DDCI device for CAID 0x100 with two channels, and the CAT filter.
+static void emm_fixture(ddci_device_t *d, ca_device_t *ca, SFilter *f) {
+    memset(ddci_devices, 0, sizeof(ddci_devices));
+    memset(&d->pmt, -1, sizeof(d->pmt));
+    d->id = 0;
+    d->enabled = 1;
+    d->max_channels = 2;
+    ddci_devices[0] = d;
+    int dvbca_id = add_ca(&dvbca);
+    add_caid_mask(dvbca_id, 0, 0x100, 0xFFFF);
+    ca->id = 0;
+    ca->enabled = 1;
+    ca->state = CA_STATE_INITIALIZED;
+    ca_devices[0] = ca;
+    f->flags = FILTER_CRC;
+    f->id = 0;
+    f->pid = 1;
+    f->next_filter = -1;
+    f->enabled = 1;
+    filters.slot(0) = f;
+}
+
+static void emm_fixture_reset() {
+    delete filters[0];
+    filters.slot(0) = nullptr;
+    ca_devices[0] = NULL;
+    ddci_devices[0] = NULL;
+}
+
+// The CAT comes in on adapter 2 while slot 0 holds adapter 1's PMT: the EMM
+// pids must not outlive adapter 2, or every later CAT is skipped.
+int test_emm_pids_leave_with_their_adapter() {
+    ddci_device_t d = {};
+    ca_device_t ca = {};
+    adapter a0 = {}, a1 = {}, a2 = {}, a3 = {};
+    SFilter *f = new SFilter();
+    create_adapter(&a0, 0);
+    create_adapter(&a1, 1);
+    create_adapter(&a2, 2);
+    create_adapter(&a3, 3);
+    emm_fixture(&d, &ca, f);
+    SPMT *pa = create_pmt(1, 2100, 2101, 2102, 0x100, 0x100);
+    SPMT *pb = create_pmt(2, 2200, 2201, 2202, 0x100, 0x100);
+    SPMT *pc = create_pmt(3, 2300, 2301, 2302, 0x100, 0x100);
+
+    ASSERT(ddci_process_pmt(&a1, pa, 0) == TABLES_RESULT_OK, "PMT a on DDCI");
+    ASSERT(ddci_process_pmt(&a2, pb, 0) == TABLES_RESULT_OK, "PMT b on DDCI");
+    ASSERT(d.pmt[0].id == pa->id, "adapter 1's PMT holds slot 0");
+    f->adapter = 2;
+    ddci_process_cat(0, emm_cat, sizeof(emm_cat), &d);
+    ASSERT(get_pid_mapping_allddci(2, 48) != NULL, "EMM pid mapped for ad 2");
+
+    ddci_del_pmt(&a2, pb);
+    ASSERT(get_pid_mapping_allddci(2, 48) == NULL,
+           "adapter 2 is gone, so are its EMM pids");
+    ASSERT(d.emm_pids.empty(), "no EMM pid tracked");
+    f->adapter = 1;
+    ddci_process_cat(0, emm_cat, sizeof(emm_cat), &d);
+    ASSERT(get_pid_mapping_allddci(1, 48) != NULL,
+           "adapter 1's next CAT section takes the EMM pids");
+    ddci_del_pmt(&a1, pa);
+    ASSERT(d.mapping.empty(), "nothing left mapped");
+
+    ASSERT(ddci_process_pmt(&a3, pc, 0) == TABLES_RESULT_OK, "PMT c on DDCI");
+    f->adapter = 3;
+    ddci_process_cat(0, emm_cat, sizeof(emm_cat), &d);
+    ASSERT(get_pid_mapping_allddci(3, 48) != NULL,
+           "the next CAT maps the EMM pids again");
+    ddci_del_pmt(&a3, pc);
+    emm_fixture_reset();
+    return 0;
+}
+
+// An adapter that still has a PMT keeps its EMM pids.
+int test_emm_pids_stay_while_their_adapter_has_a_pmt() {
+    ddci_device_t d = {};
+    ca_device_t ca = {};
+    adapter a0 = {}, a1 = {};
+    SFilter *f = new SFilter();
+    create_adapter(&a0, 0);
+    create_adapter(&a1, 1);
+    emm_fixture(&d, &ca, f);
+    SPMT *pa = create_pmt(1, 2400, 2401, 2402, 0x100, 0x100);
+    SPMT *pb = create_pmt(1, 2500, 2501, 2502, 0x100, 0x100);
+
+    ASSERT(ddci_process_pmt(&a1, pa, 0) == TABLES_RESULT_OK, "PMT a on DDCI");
+    ASSERT(ddci_process_pmt(&a1, pb, 0) == TABLES_RESULT_OK, "PMT b on DDCI");
+    f->adapter = 1;
+    ddci_process_cat(0, emm_cat, sizeof(emm_cat), &d);
+    ddci_del_pmt(&a1, pa);
+    ASSERT(get_pid_mapping_allddci(1, 48) != NULL,
+           "PMT b still runs on adapter 1");
+    ASSERT(d.emm_pids.count(MAKE_KEY(1, 48)) > 0, "EMM pid 48 tracked");
+    ddci_del_pmt(&a1, pb);
+    ASSERT(d.mapping.empty(), "nothing left mapped");
+    ASSERT(d.emm_pids.empty(), "no EMM pid tracked");
+    emm_fixture_reset();
+    return 0;
+}
+
 int main() {
     opts.log = 65535 ^ LOG_LOCK ^ LOG_UTILS;
     opts.debug = 0;
@@ -1772,6 +1878,10 @@ int main() {
               "testing that an initializing DDCI does not block the others");
     TEST_FUNC(test_ddci_least_used_device(),
               "testing that new channels go to the least used DDCI");
+    TEST_FUNC(test_emm_pids_leave_with_their_adapter(),
+              "testing EMM pids leave with their adapter");
+    TEST_FUNC(test_emm_pids_stay_while_their_adapter_has_a_pmt(),
+              "testing EMM pids stay while their adapter has a PMT");
     pmts.destroy_all();
     filters.destroy_all();
     fflush(stdout);

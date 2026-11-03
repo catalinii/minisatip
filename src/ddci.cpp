@@ -213,11 +213,40 @@ static void release_mapping_entry(ddci_device_t *d, int ad, int pmt,
     }
 }
 
+// Unmap an adapter's EMM pids with its last PMT: the CAT maps them under slot
+// 0's PMT, which may be another adapter's, and a stale one blocks every CAT.
+static void drop_orphan_emm(ddci_device_t *d, int ad) {
+    std::vector<int> pids;
+    for (int key : d->emm_pids)
+        if ((key >> 16) == ad)
+            pids.push_back(key & 0xFFFF);
+    if (pids.empty())
+        return;
+    for (const auto &u : d->mapping)
+        if (u.second.ad == ad &&
+            d->emm_pids.count(MAKE_KEY(ad, u.second.pid)) == 0)
+            return;
+
+    for (int pid : pids)
+        d->emm_pids.erase(MAKE_KEY(ad, pid));
+    d->cat_processed = 0;
+    LOG("DDCI %d: adapter %d has no PMT left, dropping its EMM pids", d->id,
+        ad);
+    for (int pid : pids) {
+        auto it = d->mapping.find(MAKE_KEY(ad, pid));
+        if (it == d->mapping.end())
+            continue;
+        release_mapping_entry(d, ad, -1, &it->second);
+        d->mapping.erase(it);
+    }
+}
+
 int del_pmt_mapping_table(ddci_device_t *d, int ad, int pmt) {
     std::vector<int> to_del;
     for (const auto &u : d->mapping) {
         ddci_mapping_table_t *m = (ddci_mapping_table_t *)&u.second;
-        if (m->ad == ad) {
+        // EMM pids belong to the adapter, not to slot 0's PMT
+        if (m->ad == ad && d->emm_pids.count(MAKE_KEY(ad, m->pid)) == 0) {
             m->pmt.erase(pmt);
 
             if (m->pmt.size() > 0)
@@ -231,6 +260,7 @@ int del_pmt_mapping_table(ddci_device_t *d, int ad, int pmt) {
     for (int pid : to_del)
         d->mapping.erase(MAKE_KEY(ad, pid));
 
+    drop_orphan_emm(d, ad);
     return 0;
 }
 
