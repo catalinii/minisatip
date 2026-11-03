@@ -245,6 +245,16 @@ int ddci_pick_free_pair(const int *demux, int ndemux, const int *dvr, int ndvr,
     return -1;
 }
 
+// Slurps a small proc file; empty when missing. One getline
+// beats the iterator range GCC flags for null-dereference.
+static std::string ddci_read_file(const char *path) {
+    std::ifstream f(path);
+    std::string s;
+    if (f)
+        std::getline(f, s, '\0');
+    return s;
+}
+
 // CI slot feeding this loopback, published by DVBCA at open.
 static int ddci_enigma_slot(ddci_device_t *d) {
     if (d && d->id >= 0 && d->id < MAX_ADAPTERS && ca_devices[d->id] &&
@@ -273,11 +283,9 @@ static void ddci_enigma_set_tsclk(ddci_device_t *d) {
         return;
     char path[64], cur[64];
     snprintf(path, sizeof(path), "/proc/stb/tsmux/ci%d_tsclk_choices", slot);
-    std::ifstream ch(path);
-    if (!ch)
+    std::string choices = ddci_read_file(path);
+    if (choices.empty())
         return;
-    std::string choices((std::istreambuf_iterator<char>(ch)),
-                        std::istreambuf_iterator<char>());
     std::string best = ddci_tsclk_pick(choices);
     if (best.empty())
         return;
@@ -323,9 +331,7 @@ void ddci_enigma_route_pvr(ddci_device_t *d) {
     }
     char path[64];
     snprintf(path, sizeof(path), "/proc/stb/tsmux/ci%d_input_choices", slot);
-    std::ifstream ch(path);
-    std::string choices((std::istreambuf_iterator<char>(ch)),
-                        std::istreambuf_iterator<char>());
+    std::string choices = ddci_read_file(path);
     const char *input = nullptr;
     if (ddci_choices_has(choices, "PVR"))
         input = "PVR";
@@ -2232,7 +2238,9 @@ void ddci_free(adapter *ad) {
 // First slot without an adapter that -e did not disable; -1 if none.
 int ddci_pick_free_slot() {
     for (int i = 0; i < MAX_ADAPTERS; i++)
-        if ((!a[i] || a[i]->type == 0) && !is_adapter_disabled(i))
+        if ((!a[static_cast<size_t>(i)] ||
+             a[static_cast<size_t>(i)]->type == 0) &&
+            !is_adapter_disabled(i))
             return i;
     return -1;
 }
@@ -2246,10 +2254,11 @@ static bool ddci_add_one_enigma_loopback(int slot) {
         return false;
     }
     int used[MAX_ADAPTERS], nused = 0;
-    for (int i = 0; i < MAX_ADAPTERS && nused < MAX_ADAPTERS; i++)
-        if (i != id && a[i] && !is_adapter_disabled(i) && a[i]->pa == 0 &&
-            a[i]->fn >= 0)
-            used[nused++] = a[i]->fn;
+    for (int i = 0; i < MAX_ADAPTERS && nused < MAX_ADAPTERS; i++) {
+        adapter *o = a[static_cast<size_t>(i)];
+        if (i != id && o && !is_adapter_disabled(i) && o->pa == 0 && o->fn >= 0)
+            used[nused++] = o->fn;
+    }
     int demux[64], ndemux = 0, dvr[64], ndvr = 0, fe[64], nfe = 0;
     char buf[100];
     for (int fn = 0; fn < 64; fn++) {
@@ -2271,10 +2280,10 @@ static bool ddci_add_one_enigma_loopback(int slot) {
         LOG("no free demux/dvr pair for the enigma loopback");
         return false;
     }
-    if (!a[id])
-        a[id] = adapter_alloc();
+    if (!a[static_cast<size_t>(id)])
+        a[static_cast<size_t>(id)] = adapter_alloc();
 
-    adapter *ad = a[id];
+    adapter *ad = a[static_cast<size_t>(id)];
     ad->pa = 0;
     ad->fn = fn;
     ad->open = ddci_open_device;
