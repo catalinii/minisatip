@@ -2414,7 +2414,7 @@ int test_loopback_capmt_sends_at_once() {
     loop.enabled = 1;
     loop.loopback = 1;
     ddci_devices[3] = &loop;
-    int saved_enigma = opts.enigma;
+    auto saved_enigma = opts.enigma;
     opts.enigma = 1;
     pcam->dev.mode = ca_mode::ENIGMA_DDCI;
     SPMT *p1 = packing_program(0x2c01);
@@ -2429,7 +2429,7 @@ int test_loopback_capmt_sends_at_once() {
 // Loopback owns its stored CI slot; the enigma tuner on that slot
 // stands down so /dev/ciX is driven only by the DDCI adapter.
 int test_loopback_owns_ci_slot() {
-    int saved_enigma = opts.enigma;
+    auto saved_enigma = opts.enigma;
     int saved_has_ci = has_ci;
     ddci_device_t *saved_ddci[MAX_ADAPTERS];
     memcpy(saved_ddci, ddci_devices, sizeof(saved_ddci));
