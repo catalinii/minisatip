@@ -2143,7 +2143,8 @@ void pmt_add_descriptors(SPMT *pmt, unsigned char *pi, int len) {
 }
 
 void pmt_add_stream_pid_descriptors(SPMT *pmt, SStreamPid &sp,
-                                    unsigned char *es, int len) {
+                                    unsigned char *es, int len,
+                                    bool collect_caids) {
     int es_len;
 
     for (int i = 0; i < len; i += es_len + 2) {
@@ -2160,8 +2161,9 @@ void pmt_add_stream_pid_descriptors(SPMT *pmt, SStreamPid &sp,
 
         sp.descriptors.push_back(d);
 
-        // Handle CA descriptors separately
-        if (d.is_ca_descriptor()) {
+        // Handle CA descriptors separately; non-AV streams keep the
+        // descriptor for CAPMT selection but must not flip FTA routing.
+        if (collect_caids && d.is_ca_descriptor()) {
             int caid = es[i + 2] * 256 + es[i + 3];
             int capid = (es[i + 4] & 0x1F) * 256 + es[i + 5];
             pmt_add_caid(pmt, caid, capid, es + i + 6, es_len - 4);
@@ -2295,7 +2297,8 @@ int process_pmt(int filter, unsigned char *b, int, void *opaque) {
         // Store descriptors for every stream: non-AV streams
         // (data, secondary audio) carry CA descriptors too.
         pmt_add_stream_pid_descriptors(pmt, pmt->stream_pids[stream_pid_id],
-                                       pmt_b + i + 5, es_len);
+                                       pmt_b + i + 5, es_len,
+                                       is_audio || is_video);
     }
     // Add the PCR pid if it's independent
     if (pcr_pid > 0 && pcr_pid < 8191)

@@ -417,8 +417,7 @@ int tables_close_device(adapter *ad) {
 int tables_init() {
 #ifndef DISABLE_DDCI
     // DDCI maps before DVBCA builds CAPMTs, so loopback CAPMTs use mapped pids.
-    // Off-enigma hardware DDCI keeps lazy ddci_post_init registration.
-    if (opts.enigma)
+    if (opts.enigma_loopback)
         ddci_init();
 #endif
 #ifndef DISABLE_DVBCA

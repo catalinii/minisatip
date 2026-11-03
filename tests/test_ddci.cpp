@@ -384,6 +384,8 @@ int test_mandatory_pat_stays_mapped() {
 
     ASSERT(ddci_process_pmt(&ad, pmt0, 0) == TABLES_RESULT_OK, "slot expected");
     ASSERT(get_pid_mapping_allddci(8, 0) != nullptr, "PAT should be mapped");
+    ASSERT(get_pid_mapping_allddci(8, 0)->ddci_pid == 0,
+           "PAT keeps the fixed ddci pid 0");
 
     // the update drops 602: PAT stays, the stream pid goes
     std::erase_if(pmt0->stream_pids,
@@ -394,7 +396,20 @@ int test_mandatory_pat_stays_mapped() {
     ASSERT(get_pid_mapping_allddci(8, 602) == nullptr,
            "602 should be unmapped");
 
+    // Second tuner shares PAT: first delete keeps it, last drops it.
+    d0.max_channels = 2;
+    adapter ad9 = {};
+    create_adapter(&ad9, 9);
+    SPMT *pmt1 = create_pmt(9, 601, 611, 612, 0x100, 0x100);
+    ASSERT(ddci_process_pmt(&ad9, pmt1, 0) == TABLES_RESULT_OK,
+           "second slot expected");
     ddci_del_pmt(&ad, pmt0);
+    ASSERT(get_pid_mapping_allddci(9, 0) != nullptr,
+           "PAT kept for the second tuner");
+    ddci_del_pmt(&ad9, pmt1);
+    ASSERT(get_pid_mapping_allddci(9, 0) == nullptr,
+           "PAT dropped with the last user");
+
     channels.clear();
     filters.destroy_all();
     del_ca(&dvbca);
@@ -402,6 +417,7 @@ int test_mandatory_pat_stays_mapped() {
     ca_devices[0] = nullptr;
     a[0] = nullptr;
     a[8] = nullptr;
+    a[9] = nullptr;
     return 0;
 }
 
@@ -832,6 +848,7 @@ int test_ddci_process_ts_loopback_queue() {
     ad.rlen = ad.lbuf - 188;
     set_pid_ts(buf, 1000);
     d.read_index[1] = d.read_index[2] = d.fifo.write_index = 188;
+    d.psi_changed = true; // force PAT/SDT on this tick
     auto save_enigma = opts.enigma;
     opts.enigma = 0; // keep the kick watchdog inert
     _writev = xwritev;
@@ -846,6 +863,11 @@ int test_ddci_process_ts_loopback_queue() {
     size_t used = fifo_used(&d.push_backlog);
     if (used < 188)
         LOG_AND_RETURN(1, "expected queued bytes, got %zu", used);
+    void *head = nullptr;
+    if (fifo_peek(&d.push_backlog, &head, 188, 0) != 188)
+        LOG_AND_RETURN(1, "head peek got short read");
+    if (PID_FROM_TS(reinterpret_cast<uint8_t *>(head)) != 0)
+        LOG_AND_RETURN(1, "PSI (PAT pid 0) must lead the backlog");
     void *tail = nullptr;
     size_t got = fifo_peek(&d.push_backlog, &tail, 188, (size_t)(used - 188));
     if (got != 188)
@@ -1289,11 +1311,13 @@ int test_create_pmt() {
         pmt->stream_pids.size(), new_pmt->stream_pids.size(),
         "Number of streampids does not matches between generated PMT and "
         "read PMT");
-    // Program caids plus the ES CA descriptor, now preserved
-    // for non-AV streams instead of dropped on re-parse.
-    ASSERT_EQUAL(pmt->caids + 1, new_pmt->caids,
+    // Program caids round-trip; the non-AV ES CA descriptor is
+    // retained for CAPMT selection without flipping caids.
+    ASSERT_EQUAL(pmt->caids, new_pmt->caids,
                  "Number of caids does not matches "
                  "between generated PMT and read PMT");
+    ASSERT(new_pmt->stream_pids[1].descriptors.size() == 1,
+           "non-AV ES CA descriptor retained on re-parse");
 
     a[0] = nullptr;
     return 0;
@@ -2096,12 +2120,14 @@ int test_dvbca_ci_adapter_no_routing() {
 
     // CI adapters drive their own stack without moving the tsmux link.
     ad.type = ADAPTER_CI;
-    dvbca.ca_add_pmt(&ad, pmt0, 0);
+    // rc 1 proves send attempted: an empty table cannot decline, and
+    // the failure is only the missing CA session in the fixture.
+    ASSERT(dvbca.ca_add_pmt(&ad, pmt0, 0) == 1, "CI add reaches send");
     ASSERT(dev.linked_adapter == 7, "CI adapter does not steal the link");
 
     // Live adapters still route the CI to their tuner.
     ad.type = ADAPTER_DVB;
-    dvbca.ca_add_pmt(&ad, pmt0, 0);
+    ASSERT(dvbca.ca_add_pmt(&ad, pmt0, 0) == 1, "live add reaches send");
     ASSERT(dev.linked_adapter == 8, "live adapter moves the link");
 
     opts.enigma = 0;
@@ -2127,6 +2153,13 @@ int test_ddci_pick_free_slot() {
     ASSERT(ddci_pick_free_slot() == 2, "disabled slot 1 skipped");
     ad.type = 0;
     ASSERT(ddci_pick_free_slot() == 0, "typeless adapter reads free");
+
+    ad.type = ADAPTER_DVB;
+    for (int i = 1; i < MAX_ADAPTERS; i++)
+        set_disable(i, 1);
+    ASSERT(ddci_pick_free_slot() == -1, "no free slot picks nothing");
+    for (int i = 1; i < MAX_ADAPTERS; i++)
+        set_disable(i, 0);
 
     a[0] = nullptr;
     set_disable(1, 0);
@@ -2166,6 +2199,7 @@ int test_ddci_push_queue_order() {
            "overfill queues only what fits");
     ASSERT(bl_have(&d) == 376, "ring keeps the oldest bytes");
     ASSERT(d.push_dropped == 188, "overflow counted");
+    ASSERT(d.shed_bytes.load() == 0, "backpressure is not a shed");
     first = fifo_peek(&d.push_backlog, &p, sizeof(out), 0);
     ASSERT(first == 376, "single head segment");
     memcpy(out, p, first);
@@ -2174,6 +2208,7 @@ int test_ddci_push_queue_order() {
     ASSERT(ddci_push_queue(&d, psi, sizeof(psi), io, 2) == 0,
            "full ring queues nothing");
     ASSERT(d.push_dropped == 752, "drops accumulate");
+    ASSERT(d.shed_bytes.load() == 0, "backpressure is not a shed");
     ASSERT(bl_have(&d) == 376, "queued bytes untouched");
     free_fifo(&d.push_backlog);
     return 0;
@@ -2209,6 +2244,8 @@ int test_ddci_push_thread_roundtrip() {
     ASSERT(bl_read_exact(fds[0], got, sizeof(got)) == sizeof(got),
            "pipe yields queued bytes");
     ASSERT(memcmp(got, msg, sizeof(msg)) == 0, "round trip intact");
+    ASSERT(d.shed_bytes.load() == 0, "clean drain sheds nothing");
+    ASSERT(d.push_dropped == 0, "clean drain drops nothing");
     ASSERT(!d.push_running.load(), "loop exited");
     ASSERT(!d.push_thread.joinable(), "thread joined");
     ddci_push_stop(&d);
@@ -2321,6 +2358,8 @@ int test_ddci_push_stop_sheds_stall() {
     ASSERT(queued == sizeof(msg), "queued");
     ASSERT(!d.push_running.load(), "loop exited on stop");
     ASSERT(bl_have(&d) == 0, "stop sheds the stalled backlog");
+    ASSERT(d.shed_bytes.load() == sizeof(msg), "stop shed counted");
+    ASSERT(d.push_dropped == 0, "stop shed is not backpressure");
     close(fds[0]);
     close(fds[1]);
     ad2.fe = -1;
@@ -2404,6 +2443,7 @@ int test_ddci_two_loopbacks_own_distinct_slots() {
     d1.enabled = 1;
     d1.loopback = 1;
     d1.ci_slot = 1;
+    d0.slot_claimed = d1.slot_claimed = true;
     ddci_devices[10] = &d0;
     ddci_devices[11] = &d1;
 
@@ -2416,6 +2456,7 @@ int test_ddci_two_loopbacks_own_distinct_slots() {
     ASSERT(ddci_loopback_slot_for(8) == -1, "tuner owns no slot");
 
     d0.ci_slot = d1.ci_slot = -1;
+    d0.slot_claimed = d1.slot_claimed = false;
     ASSERT(!ddci_loopback_owns_slot(0), "released slot reads free");
     ASSERT(ddci_loopback_slot_for(10) == -1, "slotless loopback declines");
 
@@ -2433,6 +2474,8 @@ int test_ddci_tsclk_pick() {
     ASSERT(ddci_tsclk_pick("normal\n").empty(), "normal offers nothing");
     ASSERT(ddci_tsclk_pick("normal extra_high\n").empty(),
            "extra_high alone offers nothing");
+    ASSERT(ddci_tsclk_pick("highest\n").empty(), "prefix match rejected");
+    ASSERT(ddci_tsclk_pick("xhigh\n").empty(), "suffix match rejected");
     ASSERT(ddci_tsclk_pick("").empty(), "empty offers nothing");
     return 0;
 }
@@ -2460,10 +2503,15 @@ int test_ddci_output_shed_drains_demux_and_fifo() {
            "stale fifo bytes");
     d.read_index[0] = 188; // a lagging cursor
     ad2.drop_buffer = 0;
+    create_fifo(&d.push_backlog, DDCI_PUSH_BACKLOG_MAX);
+    ASSERT(fifo_push(&d.push_backlog, stale, sizeof(stale)) == sizeof(stale),
+           "separate push backlog");
     ddci_output_shed(&ad2, &d);
     ASSERT(fifo_used(&d.fifo) == 0, "fifo shed");
     ASSERT(d.read_index[0] == 0, "cursors reset");
     ASSERT(d.shed_bytes.load() == 2 * sizeof(stale), "shed bytes counted");
+    ASSERT(fifo_used(&d.push_backlog) == sizeof(stale),
+           "push fifo untouched by the shed");
     ASSERT(ad2.drop_buffer == 1, "socket residue flagged");
     ASSERT(d.push_dropped == 0, "no-progress counter untouched");
     pollfd pfd = {fds[0], POLLIN, 0};
@@ -2472,8 +2520,46 @@ int test_ddci_output_shed_drains_demux_and_fifo() {
     close(fds[1]);
     ad2.dvr = -1;
     free_fifo(&d.fifo);
+    free_fifo(&d.push_backlog);
     ddci_devices[2] = nullptr;
     a[2] = nullptr;
+    return 0;
+}
+
+int test_ddci_push_kick_criteria() {
+    ddci_device_t d = {};
+    d.id = 2;
+    d.enabled = 1;
+    d.loopback = 1;
+    create_fifo(&d.push_backlog, DDCI_PUSH_BACKLOG_MAX);
+    memset(ddci_devices, 0, sizeof(ddci_devices));
+    ddci_devices[2] = &d;
+    // No adapter: the kick body is skipped, but last_kick
+    // still records the decision.
+    a[2] = nullptr;
+    uint8_t chunk[188 * 8];
+    memset(chunk, 0, sizeof(chunk));
+    struct iovec io[1] = {{chunk, sizeof(chunk)}};
+    // Deep backlog, fresh writer: healthy buffering, no kick.
+    for (int i = 0; i < 64; i++)
+        fifo_push(&d.push_backlog, chunk, sizeof(chunk));
+    int64_t now = getTick();
+    d.last_push_write.store(now, std::memory_order_relaxed);
+    d.last_kick = now - 10000;
+    ddci_push_queue(&d, nullptr, 0, io, 1);
+    ASSERT(d.last_kick == now - 10000, "draining writer not kicked");
+    // Stale writer, old kick: kick now.
+    d.last_push_write.store(now - 2000, std::memory_order_relaxed);
+    ddci_push_queue(&d, nullptr, 0, io, 1);
+    ASSERT(d.last_kick >= now, "stalled writer kicked");
+    // Stale writer, recent kick: the min interval suppresses.
+    d.last_kick = getTick();
+    int64_t held = d.last_kick;
+    d.last_push_write.store(held - 2000, std::memory_order_relaxed);
+    ddci_push_queue(&d, nullptr, 0, io, 1);
+    ASSERT(d.last_kick == held, "min interval suppresses the kick");
+    free_fifo(&d.push_backlog);
+    ddci_devices[2] = nullptr;
     return 0;
 }
 
@@ -2542,6 +2628,8 @@ int main() {
               "testing push stop sheds a stall");
     TEST_FUNC(test_ddci_output_shed_drains_demux_and_fifo(),
               "testing tune shed drains demux and fifo counted");
+    TEST_FUNC(test_ddci_push_kick_criteria(),
+              "testing stall-only kick criteria");
     TEST_FUNC(test_ddci_tsclk_pick(), "testing tsclk choice pick");
     TEST_FUNC(test_capmt_lists_pmt_pids(),
               "testing CAPMT lists PMT pids verbatim");

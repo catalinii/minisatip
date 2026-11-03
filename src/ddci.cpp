@@ -212,7 +212,7 @@ int ddci_loopback_owns_slot(int slot) {
         return 0;
     auto it =
         std::ranges::find_if(ddci_devices, [slot](const ddci_device_t *d) {
-            return d && d->loopback && d->ci_slot == slot;
+            return d && d->loopback && d->slot_claimed && d->ci_slot == slot;
         });
     return it != std::end(ddci_devices);
 }
@@ -383,8 +383,10 @@ int ddci_close_adapter(adapter *ad) {
     if (!ad)
         return 0;
     ddci_device_t *d = ddci_devices[ad->id];
-    if (d && d->loopback)
+    if (d && d->loopback) {
         ddci_push_stop(d);
+        d->slot_claimed = false;
+    }
     return 0;
 }
 
@@ -1385,6 +1387,12 @@ void ddci_push_start(ddci_device_t *d) {
         std::lock_guard<SMutex> alock(ad->mutex);
         fe = ad->fe;
     }
+    if (fe < 0) {
+        // No fd (close raced open): stay stopped, the stall
+        // kick restarts once traffic resumes.
+        d->push_running.store(false);
+        return;
+    }
     d->push_stop.store(false);
     d->last_push_write.store(getTick(), std::memory_order_relaxed);
     d->push_thread = std::thread(ddci_push_loop, d->id, fe);
@@ -1472,17 +1480,20 @@ void ddci_output_shed(adapter *ad, ddci_device_t *d) {
             drained += static_cast<size_t>(r);
         }
     }
-    // Reset last: anything the socket thread raced in lands in
-    // the fifo first, so the trailing reset wipes it too.
+    // Reset under A, then flag: the socket action takes A
+    // before pushing, so no stale batch slips in between.
     size_t left = 0;
     {
-        std::lock_guard<SMutex> lock(d->mutex);
+        std::lock_guard<SMutex> alock(ad->mutex);
+        std::lock_guard<SMutex> dlock(d->mutex);
         left = fifo_used(&d->fifo);
         fifo_reset(&d->fifo);
+        // At idle->active no consumer is owed bytes, so every
+        // cursor resets alongside the fifo.
         memset(d->read_index, 0, sizeof(d->read_index));
         d->shed_bytes += drained + left;
+        ad->drop_buffer = 1;
     }
-    ad->drop_buffer = 1; // read_dmx() flushes the socket residue
     if (drained + left > 0)
         LOG("DDCI %d: tune shed %zu demux + %zu fifo bytes", d->id, drained,
             left);
@@ -1695,6 +1706,9 @@ int ddci_set_pid(adapter *ad, int pid) {
 #ifndef DISABLE_LINUXDVB
     // Loopback reads the real DVR; hardware DDCI needs no demux filters.
     if (opts.enigma && ddci_is_loopback(ad->id)) {
+        // Serialized check->shed->arm: concurrent first adds
+        // must not double-shed (recursive, callers may hold A).
+        std::lock_guard<SMutex> lock(ad->mutex);
         // Idle -> active: shed stale output so the fresh tune
         // starts clean; the push side keeps flowing.
         if (ad->active_demux_pids <= 0) {
@@ -1713,6 +1727,8 @@ int ddci_set_pid(adapter *ad, int pid) {
 int ddci_del_filters(adapter *ad, [[maybe_unused]] int fd, int pid) {
 #ifndef DISABLE_LINUXDVB
     if (opts.enigma && ddci_is_loopback(ad->id)) {
+        // Same serialization as the add path, for the idle counter.
+        std::lock_guard<SMutex> lock(ad->mutex);
         int rc = dvb_demux_del_filters(ad, fd, pid);
         LOGM("%s: loopback %d del pid %d -> %d", __FUNCTION__, ad->id, pid, rc);
         return rc;
@@ -1845,6 +1861,7 @@ static int ddci_open_enigma(adapter *ad, ddci_device_t *d) {
         fifo_reset(&d->push_backlog);
     }
     d->enabled = 1;
+    d->slot_claimed = d->ci_slot >= 0;
     ad->enabled = 1;
     LOG("opened enigma loopback %d push dvr%d fd:%d read fd:%d source:%d",
         ad->id, push_dvr, ad->fe, ad->dvr, ad->dmx_source);
@@ -2221,6 +2238,9 @@ static bool ddci_add_one_enigma_loopback(int slot) {
             if (!access(buf, R_OK | W_OK))
                 dd->ci_slot = c;
         }
+        // Hold from boot so a tuner never grabs it first; close
+        // releases, open retakes.
+        dd->slot_claimed = dd->ci_slot >= 0;
     }
     load_channels();
     LOG("enigma loopback adapter %d on demux %d", id, fn);

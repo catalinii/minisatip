@@ -256,6 +256,7 @@ int test_capmt_includes_non_av_ca_stream() {
     size_t data_id = pmt_add_stream_pid(pmt, 0x269, 6, false, false);
     const uint8_t raw[] = {0x09, 4, 0x18, 0x3E, 0xE1, 0x07};
     pmt->stream_pids[data_id].descriptors.push_back(create_descriptor(raw));
+    pmt_add_stream_pid(pmt, 0x26A, 6, false, false); // no CA descriptor
 
     SCAPMT scapmt = {};
     scapmt.pmt_id = pmt_id;
@@ -267,16 +268,18 @@ int test_capmt_includes_non_av_ca_stream() {
     int len = create_capmt(&scapmt, CLM_ONLY, capmt, sizeof(capmt),
                            CMD_ID_OK_DESCRAMBLING, 0);
     ASSERT(len > 0, "create_capmt failed");
-    bool found_video = false, found_data = false;
+    bool found_video = false, found_data = false, found_plain = false;
     for (int off = 6; off + 5 <= len;) {
         int pid = (capmt[off + 1] << 8) | capmt[off + 2];
         int eslen = (capmt[off + 3] << 8) | capmt[off + 4];
         found_video |= (pid == 0x501);
         found_data |= (pid == 0x269);
+        found_plain |= (pid == 0x26A);
         off += 5 + eslen;
     }
     ASSERT(found_video, "video stream missing from CAPMT");
     ASSERT(found_data, "non-AV CA stream missing from CAPMT");
+    ASSERT(!found_plain, "descriptor-less data stream selected");
     return 0;
 }
 
@@ -2441,9 +2444,13 @@ int test_loopback_owns_ci_slot() {
     ddci_device_t loop = {};
     loop.id = 71;
     loop.loopback = 1;
+    loop.slot_claimed = true;
     loop.ci_slot = 1;
     ddci_devices[71] = &loop;
     ASSERT_EQUAL(ddci_loopback_owns_slot(1), 1, "stored claim is read");
+    loop.slot_claimed = false;
+    ASSERT_EQUAL(ddci_loopback_owns_slot(1), 0, "close releases the claim");
+    loop.slot_claimed = true;
 
     adapter tuner = {};
     tuner.id = 1;
@@ -2465,6 +2472,36 @@ int test_loopback_owns_ci_slot() {
 
     ca_devices[1] = saved_ca1;
 
+    memcpy(ddci_devices, saved_ddci, sizeof(saved_ddci));
+    opts.enigma = saved_enigma;
+    has_ci = saved_has_ci;
+    return 0;
+}
+
+int test_loopback_init_without_stack_fails_loud() {
+    auto saved_enigma = opts.enigma;
+    int saved_has_ci = has_ci;
+    ddci_device_t *saved_ddci[MAX_ADAPTERS];
+    memcpy(saved_ddci, ddci_devices, sizeof(saved_ddci));
+    memset(ddci_devices, 0, sizeof(ddci_devices));
+    opts.enigma = 1;
+    has_ci = 1;
+    ddci_device_t loop = {};
+    loop.id = 73;
+    loop.enabled = 1;
+    loop.loopback = 1;
+    loop.slot_claimed = true;
+    loop.ci_slot = 7; // no /dev/ci7 in test envs
+    ddci_devices[73] = &loop;
+    ca_device_t *saved_ca73 = ca_devices[73];
+    ca_devices[73] = nullptr;
+    adapter ad = {};
+    ad.id = 73;
+    ad.type = ADAPTER_DVB;
+    ASSERT_EQUAL(dvbca_init_dev(&ad), TABLES_RESULT_ERROR_NORETRY,
+                 "missing stack fails loud");
+    ASSERT(ca_devices[73] == nullptr, "no CA device opened for it");
+    ca_devices[73] = saved_ca73;
     memcpy(ddci_devices, saved_ddci, sizeof(saved_ddci));
     opts.enigma = saved_enigma;
     has_ci = saved_has_ci;
@@ -2877,6 +2914,8 @@ int main() {
 #ifndef DISABLE_DDCI
     TEST_FUNC(test_loopback_owns_ci_slot(),
               "testing that the tuner yields its CI slot to the loopback");
+    TEST_FUNC(test_loopback_init_without_stack_fails_loud(),
+              "testing loopback init without a stack fails loud");
 #endif
     TEST_FUNC(test_get_authdata_filename(), "testing filename helper function");
     TEST_FUNC(test_capmt_content_hash_masks_version_and_listmgmt(),

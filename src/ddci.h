@@ -86,6 +86,7 @@ typedef struct ddci_device {
     char disable_cat;
     char loopback;            // enigma DVR loopback, no sec/ci hardware
     int ci_slot;              // claimed /dev/ciN, -1 until bound
+    bool slot_claimed{false}; // reservation live; close releases it
     char tsclk_saved[16];     // prior ciN_tsclk, restored on release
     SFIFO push_backlog;       // queued push bytes, oldest first
     uint64_t push_dropped{0}; // refused while full: CAM backpressure only
@@ -130,7 +131,7 @@ void ddci_push_stop(ddci_device_t *d);
 void ddci_output_shed(adapter *ad, ddci_device_t *d);
 // Micro-kick: close/open re-primes a dead CAM pull, backlog kept.
 void ddci_push_kick(adapter *ad, ddci_device_t *d);
-// Queues fresh PSI first, then TS; a full ring sheds oldest.
+// Queues fresh PSI first, then TS; a full ring drops newest, counted.
 size_t ddci_push_queue(ddci_device_t *d, uint8_t *psi, size_t psi_len,
                        struct iovec *io, int iop);
 // True when id is an enabled enigma loopback device.

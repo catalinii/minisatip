@@ -324,9 +324,8 @@ void hw_set_cw(SCW *cw, SPMT *pmt) {
         pmt->id, pmt->adapter, ad->pa, ad->fn, k->slot_index,
         k->num_descramblers, cw->algo, cw->parity);
 
-    // 1. Bind PMT PIDs to Hardware Descrambler Slot first: the
-    // driver only accepts a mode for a slot with pids bound.
-    int bound = 0;
+    // 1. Bind PMT PIDs first (mode needs bound pids); bind
+    // failures never stop MODE/DATA, rebinds fail once bound.
     for (std::size_t i = 0; i < pmt->stream_pids.size(); ++i) {
         struct ca_pid pid_cmd{};
         pid_cmd.pid = static_cast<unsigned>(pmt->stream_pids[i].pid);
@@ -335,15 +334,6 @@ void hw_set_cw(SCW *cw, SPMT *pmt) {
         LOG("hw_descrambler: CA_SET_PID ioctl (pid=%u, slot=%d) -> result=%d%s",
             pid_cmd.pid, pid_cmd.index, res_pid,
             res_pid < 0 ? std::strerror(errno) : " SUCCESS");
-        if (res_pid == 0)
-            bound++;
-    }
-    // No pid bound: programming a key would arm an unbound
-    // slot, so stop before MODE/DATA.
-    if (!pmt->stream_pids.empty() && bound == 0) {
-        LOG("hw_descrambler: no pid bound for PMT %d, key not programmed",
-            pmt_id);
-        return;
     }
 
     // 2. Configure Hardware Descrambler Algorithm Mode using pmt.h CA_ALGO_*

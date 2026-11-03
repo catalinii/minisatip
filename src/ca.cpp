@@ -4420,6 +4420,8 @@ int dvbca_init_dev(adapter *ad) {
     // Ownership is by policy (mode), so concurrent opens race
     // nothing: each adapter publishes its own device slot below.
     fd = open(ca_dev_path, O_RDWR);
+    if (fd >= 0)
+        flush_handle(fd);
     if (fd < 0) {
         // A loopback with no stack must fail loudly, not inherit a bit.
         if (mode == ca_mode::ENIGMA_DDCI)
@@ -4474,8 +4476,6 @@ int dvbca_init_dev(adapter *ad) {
     // programs the right input without waiting for a kick.
     if (mode == ca_mode::ENIGMA_DDCI)
         ddci_enigma_route_pvr(ddci_devices[ad->id]);
-    // No reader exists yet (sock is -1), so flushing outside is safe.
-    flush_handle(fd);
 
     if (!c->force_ci) {
         if (access("/etc/ssl/certs/root.pem", F_OK) != 0) {
