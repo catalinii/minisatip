@@ -2330,64 +2330,6 @@ int test_ddci_push_stop_sheds_stall() {
     return 0;
 }
 
-int test_ddci_push_reshed_sheds_and_restarts() {
-    ddci_device_t d = {};
-    adapter ad2 = {};
-    d.id = 2;
-    d.enabled = 1;
-    d.loopback = 1;
-    create_fifo(&d.push_backlog, DDCI_PUSH_BACKLOG_MAX);
-    memset(ddci_devices, 0, sizeof(ddci_devices));
-    ddci_devices[2] = &d;
-    create_adapter(&ad2, 2);
-    int fds[2];
-    ASSERT(pipe(fds) == 0, "pipe as mock dvr");
-    int flags = fcntl(fds[1], F_GETFL, 0);
-    ASSERT(fcntl(fds[1], F_SETFL, flags | O_NONBLOCK) == 0, "nonblock push");
-    ad2.fe = fds[1];
-    ASSERT(fcntl(fds[1], F_SETPIPE_SZ, 4096) == 4096, "one-slot pipe");
-    size_t held = bl_fill_pipe(fds[1]);
-    ASSERT(held >= 4096, "pipe holds filler");
-    ddci_push_start(&d);
-    uint8_t stale[1024];
-    memset(stale, 0x5A, sizeof(stale));
-    struct iovec io[1] = {{stale, sizeof(stale)}};
-    ASSERT(ddci_push_queue(&d, nullptr, 0, io, 1) == sizeof(stale), "queued");
-    uint64_t gen = d.push_gen;
-    // Stalled mid-peek: reshed joins, sheds counted, restarts.
-    ddci_push_reshed(&ad2, &d);
-    ASSERT(bl_have(&d) == 0, "reshed sheds the stale backlog");
-    ASSERT(d.push_dropped == sizeof(stale), "shed bytes counted");
-    ASSERT(d.push_gen == gen + 1, "shed retires the generation");
-    ASSERT(d.push_running.load(), "thread restarted");
-    // Drain the filler, fresh bytes must flow on the new tune.
-    uint8_t drain[4096];
-    size_t drained = 0;
-    while (drained < held) {
-        ssize_t r = read(fds[0], drain, sizeof(drain));
-        ASSERT(r > 0, "filler drains");
-        drained += (size_t)r;
-    }
-    uint8_t fresh[1024];
-    for (size_t i = 0; i < sizeof(fresh); i++)
-        fresh[i] = (uint8_t)(i * 31 + 7);
-    struct iovec io2[1] = {{fresh, sizeof(fresh)}};
-    ASSERT(ddci_push_queue(&d, nullptr, 0, io2, 1) == sizeof(fresh),
-           "fresh queued");
-    uint8_t got[sizeof(fresh)];
-    ASSERT(bl_read_exact(fds[0], got, sizeof(got)) == sizeof(got),
-           "fresh bytes flow after reshed");
-    ASSERT(memcmp(got, fresh, sizeof(fresh)) == 0, "fresh intact, no stale");
-    ddci_push_stop(&d);
-    close(fds[0]);
-    close(fds[1]);
-    ad2.fe = -1;
-    free_fifo(&d.push_backlog);
-    ddci_devices[2] = nullptr;
-    a[2] = nullptr;
-    return 0;
-}
-
 int test_ddci_enigma_local_loops_back() {
     SPMT *pmt0;
     ddci_device_t d0 = {};
@@ -2495,6 +2437,46 @@ int test_ddci_tsclk_pick() {
     return 0;
 }
 
+int test_ddci_output_shed_drains_demux_and_fifo() {
+    ddci_device_t d = {};
+    adapter ad2 = {};
+    d.id = 2;
+    d.enabled = 1;
+    d.loopback = 1;
+    create_fifo(&d.fifo, DDCI_BUFFER);
+    memset(ddci_devices, 0, sizeof(ddci_devices));
+    ddci_devices[2] = &d;
+    create_adapter(&ad2, 2);
+    // Stale output on both sides: kernel demux and queued fifo.
+    int fds[2];
+    ASSERT(pipe(fds) == 0, "pipe as mock demux");
+    uint8_t stale[188 * 4];
+    memset(stale, 0x5A, sizeof(stale));
+    ASSERT(write(fds[1], stale, sizeof(stale)) ==
+               static_cast<ssize_t>(sizeof(stale)),
+           "stale demux bytes");
+    ad2.dvr = fds[0];
+    ASSERT(fifo_push(&d.fifo, stale, sizeof(stale)) == sizeof(stale),
+           "stale fifo bytes");
+    d.read_index[0] = 188; // a lagging cursor
+    ad2.drop_buffer = 0;
+    ddci_output_shed(&ad2, &d);
+    ASSERT(fifo_used(&d.fifo) == 0, "fifo shed");
+    ASSERT(d.read_index[0] == 0, "cursors reset");
+    ASSERT(d.shed_bytes.load() == 2 * sizeof(stale), "shed bytes counted");
+    ASSERT(ad2.drop_buffer == 1, "socket residue flagged");
+    ASSERT(d.push_dropped == 0, "no-progress counter untouched");
+    pollfd pfd = {fds[0], POLLIN, 0};
+    ASSERT(poll(&pfd, 1, 0) == 0, "demux drained");
+    close(fds[0]);
+    close(fds[1]);
+    ad2.dvr = -1;
+    free_fifo(&d.fifo);
+    ddci_devices[2] = nullptr;
+    a[2] = nullptr;
+    return 0;
+}
+
 int test_ddci_push_kick_due() {
     ASSERT(!ddci_kick_due(0, 600), "healthy writer is not kicked");
     ASSERT(!ddci_kick_due(1001, 500), "kick inside the min interval waits");
@@ -2566,8 +2548,8 @@ int main() {
               "testing push EAGAIN retries after a drain");
     TEST_FUNC(test_ddci_push_stop_sheds_stall(),
               "testing push stop sheds a stall");
-    TEST_FUNC(test_ddci_push_reshed_sheds_and_restarts(),
-              "testing tune reshed sheds counted and restarts");
+    TEST_FUNC(test_ddci_output_shed_drains_demux_and_fifo(),
+              "testing tune shed drains demux and fifo counted");
     TEST_FUNC(test_ddci_push_kick_due(), "testing push micro-kick trigger");
     TEST_FUNC(test_ddci_tsclk_pick(), "testing tsclk choice pick");
     TEST_FUNC(test_capmt_lists_pmt_pids(),

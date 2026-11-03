@@ -21,8 +21,11 @@
 #define DDCI_BUFFER (20000 * 188)
 
 // Push ring bytes; 188-multiple, ~2MB (~500ms at 4MB/s).
-// Covers jitter plus the kick window; kicks shed anyway.
+// Covers jitter plus the kick window; the tune shed leaves it alone.
 #define DDCI_PUSH_BACKLOG_MAX (188 * 10240)
+
+// Tune-shed drain cap; covers the ~6MB demux buffer plus margin.
+#define DDCI_SHED_DRAIN_MAX (8 * 1024 * 1024)
 
 // Push bytes per cycle, kept a multiple of the 188B TS frame;
 // enigma filepush default buffersize.
@@ -86,12 +89,12 @@ typedef struct ddci_device {
     int sdt_data_mask; // channels with real SDT data at last SDT generation
     int16_t pat_cc, sdt_cc, eit_cc;
     char disable_cat;
-    char loopback;                 // enigma DVR loopback, no sec/ci hardware
-    int ci_slot;                   // claimed /dev/ciN, -1 until bound
-    char tsclk_saved[16];          // prior ciN_tsclk, restored on release
-    SFIFO push_backlog;            // queued push bytes, oldest first
-    uint64_t push_gen{0};          // backlog generation, push_mutex only
-    uint64_t push_dropped{0};      // bytes refused while full, push_mutex only
+    char loopback;            // enigma DVR loopback, no sec/ci hardware
+    int ci_slot;              // claimed /dev/ciN, -1 until bound
+    char tsclk_saved[16];     // prior ciN_tsclk, restored on release
+    SFIFO push_backlog;       // queued push bytes, oldest first
+    uint64_t push_dropped{0}; // refused while full: CAM backpressure only
+    std::atomic<uint64_t> shed_bytes{0}; // voluntary sheds: tune + stop
     int64_t push_last_drop_log{0}; // last ring-full report, push_mutex only
     // Push thread, loopback only: writevs peeked ring segments;
     // EAGAIN retries until stop or room.
@@ -128,8 +131,8 @@ int ddci_pick_free_slot();
 void ddci_push_start(ddci_device_t *d);
 // Stops the push thread, shedding the backlog; safe to call twice.
 void ddci_push_stop(ddci_device_t *d);
-// Tune shed: join (fd open), drop backlog counted, restart.
-void ddci_push_reshed(adapter *ad, ddci_device_t *d);
+// Tune shed, output side: drain the demux, drop queued output.
+void ddci_output_shed(adapter *ad, ddci_device_t *d);
 // Micro-kick: close/open re-primes a dead CAM pull, backlog kept.
 void ddci_push_kick(adapter *ad, ddci_device_t *d);
 // Queues fresh PSI first, then TS; a full ring sheds oldest.
