@@ -44,8 +44,10 @@ struct ca_descr_mode {
 #define CA_SET_DESCR_DATA _IOW('o', 137, struct ca_descr_data)
 struct ca_descr_data {
     unsigned int index;
-    unsigned int parity;    // 0: EVEN, 1: ODD
-    unsigned int data_type; // 0: CW, 1: IV
+    unsigned int parity; // 0: EVEN, 1: ODD
+    // Order matches enigma2 ca_descr_data_type (IV=0, KEY=1):
+    // https://github.com/catalinii/enigma2/blob/358078df37/lib/dvb_ci/descrambler.cpp
+    unsigned int data_type; // 0: IV, 1: key
     unsigned int data_len;  // Length (16 bytes for 128-bit key/IV)
     unsigned char *data;    // Userspace pointer, driver copies data_len bytes
 };

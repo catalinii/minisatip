@@ -35,6 +35,7 @@ static inline void fifo_skip_bytes(SFIFO *f, size_t len) {
         f->read_index.fetch_add(len, std::memory_order_release);
 }
 
+// Returns bytes queued; 0 when refused (full without force).
 size_t fifo_push_force(SFIFO *fifo, void *src, size_t len, int force);
 
 size_t fifo_pop(SFIFO *fifo, void *dst, size_t len);
