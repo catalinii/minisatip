@@ -42,9 +42,8 @@ int test_mkdir_recursive() {
 }
 
 int test_fifo() {
-    SFIFO f;
+    SFIFO f{};
     char buf[] = {0, 1, 2, 3, 4, 5};
-    memset(&f, 0, sizeof(f));
     create_fifo(&f, 10);
 
     ASSERT(0 == fifo_pop(&f, buf, sizeof(buf)),
@@ -59,10 +58,9 @@ int test_fifo() {
     free_fifo(&f);
 
     // pushing more bytes than available fails without force
-    SFIFO f2;
+    SFIFO f2{};
     char buf2[8] = {0, 1, 2, 3, 4, 5, 6, 7};
     char buf3[4] = {8, 9, 10, 11};
-    memset(&f2, 0, sizeof(f2));
     create_fifo(&f2, 10);
     ASSERT(sizeof(buf2) == fifo_push(&f2, buf2, sizeof(buf2)),
            "Failed to fill fifo");
@@ -75,8 +73,7 @@ int test_fifo() {
 
     // Test fifo_pop_offset available calculation when read_index is 0 but
     // offset is non-zero
-    SFIFO f3;
-    memset(&f3, 0, sizeof(f3));
+    SFIFO f3{};
     create_fifo(&f3, 100);
     char in_buf[50] = {0};
     fifo_push_force(&f3, in_buf, 50, 1); // write_index = 50, read_index = 0

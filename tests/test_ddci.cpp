@@ -51,7 +51,6 @@
 
 #include <array>
 #include <poll.h>
-#include <thread>
 #include <vector>
 
 #define DEFAULT_LOG LOG_DVBCA
@@ -647,6 +646,43 @@ static size_t bl_read_exact(int fd, uint8_t *dst, size_t len) {
     return off;
 }
 
+static int is_err = 0;
+static int expected_pid = 0;
+static int did_write = 0;
+static ssize_t xwritev(int, const struct iovec *io, int len) {
+    unsigned char *b = reinterpret_cast<unsigned char *>(io[0].iov_base);
+    LOGM("called writev with len %d, first pid %d", len, PID_FROM_TS(b));
+    did_write = 1;
+    if (len < 2) {
+        is_err = 1;
+        LOG_AND_RETURN(
+            -1, "writev did not receive proper arguments, expected 2, got %d",
+            len);
+    }
+
+    if (PID_FROM_TS(b) != expected_pid) {
+        is_err = 1;
+        LOG_AND_RETURN(-1,
+                       "writev did not receive proper TS, expected %d, got %d",
+                       expected_pid, PID_FROM_TS(b));
+    }
+    return len * 188;
+}
+
+// the last iovec passed to writev(), captured by xwritev_last
+static int last_iov_len = -1;
+static uint8_t last_iov[188];
+static ssize_t xwritev_last(int, const struct iovec *io, int len) {
+    int i, total = 0;
+    did_write = 1;
+    for (i = 0; i < len; i++)
+        total += static_cast<int>(io[i].iov_len);
+    last_iov_len = static_cast<int>(io[len - 1].iov_len);
+    if (last_iov_len == 188)
+        memcpy(last_iov, io[len - 1].iov_base, 188);
+    return total;
+}
+
 // every write to the CI must end with exactly one null packet, so the
 // 128 byte DMA granularity of the driver never cuts a real packet (#1437)
 int test_ddci_process_ts_null_tail() {
@@ -658,16 +694,11 @@ int test_ddci_process_ts_null_tail() {
     d.id = 2;
     d.enabled = 1;
     create_fifo(&d.fifo, DDCI_BUFFER);
-    create_fifo(&d.push_backlog, DDCI_PUSH_BACKLOG_MAX);
     memset(ddci_devices, 0, sizeof(ddci_devices));
     ddci_devices[0] = &d;
-    ddci_devices[2] = &d;
     create_adapter(&ad0, 0);
     create_adapter(&ad, 1);
     create_adapter(&ad2, 2);
-    int fds[2];
-    ASSERT(pipe(fds) == 0, "pipe as mock dvr");
-    ad2.fe = fds[1];
     ad.buf = buf;
     ad.lbuf = sizeof(buf);
     for (i = 0; i < ad.lbuf; i += 188) {
@@ -681,35 +712,26 @@ int test_ddci_process_ts_null_tail() {
     ad.rlen = ad.lbuf - 188;
     set_pid_ts(buf, 1000);
     d.read_index[1] = d.read_index[2] = d.fifo.write_index = 188;
+    _writev = xwritev_last;
+    did_write = 0;
+    last_iov_len = -1;
     ddci_process_ts(&ad, &d);
-    size_t pushed = bl_have(&d);
-    ASSERT(pushed >= 376, "TS and tail queued");
-    ddci_push_start(&d);
-    int t = 0;
-    while (bl_have(&d) > 0 && t++ < 500)
-        usleep(10000);
-    int drained = (bl_have(&d) == 0);
-    ddci_push_stop(&d);
-    ASSERT(drained, "push drained");
-    std::vector<uint8_t> got(pushed);
-    ASSERT(bl_read_exact(fds[0], got.data(), pushed) == pushed,
-           "pushed bytes readable");
-    uint8_t *last = got.data() + pushed - 188;
-    if (last[0] != 0x47 || PID_FROM_TS(last) != 8191)
+    if (!did_write)
+        LOG_AND_RETURN(1, "no writev called");
+    if (last_iov_len != 188)
+        LOG_AND_RETURN(1, "expected a single 188 byte packet last, got %d",
+                       last_iov_len);
+    if (last_iov[0] != 0x47 || PID_FROM_TS(last_iov) != 8191)
         LOG_AND_RETURN(1, "last packet is not a null packet (pid %d)",
-                       PID_FROM_TS(last));
-    if ((last[3] & 0x30) != 0x10)
+                       PID_FROM_TS(last_iov));
+    if ((last_iov[3] & 0x30) != 0x10)
         LOG_AND_RETURN(1, "null packet must carry payload only, got %02X",
-                       last[3]);
-    close(fds[0]);
-    close(fds[1]);
-    ad2.fe = -1;
+                       last_iov[3]);
     free_fifo(&d.fifo);
-    free_fifo(&d.push_backlog);
     pmts.slot(0) = save;
+    _writev = writev;
     channels.clear();
-    ddci_devices[0] = NULL;
-    ddci_devices[2] = NULL;
+    ddci_devices[0] = nullptr;
     a[0] = nullptr;
     a[1] = nullptr;
     a[2] = nullptr;
@@ -727,7 +749,6 @@ int test_ddci_process_ts() {
     d.id = 2;
     d.enabled = 1;
     create_fifo(&d.fifo, DDCI_BUFFER);
-    create_fifo(&d.push_backlog, DDCI_PUSH_BACKLOG_MAX);
     memset(ddci_devices, 0, sizeof(ddci_devices));
     ddci_devices[0] = &d;
     create_adapter(&ad0, 0);
@@ -756,47 +777,102 @@ int test_ddci_process_ts() {
     set_pid_ts(fifo + 188, new_pid2);
     set_pid_ts(fifo + 376, new_pid2);
     fifo_push(&d.fifo, fifo, sizeof(fifo));
-    int fds[2];
-    ASSERT(pipe(fds) == 0, "pipe as mock dvr");
-    ad2.fe = fds[1];
-    ddci_devices[2] = &d;
+    expected_pid = new_pid;
+    _writev = xwritev;
+    is_err = 0;
+    did_write = 0;
     ddci_process_ts(&ad, &d);
-    size_t pushed = bl_have(&d);
-    ASSERT(pushed > 0, "TS queued for the push");
-    ddci_push_start(&d);
-    int t = 0;
-    while (bl_have(&d) > 0 && t++ < 500)
-        usleep(10000);
-    int drained = (bl_have(&d) == 0);
-    ddci_push_stop(&d);
-    ASSERT(drained, "push drained");
-    std::vector<uint8_t> got(pushed);
-    ASSERT(bl_read_exact(fds[0], got.data(), pushed) == pushed,
-           "pushed bytes readable");
-    // Mapped TS rides the push in adapter order, PSI first.
-    int seen_pid = 0, seen_pid2 = 0;
-    for (size_t k = 0; k + 188 <= pushed; k += 188) {
-        int p = PID_FROM_TS(got.data() + k);
-        if (p == new_pid && !seen_pid2)
-            seen_pid = 1;
-        if (p == new_pid2 && seen_pid)
-            seen_pid2 = 1;
-    }
-    if (!seen_pid || !seen_pid2)
-        LOG_AND_RETURN(1, "pushed TS misses mapped pids in order");
+    if (is_err)
+        LOG_AND_RETURN(1, "is_err is set");
+    if (!did_write)
+        LOG_AND_RETURN(1, "no writev called");
     if (PID_FROM_TS(ad.buf) != 1000)
         LOG_AND_RETURN(1, "expected pid 1000 in the adapter buffer, got %d",
                        PID_FROM_TS(ad.buf));
     if (PID_FROM_TS(ad.buf + 2 * 188) != 2000)
         LOG_AND_RETURN(1, "expected pid 2000 in the adapter buffer, got %d",
                        PID_FROM_TS(ad.buf + 2 * 188));
-    close(fds[0]);
-    close(fds[1]);
-    ad2.fe = -1;
     free_fifo(&d.fifo);
-    free_fifo(&d.push_backlog);
     pmts.slot(0) = save;
-    ddci_devices[2] = NULL;
+    _writev = writev;
+    ddci_devices[0] = nullptr;
+    a[0] = nullptr;
+    a[1] = nullptr;
+    a[2] = nullptr;
+    return 0;
+}
+// Loopback queues PSI+TS for the push thread: no writev, and no
+// null tail (the FPGA-granularity tail is hardware-only, #1437).
+int test_ddci_process_ts_loopback_queue() {
+    ddci_device_t d = {};
+    uint8_t buf[188 * 10];
+    int i;
+    adapter ad = {}, ad2 = {}, ad0 = {};
+    memset(buf, 0, sizeof(buf));
+    d.id = 2;
+    d.enabled = 1;
+    d.loopback = 1;
+    create_fifo(&d.fifo, DDCI_BUFFER);
+    create_fifo(&d.push_backlog, DDCI_PUSH_BACKLOG_MAX);
+    memset(ddci_devices, 0, sizeof(ddci_devices));
+    ddci_devices[0] = &d;
+    create_adapter(&ad0, 0);
+    create_adapter(&ad, 1);
+    create_adapter(&ad2, 2);
+    ad.buf = buf;
+    ad.lbuf = sizeof(buf);
+    for (i = 0; i < ad.lbuf; i += 188) {
+        buf[i] = 0x47;
+        set_pid_ts(buf + i, 2121); // unmapped pid
+    }
+
+    SPMT *save = pmts[0];
+    pmts.slot(0) = nullptr;
+    int new_pid = add_pid_mapping_table(1, 1000, 0, &d, 0);
+    ad.rlen = ad.lbuf - 188;
+    set_pid_ts(buf, 1000);
+    d.read_index[1] = d.read_index[2] = d.fifo.write_index = 188;
+    int save_enigma = opts.enigma;
+    opts.enigma = 0; // keep the kick watchdog inert
+    _writev = xwritev;
+    is_err = 0;
+    did_write = 0;
+    ddci_process_ts(&ad, &d);
+    opts.enigma = save_enigma;
+    if (is_err)
+        LOG_AND_RETURN(1, "is_err is set");
+    if (did_write)
+        LOG_AND_RETURN(1, "loopback must not writev");
+    int used = fifo_used(&d.push_backlog);
+    if (used < 188)
+        LOG_AND_RETURN(1, "expected queued bytes, got %d", used);
+    void *tail = nullptr;
+    size_t got = fifo_peek(&d.push_backlog, &tail, 188, (size_t)(used - 188));
+    if (got != 188)
+        LOG_AND_RETURN(1, "tail peek got %zu bytes", got);
+    auto *tail_ts = reinterpret_cast<uint8_t *>(tail);
+    if (PID_FROM_TS(tail_ts) == 8191)
+        LOG_AND_RETURN(1, "loopback queued a null tail");
+    void *all = nullptr;
+    if (fifo_peek(&d.push_backlog, &all, (size_t)used, 0) != (size_t)used)
+        LOG_AND_RETURN(1, "backlog peek got short read");
+    auto *bytes = reinterpret_cast<uint8_t *>(all);
+    bool found = false;
+    for (int off = 0; off < used; off++)
+        if (bytes[off] == 0x47 && PID_FROM_TS(bytes + off) == new_pid) {
+            found = true;
+            break;
+        }
+    if (!found)
+        LOG_AND_RETURN(1, "mapped pid %d missing from backlog", new_pid);
+    free_fifo(&d.push_backlog);
+    free_fifo(&d.fifo);
+    pmts.slot(0) = save;
+    _writev = writev;
+    ddci_devices[0] = nullptr;
+    a[0] = nullptr;
+    a[1] = nullptr;
+    a[2] = nullptr;
     return 0;
 }
 // Two tuners on one CI: stopping the first must not remove pid 0 from the CI
@@ -2093,20 +2169,21 @@ int test_ddci_push_queue_order() {
     ASSERT(PID_FROM_TS(out + 188) == 1000, "ts order kept");
     ASSERT(PID_FROM_TS(out + 376) == 2000, "ts order kept");
     free_fifo(&d.push_backlog);
-    // A full ring sheds oldest, newest survive.
+    // A full ring drops newest, oldest survive and drops count up.
     create_fifo(&d.push_backlog, 376);
-    ASSERT(ddci_push_queue(&d, psi, sizeof(psi), io, 2) == 564,
-           "overfill queues all");
-    ASSERT(bl_have(&d) == 376, "ring keeps the newest bytes");
+    ASSERT(ddci_push_queue(&d, psi, sizeof(psi), io, 2) == 376,
+           "overfill queues only what fits");
+    ASSERT(bl_have(&d) == 376, "ring keeps the oldest bytes");
+    ASSERT(d.push_dropped == 188, "overflow counted");
     first = fifo_peek(&d.push_backlog, &p, sizeof(out), 0);
-    ASSERT(first == 188, "wrapped head segment");
+    ASSERT(first == 376, "single head segment");
     memcpy(out, p, first);
-    void *q = NULL;
-    size_t second = fifo_peek(&d.push_backlog, &q, bl_have(&d) - first, first);
-    ASSERT(second == 188, "wrapped tail segment");
-    memcpy(out + first, q, second);
-    ASSERT(PID_FROM_TS(out) == 1000, "newest kept first");
-    ASSERT(PID_FROM_TS(out + 188) == 2000, "newest kept in order");
+    ASSERT(PID_FROM_TS(out) == 0, "oldest kept first");
+    ASSERT(PID_FROM_TS(out + 188) == 1000, "oldest kept in order");
+    ASSERT(ddci_push_queue(&d, psi, sizeof(psi), io, 2) == 0,
+           "full ring queues nothing");
+    ASSERT(d.push_dropped == 752, "drops accumulate");
+    ASSERT(bl_have(&d) == 376, "queued bytes untouched");
     free_fifo(&d.push_backlog);
     return 0;
 }
@@ -2358,82 +2435,6 @@ int test_ddci_two_loopbacks_own_distinct_slots() {
     return 0;
 }
 
-int test_ddci_push_fpga() {
-    ddci_device_t d = {};
-    uint8_t buf[188 * 10];
-    adapter ad = {}, ad2 = {}, ad0 = {};
-    memset(buf, 0, sizeof(buf));
-    d.id = 2;
-    d.enabled = 1;
-    d.loopback = 0;
-    create_fifo(&d.fifo, DDCI_BUFFER);
-    create_fifo(&d.push_backlog, DDCI_PUSH_BACKLOG_MAX);
-    memset(ddci_devices, 0, sizeof(ddci_devices));
-    ddci_devices[0] = &d;
-    ddci_devices[2] = &d;
-    create_adapter(&ad0, 0);
-    create_adapter(&ad, 1);
-    create_adapter(&ad2, 2);
-    int fds[2];
-    ASSERT(pipe(fds) == 0, "pipe as mock dvr");
-    ad2.fe = fds[1];
-    ad.buf = buf;
-    ad.lbuf = sizeof(buf);
-    for (int i = 0; i < ad.lbuf; i += 188) {
-        buf[i] = 0x47;
-        set_pid_ts(buf + i, 2121); // unmapped pid
-    }
-
-    SPMT *save = pmts[0];
-    pmts.slot(0) = nullptr;
-    int new_pid = add_pid_mapping_table(1, 1000, 0, &d, 0);
-    ad.rlen = ad.lbuf - 188;
-    set_pid_ts(buf, 1000);
-    d.read_index[1] = d.read_index[2] = d.fifo.write_index = 188;
-    // Pin the clocks: PAT/SDT stay quiet, the queue holds TS and tail.
-    d.last_pat = d.last_sdt = getTick();
-
-    // FPGA queues like loopback: mapped TS, then the null tail.
-    ddci_process_ts(&ad, &d);
-    size_t pushed = bl_have(&d);
-    ASSERT(pushed >= 376, "fpga queues TS and tail");
-    std::vector<uint8_t> expect(pushed);
-    void *p = NULL;
-    ASSERT(fifo_peek(&d.push_backlog, &p, pushed, 0) == pushed,
-           "single-segment peek");
-    memcpy(expect.data(), p, pushed);
-    int seen = 0;
-    for (size_t k = 0; k + 188 <= pushed; k += 188)
-        if (PID_FROM_TS(expect.data() + k) == new_pid)
-            seen = 1;
-    ASSERT(seen, "mapped TS queued");
-    ASSERT(PID_FROM_TS(expect.data() + pushed - 188) == 8191,
-           "null tail queued last");
-    ddci_push_start(&d);
-    int t = 0;
-    while (bl_have(&d) > 0 && t++ < 500)
-        usleep(10000);
-    int drained = (bl_have(&d) == 0);
-    ddci_push_stop(&d);
-    ASSERT(drained, "fpga backlog drains fully");
-    std::vector<uint8_t> got(pushed);
-    ASSERT(bl_read_exact(fds[0], got.data(), pushed) == pushed,
-           "drained bytes readable");
-    ASSERT(memcmp(got.data(), expect.data(), pushed) == 0,
-           "drained bytes intact");
-
-    close(fds[0]);
-    close(fds[1]);
-    ad2.fe = -1;
-    free_fifo(&d.fifo);
-    free_fifo(&d.push_backlog);
-    pmts.slot(0) = save;
-    ddci_devices[0] = NULL;
-    ddci_devices[2] = NULL;
-    a[0] = a[1] = a[2] = nullptr;
-    return 0;
-}
-
 int test_ddci_tsclk_pick() {
     ASSERT(ddci_tsclk_pick("normal high extra_high\n") == "high",
            "high wins over extra_high");
@@ -2478,6 +2479,8 @@ int main() {
     TEST_FUNC(test_ddci_process_ts(), "testing ddci_process_ts");
     TEST_FUNC(test_ddci_process_ts_null_tail(),
               "testing ddci_process_ts ends every write with a null packet");
+    TEST_FUNC(test_ddci_process_ts_loopback_queue(),
+              "testing loopback queues PSI+TS with no writev or tail");
     TEST_FUNC(test_psi_pids_survive_a_channel_change(),
               "testing that the CI keeps the pids of its generated PSI");
     TEST_FUNC(test_ci_pmt_name_is_refreshed(),
@@ -2521,7 +2524,6 @@ int main() {
               "testing push stop sheds a stall");
     TEST_FUNC(test_ddci_push_kick_due(), "testing push micro-kick trigger");
     TEST_FUNC(test_ddci_tsclk_pick(), "testing tsclk choice pick");
-    TEST_FUNC(test_ddci_push_fpga(), "testing fpga push queue and drain");
     TEST_FUNC(test_capmt_lists_pmt_pids(),
               "testing CAPMT lists PMT pids verbatim");
     TEST_FUNC(test_dvbca_ci_adapter_no_routing(),

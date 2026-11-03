@@ -874,18 +874,17 @@ int get_ca_multiple_pmt(int i) {
 
 void send_cw_to_all_pmts(ca_device_t *d, int parity) {
     int i;
-    int algo = d->cc_version == 1 ? CA_ALGO_DVBCSA : CA_ALGO_AES128_CBC;
     // Same producer bound as everywhere else: slots past
     // max_ca_pmt are always -1 and skipped by the checks below.
     for (i = 0; i < d->max_ca_pmt; i++) {
         if (PMT_ID_IS_VALID(d->capmt[i].pmt_id)) {
-            send_cw(d->capmt[i].pmt_id, algo, parity, d->key[parity],
-                    d->iv[parity], 3720, NULL);
+            send_cw(d->capmt[i].pmt_id, CA_ALGO_AES128_CBC, parity,
+                    d->key[parity], d->iv[parity], 3720, NULL);
         }
         for (int id : d->capmt[i].other_id)
             if (PMT_ID_IS_VALID(id))
-                send_cw(id, algo, parity, d->key[parity], d->iv[parity], 3720,
-                        NULL);
+                send_cw(id, CA_ALGO_AES128_CBC, parity, d->key[parity],
+                        d->iv[parity], 3720, NULL);
     }
 }
 
@@ -1165,17 +1164,18 @@ void set_input_ci(int ci, int aid) {
     }
 }
 
-void set_ci_input_str(int ci, const char *val) {
+bool set_ci_input_str(int ci, const char *val) {
     char filename[100];
-    sprintf(filename, "/proc/stb/tsmux/ci%d_input", ci);
+    snprintf(filename, sizeof(filename), "/proc/stb/tsmux/ci%d_input", ci);
     LOG("%s: %s -> %s", __FUNCTION__, filename, val);
     FILE *fp = fopen(filename, "w");
-    if (fp) {
-        fprintf(fp, "%s", val);
-        fclose(fp);
-    } else {
+    if (!fp) {
         LOG("%s open failed, %s", __FUNCTION__, filename);
+        return false;
     }
+    bool ok = fprintf(fp, "%s", val) > 0;
+    fclose(fp);
+    return ok;
 }
 
 void set_tuner_input(int ci, int aid) {
@@ -1378,12 +1378,12 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt, int update) {
         LOG_AND_RETURN(rc, "send_capmt failed");
     }
 
-    int algo = d->cc_version == 1 ? CA_ALGO_DVBCSA : CA_ALGO_AES128_CBC;
     if (d->key[0][0])
-        send_cw(spmt->id, algo, 0, d->key[0], d->iv[0], 3600,
+        send_cw(spmt->id, CA_ALGO_AES128_CBC, 0, d->key[0], d->iv[0], 3600,
                 NULL); // 1 hour
     if (d->key[1][0])
-        send_cw(spmt->id, algo, 1, d->key[1], d->iv[1], 3600, NULL);
+        send_cw(spmt->id, CA_ALGO_AES128_CBC, 1, d->key[1], d->iv[1], 3600,
+                NULL);
 
     return 0;
 }
@@ -2518,8 +2518,6 @@ by the CICAM */
         d->uri_mask = 1;
     else
         d->uri_mask = 3;
-    // v1 CAMs return CSA content keys, v2 CAMs AES ones.
-    d->cc_version = (resource_id == TS103205_APP_CC_RESOURCEID_THREE) ? 2 : 1;
     return 0;
 }
 static int CIPLUS_APP_CC_handler(ca_session_t *session, int tag, uint8_t *data,
@@ -4294,7 +4292,7 @@ int dvbca_init_dev(adapter *ad) {
                                ad->id);
         }
 #endif
-        sprintf(ca_dev_path, "/dev/ci%d", ci_slot);
+        snprintf(ca_dev_path, sizeof(ca_dev_path), "/dev/ci%d", ci_slot);
     }
 #ifndef DISABLE_DDCI
     // Loopback owns its CI slot; the enigma tuner stands down.
