@@ -2385,7 +2385,7 @@ int test_loopback_capmt_sends_at_once() {
     ASSERT_EQUAL(dvbca_process_pmt(&pcam->ad, p1, 0), 0, "loopback join sends");
     ASSERT_EQUAL(read_capmts(), 1, "CAPMT written at once");
     opts.enigma = saved_enigma;
-    ddci_devices[3] = NULL;
+    ddci_devices[3] = nullptr;
     packing_cam_close();
     return 0;
 }
@@ -2413,16 +2413,16 @@ int test_loopback_owns_ci_slot() {
     tuner.id = 1;
     tuner.type = ADAPTER_DVB;
     ca_device_t *saved_ca1 = ca_devices[1];
-    ca_devices[1] = NULL;
+    ca_devices[1] = nullptr;
     ASSERT_EQUAL(dvbca_init_dev(&tuner), TABLES_RESULT_ERROR_NORETRY,
                  "owned slot stands down");
-    ASSERT(ca_devices[1] == NULL, "no CA device opened for it");
+    ASSERT(ca_devices[1] == nullptr, "no CA device opened for it");
 
     adapter other = {};
     other.id = 72;
     other.type = ADAPTER_DVB;
     ca_device_t *saved_ca72 = ca_devices[72];
-    ca_devices[72] = NULL;
+    ca_devices[72] = nullptr;
     ASSERT_EQUAL(dvbca_init_dev(&other), TABLES_RESULT_OK,
                  "other slots still probe");
     ca_devices[72] = saved_ca72;

@@ -27,6 +27,8 @@
 // Push bytes per cycle, kept a multiple of the 188B TS frame;
 // enigma filepush default buffersize.
 #define DDCI_PUSH_CHUNK (188 * 1024)
+static_assert(DDCI_PUSH_BACKLOG_MAX % 188 == 0, "ring stays frame-aligned");
+static_assert(DDCI_PUSH_CHUNK % 188 == 0, "chunk stays frame-aligned");
 // Micro-kick backstop: EAGAIN past this long means the playpump
 // congestion latch is stuck, re-prime it via close/open.
 #define DDCI_KICK_STALL_MS 1000
@@ -129,6 +131,8 @@ int ddci_pick_free_slot();
 void ddci_push_start(ddci_device_t *d);
 // Stops the push thread, shedding the backlog; safe to call twice.
 void ddci_push_stop(ddci_device_t *d);
+// Tune shed: join (fd open), drop backlog counted, restart.
+void ddci_push_reshed(adapter *ad, ddci_device_t *d);
 // Micro-kick: close/open re-primes a dead CAM pull, backlog kept.
 void ddci_push_kick(adapter *ad, ddci_device_t *d);
 // Queues fresh PSI first, then TS; a full ring sheds oldest.

@@ -1308,18 +1308,24 @@ int ddci_add_psi(ddci_device_t *d, uint8_t *dst, int len, adapter *ad) {
             ddci_update_pmt_name(d, pmt);
             psi_len = ddci_create_pmt(d, pmt, psi, sizeof(psi), d->pmt + i);
             auto it = get_pid_mapping(d, pmt->adapter, pmt->pid);
-            if (it != d->mapping.end())
-                pos += buffer_to_ts(dst + pos, len - pos, psi, psi_len,
-                                    &d->pmt[i].cc, it->second.ddci_pid);
-            else
+            if (it != d->mapping.end()) {
+                // Guard like PAT/SDT: a -1 would shift every
+                // later byte off the 188B frame, permanently.
+                n = buffer_to_ts(dst + pos, len - pos, psi, psi_len,
+                                 &d->pmt[i].cc, it->second.ddci_pid);
+                if (n > 0)
+                    pos += n;
+            } else
                 LOG("%s: could not find PMT %d adapter %d and pid %d to "
                     "mapping table",
                     __FUNCTION__, d->pmt[i].id, pmt->adapter, pmt->pid);
 
             // Add an EIT table for each channel
             psi_len = ddci_create_eit(pmt->sid, psi, d->pmt[i].ver);
-            pos += buffer_to_ts(dst + pos, len - pos, psi, psi_len, &d->eit_cc,
-                                18);
+            n = buffer_to_ts(dst + pos, len - pos, psi, psi_len, &d->eit_cc,
+                             18);
+            if (n > 0)
+                pos += n;
             d->pmt[i].last_pmt = ctime;
         }
     }
@@ -1375,6 +1381,13 @@ static void ddci_push_loop(int id) {
         (id >= 0 && id < MAX_ADAPTERS) ? ddci_devices[id] : nullptr;
     if (!d)
         return;
+    // Every fd replacement joins this thread first, so one
+    // load per incarnation stays valid; no per-chunk race.
+    int fe = -1;
+    if (adapter *aad = get_adapter_nw(id)) {
+        std::lock_guard<SMutex> alock(aad->mutex);
+        fe = aad->fe;
+    }
     for (;;) {
         struct iovec iov[2];
         int iocnt = 0, first = 0;
@@ -1406,15 +1419,14 @@ static void ddci_push_loop(int id) {
                 iocnt = 2;
             }
         }
-        adapter *ad = get_adapter_nw(id);
-        if (!ad)
+        if (fe < 0)
             break;
         size_t off = 0;
         bool fatal = false;
         // The peeked span is stable unlocked: pushes never
         // overwrite unread bytes, only this thread consumes.
         while (off < n && !d->push_stop.load()) {
-            ssize_t w = writev(ad->fe, iov + first, iocnt - first);
+            ssize_t w = writev(fe, iov + first, iocnt - first);
             if (w > 0) {
                 off += static_cast<size_t>(w);
                 size_t left = static_cast<size_t>(w);
@@ -1505,10 +1517,10 @@ static void ddci_push_join(ddci_device_t *d, adapter *ad) {
 void ddci_push_kick(adapter *ad, ddci_device_t *d) {
     if (!ad || !d || !ddci_is_loopback(d->id))
         return;
-    // Serialize against close_adapter (same outer ad->mutex as the
-    // close path, push_mutex inner): no double-close or fd leak.
-    std::lock_guard<SMutex> lock(ad->mutex);
-    if (!ad->enabled)
+    // Try-only: queue holds d->mutex while open takes ad->mutex
+    // first; blocking here would ABBA against reopen. Retried next tick.
+    std::unique_lock<SMutex> lock(ad->mutex, std::try_to_lock);
+    if (!lock.owns_lock() || !ad->enabled)
         return;
     ddci_push_join(d, ad);
     char buf[100];
@@ -1534,10 +1546,33 @@ void ddci_push_stop(ddci_device_t *d) {
     std::lock_guard<std::mutex> lock(d->push_mutex);
     SFIFO *f = &d->push_backlog;
     int64_t left = (int64_t)(f->write_index - f->read_index);
-    if (left > 0)
+    if (left > 0) {
         LOG("DDCI %d: push stop shedding %jd backlog bytes", d->id,
             (intmax_t)left);
+        d->push_dropped += (uint64_t)left;
+    }
     f->read_index = f->write_index;
+}
+
+// Tune shed: join the thread (fd stays open), drop the stale
+// backlog counted, restart. No peek survives the join to tear.
+void ddci_push_reshed(adapter *ad, ddci_device_t *d) {
+    if (!ad || !d)
+        return;
+    // Same ad->mutex as kick/close: joins never overlap, and the
+    // queue's try-lock kick skips while a shed is in flight.
+    std::lock_guard<SMutex> lock(ad->mutex);
+    ddci_push_join(d, nullptr);
+    std::lock_guard<std::mutex> plock(d->push_mutex);
+    SFIFO *f = &d->push_backlog;
+    int64_t left = (int64_t)(f->write_index - f->read_index);
+    if (left > 0) {
+        LOG("DDCI %d: tune shedding %jd backlog bytes", d->id, (intmax_t)left);
+        d->push_dropped += (uint64_t)left;
+    }
+    f->read_index = f->write_index;
+    d->push_gen++;
+    ddci_push_start(d);
 }
 
 // Queues fresh PSI first, then TS; pieces that do not fit are
@@ -1747,13 +1782,8 @@ int ddci_set_pid(adapter *ad, int pid) {
         // Idle -> active: shed the previous tune's backlog so the
         // fresh tune starts clean.
         if (ad->active_demux_pids <= 0) {
-            if (ddci_device_t *dd = get_ddci(ad->id)) {
-                std::lock_guard<std::mutex> lock(dd->push_mutex);
-                dd->push_backlog.read_index = dd->push_backlog.write_index;
-                // Retire in-flight peeks: the push thread voids
-                // its skip when the generation moved on.
-                dd->push_gen++;
-            }
+            if (ddci_device_t *dd = get_ddci(ad->id))
+                ddci_push_reshed(ad, dd);
         }
         int rc = dvb_demux_set_pid(ad, pid);
         LOGM("%s: loopback %d add pid %d -> %d", __FUNCTION__, ad->id, pid, rc);
@@ -1895,7 +1925,12 @@ static int ddci_open_enigma(adapter *ad, ddci_device_t *d) {
     d->last_pat = 0;
     d->psi_changed = false;
     d->tid = d->ver = d->sdt_ver = d->sdt_data_mask = 0;
-    d->push_backlog.read_index = d->push_backlog.write_index;
+    {
+        // Same push_mutex as every other backlog user; d->mutex
+        // outer here matches the queue's nesting, P stays a leaf.
+        std::lock_guard<std::mutex> plock(d->push_mutex);
+        d->push_backlog.read_index = d->push_backlog.write_index;
+    }
     d->enabled = 1;
     ad->enabled = 1;
     LOG("opened enigma loopback %d push dvr%d fd:%d read fd:%d source:%d",
@@ -1980,7 +2015,12 @@ int ddci_open_device(adapter *ad) {
     d->last_pat = 0;
     d->psi_changed = false;
     d->tid = d->ver = d->sdt_ver = d->sdt_data_mask = 0;
-    d->push_backlog.read_index = d->push_backlog.write_index;
+    {
+        // Same push_mutex as every other backlog user; d->mutex
+        // outer here matches the queue's nesting, P stays a leaf.
+        std::lock_guard<std::mutex> plock(d->push_mutex);
+        d->push_backlog.read_index = d->push_backlog.write_index;
+    }
     d->enabled = 1;
     ad->enabled = 1;
     LOG("opened DDCI adapter %d fe:%d dvr:%d", ad->id, ad->fe, ad->dvr);
