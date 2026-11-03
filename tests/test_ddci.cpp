@@ -359,10 +359,10 @@ int test_update_resend_keeps_slot() {
 int test_mandatory_pat_stays_mapped() {
     ddci_device_t d0 = {};
     ca_device_t ca0 = {};
-    adapter ad = {0}, a0 = {0};
+    adapter ad = {}, a0 = {};
 
     for (int i = 0; i < MAX_ADAPTERS; i++)
-        a[i] = nullptr;
+        a[static_cast<size_t>(i)] = nullptr;
     create_adapter(&ad, 8);
     create_adapter(&a0, 0);
     SPMT *pmt0 = create_pmt(8, 600, 601, 602, 0x100, 0x100);
@@ -832,7 +832,7 @@ int test_ddci_process_ts_loopback_queue() {
     ad.rlen = ad.lbuf - 188;
     set_pid_ts(buf, 1000);
     d.read_index[1] = d.read_index[2] = d.fifo.write_index = 188;
-    int save_enigma = opts.enigma;
+    auto save_enigma = opts.enigma;
     opts.enigma = 0; // keep the kick watchdog inert
     _writev = xwritev;
     is_err = 0;
@@ -843,9 +843,9 @@ int test_ddci_process_ts_loopback_queue() {
         LOG_AND_RETURN(1, "is_err is set");
     if (did_write)
         LOG_AND_RETURN(1, "loopback must not writev");
-    int used = fifo_used(&d.push_backlog);
+    size_t used = fifo_used(&d.push_backlog);
     if (used < 188)
-        LOG_AND_RETURN(1, "expected queued bytes, got %d", used);
+        LOG_AND_RETURN(1, "expected queued bytes, got %zu", used);
     void *tail = nullptr;
     size_t got = fifo_peek(&d.push_backlog, &tail, 188, (size_t)(used - 188));
     if (got != 188)
@@ -858,7 +858,7 @@ int test_ddci_process_ts_loopback_queue() {
         LOG_AND_RETURN(1, "backlog peek got short read");
     auto *bytes = reinterpret_cast<uint8_t *>(all);
     bool found = false;
-    for (int off = 0; off < used; off++)
+    for (size_t off = 0; off < used; off++)
         if (bytes[off] == 0x47 && PID_FROM_TS(bytes + off) == new_pid) {
             found = true;
             break;
@@ -2002,9 +2002,10 @@ int test_ddci_pick_free_pair() {
     std::array fe = {0, 1, 2};
     auto pick = [&](const auto &dm, const auto &dv, const auto &fe_,
                     const auto &us) {
-        return ddci_pick_free_pair(dm.data(), dm.size(), dv.data(), dv.size(),
-                                   fe_.data(), fe_.size(), us.data(),
-                                   us.size());
+        return ddci_pick_free_pair(dm.data(), static_cast<int>(dm.size()),
+                                   dv.data(), static_cast<int>(dv.size()),
+                                   fe_.data(), static_cast<int>(fe_.size()),
+                                   us.data(), static_cast<int>(us.size()));
     };
     std::array<int, 0> none = {};
     ASSERT(pick(demux, dvr, fe, none) == 12, "last pair without frontend wins");
@@ -2025,9 +2026,9 @@ int test_ddci_pick_free_pair() {
 // ddci pids, so mappings must not rewrite them a second time.
 int test_capmt_lists_pmt_pids() {
     ddci_device_t d0 = {};
-    adapter ad = {0}, a0 = {0};
+    adapter ad = {}, a0 = {};
     for (int i = 0; i < MAX_ADAPTERS; i++)
-        a[i] = nullptr;
+        a[static_cast<size_t>(i)] = nullptr;
     create_adapter(&ad, 8);
     create_adapter(&a0, 0);
     memset(ddci_devices, 0, sizeof(ddci_devices));
@@ -2070,11 +2071,11 @@ int test_capmt_lists_pmt_pids() {
 
 int test_dvbca_ci_adapter_no_routing() {
     SPMT *pmt0;
-    adapter ad = {0};
+    adapter ad = {};
     ca_device_t dev;
     memset(&dev, 0, sizeof(dev));
     for (int i = 0; i < MAX_ADAPTERS; i++) {
-        a[i] = nullptr;
+        a[static_cast<size_t>(i)] = nullptr;
         ca_devices[i] = nullptr;
     }
     create_adapter(&ad, 8);
@@ -2113,9 +2114,9 @@ int test_dvbca_ci_adapter_no_routing() {
 extern void set_disable(int i, bool v);
 
 int test_ddci_pick_free_slot() {
-    adapter ad = {0};
+    adapter ad = {};
     for (int i = 0; i < MAX_ADAPTERS; i++) {
-        a[i] = nullptr;
+        a[static_cast<size_t>(i)] = nullptr;
         set_disable(i, 0);
     }
     ASSERT(ddci_pick_free_slot() == 0, "empty table picks slot 0");
@@ -2391,10 +2392,10 @@ int test_ddci_enigma_local_loops_back() {
     SPMT *pmt0;
     ddci_device_t d0 = {};
     ca_device_t ca0 = {};
-    adapter ad = {0}, a0 = {0};
+    adapter ad = {}, a0 = {};
 
     for (int i = 0; i < MAX_ADAPTERS; i++)
-        a[i] = nullptr;
+        a[static_cast<size_t>(i)] = nullptr;
     create_adapter(&ad, 8);
     create_adapter(&a0, 0);
     pmt0 = create_pmt(8, 600, 601, 602, 0x100, 0x100);
