@@ -221,8 +221,9 @@ struct ca_device {
     int max_ca_pmt, multiple_pmt;
     int fd, sock;
     int id;
-    int ci_slot;  // /dev/ciN and tsmux slot, may differ from id
-    ca_mode mode; // zero-init DVB; set once at init publish
+    int ci_slot;          // /dev/ciN and tsmux slot, may differ from id
+    char tsclk_saved[16]; // prior ciN_tsclk; nonzero once raised
+    ca_mode mode;         // zero-init DVB; set once at init publish
     int state;
     uint16_t caid[MAX_CAID];
     uint32_t caids;
@@ -266,9 +267,10 @@ struct ca_device {
 extern ca_device_t *ca_devices[];
 
 bool set_ci_input_str(int ci, const char *val);
-void ddci_enigma_route_pvr(ddci_device_t *d);
+// Routes the slot input to PVR/DVR and raises tsclk.
+void ca_enigma_route_pvr(ca_device_t *c);
 // Highest tsclk in a choices file; empty when none qualifies.
-std::string ddci_tsclk_pick(const std::string &choices);
+std::string ca_tsclk_pick(const std::string &choices);
 ca_device_t *alloc_ca_device();
 int ca_init(ca_device_t *d);
 void dvbca_init();
