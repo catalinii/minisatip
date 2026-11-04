@@ -2357,8 +2357,13 @@ static bool ddci_add_one_enigma_loopback(int slot) {
         if (ddci_loopback_owns_slot(c))
             continue;
         snprintf(buf, sizeof(buf), "/dev/ci%d", c);
-        if (access(buf, R_OK | W_OK) || !ddci_enigma_slot_has_pvr(c))
+        if (access(buf, R_OK | W_OK))
             continue;
+        if (!ddci_enigma_slot_has_pvr(c)) {
+            LOG("CI slot %d offers no PVR/DVR input, skipping loopback claim",
+                c);
+            continue;
+        }
         ci_slot = c;
     }
     if (ci_slot < 0) {
