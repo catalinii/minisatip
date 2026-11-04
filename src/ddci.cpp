@@ -2228,24 +2228,6 @@ std::string ddci_tsclk_pick(const std::string &choices) {
     return "";
 }
 
-std::string ddci_enigma_pvr_pick(const std::string &choices) {
-    if (ddci_choices_has(choices, "PVR"))
-        return "PVR";
-    if (ddci_choices_has(choices, "DVR"))
-        return "DVR";
-    return "";
-}
-
-// Whole-word PVR/DVR only: route programs bare values,
-// so DVR0-only drivers keep direct-tuner CI.
-static bool ddci_enigma_slot_has_pvr(int slot) {
-    if (!opts.enigma || slot < 0)
-        return false;
-    char path[64];
-    snprintf(path, sizeof(path), "/proc/stb/tsmux/ci%d_input_choices", slot);
-    return !ddci_enigma_pvr_pick(ddci_read_file(path)).empty();
-}
-
 // Raises the slot clock to high, saving the prior value;
 // silent no-op when already high or the knob is missing.
 static void ddci_enigma_set_tsclk(ddci_device_t *d) {
@@ -2288,21 +2270,19 @@ void ddci_enigma_route_pvr(ddci_device_t *d) {
         LOG("DDCI %d: no CI slot bound, skipping PVR route", d->id);
         return;
     }
-    char path[64];
-    snprintf(path, sizeof(path), "/proc/stb/tsmux/ci%d_input_choices", slot);
-    std::string input = ddci_enigma_pvr_pick(ddci_read_file(path));
-    if (input.empty()) {
-        LOG("DDCI %d: CI slot %d offers no PVR/DVR input, leaving routing",
-            d->id, slot);
-        return;
-    }
-    if (!set_ci_input_str(slot, input.c_str())) {
-        LOG("DDCI %d: CI slot %d input route to %s failed", d->id, slot,
-            input.c_str());
-        return;
+    // Write-acceptance beats choices files: drivers take values
+    // they do not list, and flow works even unrouted.
+    const char *input = "PVR";
+    if (!set_ci_input_str(slot, input)) {
+        input = "DVR";
+        if (!set_ci_input_str(slot, input)) {
+            LOG("DDCI %d: CI slot %d keeps its input, no PVR/DVR route", d->id,
+                slot);
+            return;
+        }
     }
     ddci_enigma_set_tsclk(d);
-    LOG("DDCI %d: CI slot %d input routed to %s", d->id, slot, input.c_str());
+    LOG("DDCI %d: CI slot %d input routed to %s", d->id, slot, input);
 }
 
 int ddci_pick_free_slot() {
@@ -2349,8 +2329,8 @@ static bool ddci_add_one_enigma_loopback(int slot) {
         LOG("no free demux/dvr pair for the enigma loopback");
         return false;
     }
-    // Claim a CI slot offering PVR/DVR first: without one the loopback
-    // cannot feed the CI, so the slot stays free for live tuners.
+    // Claim the first free CI slot; routing is best-effort,
+    // the loopback flows even when the CI stays bypassed.
     int ci_slot = -1;
     for (int k = 0; k < MAX_VU_CI_SLOTS && ci_slot < 0; k++) {
         int c = (slot + k) % MAX_VU_CI_SLOTS;
@@ -2359,15 +2339,10 @@ static bool ddci_add_one_enigma_loopback(int slot) {
         snprintf(buf, sizeof(buf), "/dev/ci%d", c);
         if (access(buf, R_OK | W_OK))
             continue;
-        if (!ddci_enigma_slot_has_pvr(c)) {
-            LOG("CI slot %d offers no PVR/DVR input, skipping loopback claim",
-                c);
-            continue;
-        }
         ci_slot = c;
     }
     if (ci_slot < 0) {
-        LOG("no CI slot with PVR/DVR input for the enigma loopback");
+        LOG("no free CI slot for the enigma loopback");
         return false;
     }
     if (!a[static_cast<size_t>(id)])

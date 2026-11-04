@@ -2470,16 +2470,6 @@ int test_ddci_two_loopbacks_own_distinct_slots() {
     return 0;
 }
 
-int test_ddci_pvr_pick() {
-    ASSERT(ddci_enigma_pvr_pick("A B PVR DVR\n") == "PVR", "PVR preferred");
-    ASSERT(ddci_enigma_pvr_pick("A B DVR\n") == "DVR", "DVR fallback");
-    ASSERT(ddci_enigma_pvr_pick("A B\n").empty(), "tuner-only offers nothing");
-    ASSERT(ddci_enigma_pvr_pick("A DVR0\n").empty(), "DVR0-only stays direct");
-    ASSERT(ddci_enigma_pvr_pick("APVR\n").empty(), "substring rejected");
-    ASSERT(ddci_enigma_pvr_pick("").empty(), "empty offers nothing");
-    return 0;
-}
-
 int test_ddci_tsclk_pick() {
     ASSERT(ddci_tsclk_pick("normal high extra_high\n") == "high",
            "high wins over extra_high");
@@ -2644,7 +2634,6 @@ int main() {
     TEST_FUNC(test_ddci_push_kick_criteria(),
               "testing stall-only kick criteria");
     TEST_FUNC(test_ddci_tsclk_pick(), "testing tsclk choice pick");
-    TEST_FUNC(test_ddci_pvr_pick(), "testing PVR input pick");
     TEST_FUNC(test_capmt_lists_pmt_pids(),
               "testing CAPMT lists PMT pids verbatim");
     TEST_FUNC(test_dvbca_ci_adapter_no_routing(),
