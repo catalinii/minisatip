@@ -1158,17 +1158,8 @@ int get_active_capmts(ca_device_t *d) {
 }
 
 void set_input_ci(int ci, int aid) {
-    char filename[100];
-    int val = 'A' + aid;
-    sprintf(filename, "/proc/stb/tsmux/ci%d_input", ci);
-    LOG("%s: %s -> %c", __FUNCTION__, filename, val);
-    FILE *fp = fopen(filename, "w");
-    if (fp) {
-        fprintf(fp, "%c", val);
-        fclose(fp);
-    } else {
-        LOG("%s open failed, %s", __FUNCTION__, filename);
-    }
+    char val[2] = {(char)('A' + aid), 0};
+    set_ci_input_str(ci, val);
 }
 
 bool set_ci_input_str(int ci, const char *val) {
