@@ -2048,6 +2048,95 @@ int test_ddci_pick_free_pair() {
 
 // CAPMT lists the PMT's own pids verbatim: shadows already carry
 // ddci pids, so mappings must not rewrite them a second time.
+int test_capmt_lists_pmt_pids() {
+    ddci_device_t d0 = {};
+    adapter ad = {}, a0 = {};
+    for (int i = 0; i < MAX_ADAPTERS; i++)
+        a[static_cast<size_t>(i)] = nullptr;
+    create_adapter(&ad, 8);
+    create_adapter(&a0, 0);
+    memset(ddci_devices, 0, sizeof(ddci_devices));
+    d0.id = 0;
+    d0.enabled = 1;
+    d0.max_channels = 2;
+    ddci_devices[0] = &d0;
+    SPMT *pmt = create_pmt(8, 600, 601, 602, 0x100, 0x100);
+
+    add_pid_mapping_table(9, 601, 999, &d0, 0);
+    add_pid_mapping_table(9, 256, 999, &d0, 0);
+    ASSERT(add_pid_mapping_table(8, 601, pmt->id, &d0, 0) == 602,
+           "video collides up");
+    ASSERT(add_pid_mapping_table(8, 602, pmt->id, &d0, 0) == 603,
+           "audio collides up");
+    ASSERT(add_pid_mapping_table(8, 256, pmt->id, &d0, 0) == 257,
+           "ECM collides up");
+    memset(&d0.pmt, -1, sizeof(d0.pmt));
+    d0.pmt[0].id = pmt->id;
+
+    uint8_t out[1024];
+    int n = CAPMT_add_PMT(out, sizeof(out), pmt, CA_PMT_CMD_ID_OK_DESCRAMBLING,
+                          0, 0);
+    ASSERT(n == 24, "two entries of 12 bytes");
+    ASSERT(out[0] == 2, "video type first");
+    ASSERT(((out[1] << 8) | out[2]) == 601, "video pid verbatim");
+    int l1 = (out[3] << 8) | out[4];
+    ASSERT(out[5] == CA_PMT_CMD_ID_OK_DESCRAMBLING, "cmd id");
+    ASSERT(out[6] == 0x09, "CA descriptor tag");
+    ASSERT(((out[10] << 8) | out[11]) == 0x100, "ECM pid verbatim");
+    int o2 = 5 + l1;
+    ASSERT(out[o2] == 6, "audio type second");
+    ASSERT(((out[o2 + 1] << 8) | out[o2 + 2]) == 602, "audio pid verbatim");
+
+    ddci_devices[0] = nullptr;
+    a[0] = nullptr;
+    a[8] = nullptr;
+    return 0;
+}
+
+int test_dvbca_ci_adapter_no_routing() {
+    SPMT *pmt0;
+    adapter ad = {};
+    ca_device_t dev;
+    memset(&dev, 0, sizeof(dev));
+    for (int i = 0; i < MAX_ADAPTERS; i++) {
+        a[static_cast<size_t>(i)] = nullptr;
+        ca_devices[i] = nullptr;
+    }
+    create_adapter(&ad, 8);
+    pmt0 = create_pmt(8, 600, 601, 602, 0x100, 0x100);
+    dev.id = 8;
+    dev.fd = -1;
+    dev.state = CA_STATE_INITIALIZED;
+    dev.linked_adapter = 7;
+    dev.max_ca_pmt = 1;
+    dev.capmt[0].pmt_id = PMT_INVALID;
+    for (int &id : dev.capmt[0].other_id)
+        id = PMT_INVALID;
+    ca_devices[8] = &dev;
+    // Same slot 0 the global dvbca_id points at in tests.
+    int dvbca_id = add_ca(&dvbca);
+    add_caid_mask(dvbca_id, 8, 0x100, 0xFFFF);
+    opts.enigma = 1;
+
+    // CI adapters drive their own stack without moving the tsmux link.
+    ad.type = ADAPTER_CI;
+    // rc 1 proves send attempted: an empty table cannot decline, and
+    // the failure is only the missing CA session in the fixture.
+    ASSERT(dvbca.ca_add_pmt(&ad, pmt0, 0) == 1, "CI add reaches send");
+    ASSERT(dev.linked_adapter == 7, "CI adapter does not steal the link");
+
+    // Live adapters still route the CI to their tuner.
+    ad.type = ADAPTER_DVB;
+    ASSERT(dvbca.ca_add_pmt(&ad, pmt0, 0) == 1, "live add reaches send");
+    ASSERT(dev.linked_adapter == 8, "live adapter moves the link");
+
+    opts.enigma = 0;
+    del_ca(&dvbca);
+    ca_devices[8] = nullptr;
+    a[8] = nullptr;
+    return 0;
+}
+
 extern void set_disable(int i, bool v);
 
 int test_ddci_pick_free_slot() {
@@ -2381,6 +2470,29 @@ int test_ddci_two_loopbacks_own_distinct_slots() {
     return 0;
 }
 
+int test_ddci_pvr_pick() {
+    ASSERT(ca_enigma_pvr_pick("A B PVR DVR\n") == "PVR", "PVR preferred");
+    ASSERT(ca_enigma_pvr_pick("A B DVR\n") == "DVR", "DVR fallback");
+    ASSERT(ca_enigma_pvr_pick("A B\n").empty(), "tuner-only offers nothing");
+    ASSERT(ca_enigma_pvr_pick("A DVR0\n").empty(), "DVR0-only stays direct");
+    ASSERT(ca_enigma_pvr_pick("APVR\n").empty(), "substring rejected");
+    ASSERT(ca_enigma_pvr_pick("").empty(), "empty offers nothing");
+    return 0;
+}
+
+int test_ddci_tsclk_pick() {
+    ASSERT(ca_tsclk_pick("normal high extra_high\n") == "high",
+           "high wins over extra_high");
+    ASSERT(ca_tsclk_pick("normal high\n") == "high", "high wins");
+    ASSERT(ca_tsclk_pick("normal\n").empty(), "normal offers nothing");
+    ASSERT(ca_tsclk_pick("normal extra_high\n").empty(),
+           "extra_high alone offers nothing");
+    ASSERT(ca_tsclk_pick("highest\n").empty(), "prefix match rejected");
+    ASSERT(ca_tsclk_pick("xhigh\n").empty(), "suffix match rejected");
+    ASSERT(ca_tsclk_pick("").empty(), "empty offers nothing");
+    return 0;
+}
+
 int test_ddci_output_shed_drains_demux_and_fifo() {
     ddci_device_t d = {};
     adapter ad2 = {};
@@ -2531,6 +2643,12 @@ int main() {
               "testing tune shed drains demux and fifo counted");
     TEST_FUNC(test_ddci_push_kick_criteria(),
               "testing stall-only kick criteria");
+    TEST_FUNC(test_ddci_tsclk_pick(), "testing tsclk choice pick");
+    TEST_FUNC(test_ddci_pvr_pick(), "testing PVR input pick");
+    TEST_FUNC(test_capmt_lists_pmt_pids(),
+              "testing CAPMT lists PMT pids verbatim");
+    TEST_FUNC(test_dvbca_ci_adapter_no_routing(),
+              "testing CI adapters skip tsmux routing");
     pmts.destroy_all();
     filters.destroy_all();
     fflush(stdout);
