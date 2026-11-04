@@ -171,17 +171,102 @@ void *get_var_address(char *var, float *multiplier, int *type, void *storage,
 }
 
 int escape_json_string(char *dest, int dl, char *src, int sl) {
-    int i, j = 1;
-    if (dl < 2)
-        LOG_AND_RETURN(0, "%s: dl %d < 2 for %s", __FUNCTION__, dl, src);
+    if (dl < 3) {
+        if (dl > 0)
+            dest[0] = 0;
+        LOG_AND_RETURN(0, "%s: dl %d < 3 for %.*s", __FUNCTION__, dl,
+                       sl > 0 ? sl : 0, src ? src : "");
+    }
 
+    int j = 1;
+    const int limit = dl - 2; // reserve space for closing '"' and NUL
     dest[0] = '"';
-    for (i = 0; (i < sl) && (j < dl - 1); i++) {
+    for (int i = 0; i < sl; i++) {
         unsigned char c = (unsigned char)src[i];
-        if (c >= 32)
-            dest[j++] = src[i];
-        else
-            strlcatf(dest, sl, j, "%%x%02X", c);
+        char esc = 0;
+        switch (c) {
+        case '"':
+            esc = '"';
+            break;
+        case '\\':
+            esc = '\\';
+            break;
+        case '\b':
+            esc = 'b';
+            break;
+        case '\f':
+            esc = 'f';
+            break;
+        case '\n':
+            esc = 'n';
+            break;
+        case '\r':
+            esc = 'r';
+            break;
+        case '\t':
+            esc = 't';
+            break;
+        default:
+            break;
+        }
+        if (esc) {
+            if (j + 2 > limit)
+                break;
+            dest[j++] = '\\';
+            dest[j++] = esc;
+        } else if (c < 0x20 || c == 0x7F) {
+            if (j + 6 > limit)
+                break;
+            static const char hex[] = "0123456789ABCDEF";
+            dest[j++] = '\\';
+            dest[j++] = 'u';
+            dest[j++] = '0';
+            dest[j++] = '0';
+            dest[j++] = hex[(c >> 4) & 0x0F];
+            dest[j++] = hex[c & 0x0F];
+        } else if (c < 0x80) {
+            if (j + 1 > limit)
+                break;
+            dest[j++] = (char)c;
+        } else {
+            int seq_len = 0;
+            if ((c & 0xE0) == 0xC0 && c >= 0xC2)
+                seq_len = 2;
+            else if ((c & 0xF0) == 0xE0)
+                seq_len = 3;
+            else if ((c & 0xF8) == 0xF0 && c <= 0xF4)
+                seq_len = 4;
+
+            bool valid = (seq_len > 0 && i + seq_len <= sl);
+            if (valid) {
+                for (int k = 1; k < seq_len; ++k) {
+                    if (((unsigned char)src[i + k] & 0xC0) != 0x80)
+                        valid = false;
+                }
+                unsigned char b1 =
+                    (seq_len > 1) ? (unsigned char)src[i + 1] : 0;
+                if (seq_len == 3 &&
+                    ((c == 0xE0 && b1 < 0xA0) || (c == 0xED && b1 >= 0xA0)))
+                    valid = false;
+                if (seq_len == 4 &&
+                    ((c == 0xF0 && b1 < 0x90) || (c == 0xF4 && b1 >= 0x90)))
+                    valid = false;
+            }
+            if (valid) {
+                if (j + seq_len > limit)
+                    break;
+                for (int k = 0; k < seq_len; ++k)
+                    dest[j++] = src[i + k];
+                i += seq_len - 1;
+            } else {
+                // Replace invalid UTF-8 byte with U+FFFD.
+                if (j + 3 > limit)
+                    break;
+                dest[j++] = '\xEF';
+                dest[j++] = '\xBF';
+                dest[j++] = '\xBD';
+            }
+        }
     }
     dest[j++] = '"';
     dest[j] = 0;
