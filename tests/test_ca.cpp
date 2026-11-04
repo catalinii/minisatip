@@ -74,6 +74,8 @@ int ca_read_apdu(ca_session_t *session, uint8_t *buf, int buf_len);
 int ca_read_tpdu(int socket, void *buf, int buf_len, sockets *ss, int *rb);
 int ca_read_enigma(int socket, void *buf, int len, sockets *ss, int *rb);
 int get_enabled_pmts_for_ca(ca_device_t *d);
+int APP_MMI_handler(ca_session_t *session, int resource, uint8_t *buffer,
+                    int len);
 
 ca_device_t d;
 
@@ -2399,6 +2401,323 @@ int test_capmt_zap_back_keeps_places() {
     return 0;
 }
 
+// Short or truncated MMI APDUs must not read past the buffer or send replies;
+// choice_nb bounds the number of items read when != 0xFF.
+int test_mmi_short_apdus_and_choice_bounds() {
+    ca_clear_mmi_messages();
+    packing_cam_open();
+    ca_session_t *s = &pcam->dev.sessions[1];
+    uint8_t drain[256];
+
+    // 0-byte and 1-byte buffers on heap so ASan catches any out-of-bounds read.
+    for (int tag :
+         {TAG_DISPLAY_CONTROL, TAG_ENQUIRY, TAG_MENU_LAST, TAG_LIST_LAST}) {
+        std::vector<uint8_t> empty;
+        APP_MMI_handler(s, tag, empty.data(), 0);
+        ASSERT(read(pcam->fds[0], drain, sizeof(drain)) < 0,
+               "empty MMI APDU sends no reply");
+    }
+    for (int tag : {TAG_DISPLAY_CONTROL, TAG_ENQUIRY}) {
+        std::vector<uint8_t> one = {0x01};
+        APP_MMI_handler(s, tag, one.data(), 1);
+        ASSERT(read(pcam->fds[0], drain, sizeof(drain)) < 0,
+               "1-byte display_control/enquiry sends no reply");
+    }
+
+    // Truncated 0x82 length at the end of a menu item must not read past max.
+    std::vector<uint8_t> trunc_len = {0xFF, 0x9F, 0x88, 0x03, 0x82, 0x00};
+    APP_MMI_handler(s, TAG_MENU_LAST, trunc_len.data(),
+                    static_cast<int>(trunc_len.size()));
+    ssize_t trunc_n = read(pcam->fds[0], drain, sizeof(drain));
+    ASSERT(trunc_n > 0, "truncated menu still closes the MMI session");
+    while (read(pcam->fds[0], drain, sizeof(drain)) > 0) {
+    }
+    ASSERT(get_json_mmi().find("\"messages\":[]") != std::string::npos,
+           "truncated menu with <3 header lines must not be recorded");
+
+    // choice_nb = 1 means 4 text lines (title, subtitle, bottom, 1 choice);
+    // test 0x81 long-form length and ensure trailing 0x82 header is ignored.
+    std::vector<uint8_t> menu = {1};
+    for (int i = 0; i < 3; i++) {
+        menu.insert(menu.end(), {0x9F, 0x88, 0x03, 0x01, 'A'});
+    }
+    menu.insert(menu.end(), {0x9F, 0x88, 0x03, 0x81, 0x01, 'B'});
+    menu.insert(menu.end(), {0x9F, 0x88, 0x03, 0x82});
+    APP_MMI_handler(s, TAG_MENU_LAST, menu.data(),
+                    static_cast<int>(menu.size()));
+    ssize_t menu_n = read(pcam->fds[0], drain, sizeof(drain));
+    ASSERT(menu_n > 0, "valid choice_nb=1 menu sends close reply");
+    while (read(pcam->fds[0], drain, sizeof(drain)) > 0) {
+    }
+    std::string menu_json = get_json_mmi();
+    ASSERT(menu_json.find("\"title\":\"A\",\"subtitle\":\"A\",\"bottom\":\"A\","
+                          "\"items\":[\"B\"]") != std::string::npos,
+           "choice_nb=1 with 0x81 item must record 1 item and ignore trailer");
+
+    // Outer ca_read_apdu length exceeding SPDU buffer must be dropped safely.
+    sockets cs{};
+    cs.sid = pcam->dev.id;
+    unsigned char open_mmi[6] = {0x91, 0x04, 0x00, 0x40, 0x00, 0x41};
+    cs.buf = open_mmi;
+    cs.rlen = sizeof(open_mmi);
+    ASSERT_EQUAL(ca_read(&cs), 0, "open MMI session parsed");
+    while (read(pcam->fds[0], drain, sizeof(drain)) > 0) {
+    }
+    std::vector<uint8_t> bad_apdu = {0x90, 0x02, 0x00, 0x01, 0x9F, 0x88,
+                                     0x07, 0x81, 0xC8, 0x00, 0x04, 'P',
+                                     'I',  'N'};
+    cs.buf = bad_apdu.data();
+    cs.rlen = static_cast<int>(bad_apdu.size());
+    ASSERT_EQUAL(ca_read(&cs), 0, "inflated outer APDU handled");
+    ASSERT(read(pcam->fds[0], drain, sizeof(drain)) < 0,
+           "inflated outer APDU must be dropped before APP_MMI_handler");
+    ASSERT(get_json_mmi().find("\"last_seq\":1") != std::string::npos,
+           "inflated outer APDU must not record an MMI message");
+
+    packing_cam_close();
+    ca_clear_mmi_messages();
+    return 0;
+}
+
+static void append_mmi_line(std::vector<uint8_t> &apdu,
+                            std::initializer_list<uint8_t> bytes,
+                            uint32_t tag = TAG_TEXT_LAST) {
+    apdu.push_back(static_cast<uint8_t>((tag >> 16) & 0xFF));
+    apdu.push_back(static_cast<uint8_t>((tag >> 8) & 0xFF));
+    apdu.push_back(static_cast<uint8_t>(tag & 0xFF));
+    apdu.push_back(static_cast<uint8_t>(bytes.size()));
+    apdu.insert(apdu.end(), bytes.begin(), bytes.end());
+}
+
+static std::vector<uint8_t> drain_cam_pipe(int fd) {
+    std::vector<uint8_t> out;
+    uint8_t buf[256];
+    ssize_t n;
+    while ((n = read(fd, buf, sizeof(buf))) > 0) {
+        out.insert(out.end(), buf, buf + n);
+    }
+    return out;
+}
+
+static bool has_apdu_tag(const std::vector<uint8_t> &buf, uint32_t tag) {
+    uint8_t t0 = static_cast<uint8_t>((tag >> 16) & 0xFF);
+    uint8_t t1 = static_cast<uint8_t>((tag >> 8) & 0xFF);
+    uint8_t t2 = static_cast<uint8_t>(tag & 0xFF);
+    for (size_t i = 0; i + 2 < buf.size(); ++i) {
+        if (buf[i] == t0 && buf[i + 1] == t1 && buf[i + 2] == t2)
+            return true;
+    }
+    return false;
+}
+
+int test_mmi_json_empty() {
+    ca_clear_mmi_messages();
+    std::string json = get_json_mmi();
+    const char *expected =
+        "{\n\"last_changed\":0,\n\"last_seq\":0,\n\"messages\":[]\n}\n";
+    ASSERT(json == expected, "empty get_json_mmi() output mismatch");
+    return 0;
+}
+
+int test_mmi_enquiry_auto_answered_and_manual() {
+    ca_clear_mmi_messages();
+    packing_cam_open();
+    ca_session_t *s = &pcam->dev.sessions[1];
+    s->session_number = 3;
+
+    // Empty pin_str with answer_length == 0 must not send TAG_ANSWER.
+    pcam->dev.pin_str[0] = '\0';
+    std::vector<uint8_t> enq0 = {0x00, 0, 'I', 'n', 'f', 'o'};
+    APP_MMI_handler(s, TAG_ENQUIRY, enq0.data(),
+                    static_cast<int>(enq0.size()));
+    std::vector<uint8_t> r0 = drain_cam_pipe(pcam->fds[0]);
+    ASSERT(!has_apdu_tag(r0, TAG_ANSWER) && has_apdu_tag(r0, TAG_CLOSE_MMI),
+           "0-length manual enquiry must send CLOSE without ANSWER");
+
+    // Empty pin_str with answer_length == 4 must not send TAG_ANSWER.
+    std::vector<uint8_t> enq1 = {0x01, 4, 'E', 'n', 't', 'e', 'r', ' ',
+                                 'P',  'I', 'N', ':', ' ', '"', '1', '"'};
+    APP_MMI_handler(s, TAG_ENQUIRY, enq1.data(),
+                    static_cast<int>(enq1.size()));
+    std::vector<uint8_t> r1 = drain_cam_pipe(pcam->fds[0]);
+    ASSERT(!has_apdu_tag(r1, TAG_ANSWER) && has_apdu_tag(r1, TAG_CLOSE_MMI),
+           "manual enquiry must send CLOSE without ANSWER");
+
+    // Configured pin_str with mismatched answer_length == 6 -> manual.
+    strcpy(pcam->dev.pin_str, "9876");
+    std::vector<uint8_t> enq_mis = {0x01, 6, 'P', 'I', 'N', '6'};
+    APP_MMI_handler(s, TAG_ENQUIRY, enq_mis.data(),
+                    static_cast<int>(enq_mis.size()));
+    std::vector<uint8_t> r2 = drain_cam_pipe(pcam->fds[0]);
+    ASSERT(!has_apdu_tag(r2, TAG_ANSWER) && has_apdu_tag(r2, TAG_CLOSE_MMI),
+           "mismatched PIN length must not send ANSWER");
+
+    // Configured pin_str matching answer_length == 4 -> sends TAG_ANSWER.
+    std::vector<uint8_t> enq2 = {0x00, 4, 'P', 'I', 'N'};
+    APP_MMI_handler(s, TAG_ENQUIRY, enq2.data(),
+                    static_cast<int>(enq2.size()));
+    std::vector<uint8_t> r3 = drain_cam_pipe(pcam->fds[0]);
+    ASSERT(has_apdu_tag(r3, TAG_ANSWER) && has_apdu_tag(r3, TAG_CLOSE_MMI),
+           "matching PIN length must send both ANSWER and CLOSE");
+
+    std::string json = get_json_mmi();
+    ASSERT(json.find("\"last_seq\":4") != std::string::npos,
+           "last_seq should be 4 after four enquiries");
+    ASSERT(json.find("\"seq\":1") != std::string::npos &&
+               json.find("\"blind\":0,\"auto_answered\":false,"
+                         "\"text\":\"Info\"") != std::string::npos,
+           "0-length enquiry with empty pin_str must have auto_answered:false");
+    ASSERT(json.find("\"seq\":2") != std::string::npos &&
+               json.find("\"blind\":1,\"auto_answered\":false,"
+                         "\"text\":\"Enter PIN: \\\"1\\\"\"") !=
+                   std::string::npos,
+           "second enquiry should have auto_answered:false and escaped quotes");
+    ASSERT(json.find("\"seq\":3") != std::string::npos &&
+               json.find("\"blind\":1,\"auto_answered\":false,"
+                         "\"text\":\"PIN6\"") != std::string::npos,
+           "mismatched PIN length should have auto_answered:false");
+    ASSERT(json.find("\"seq\":4") != std::string::npos &&
+               json.find("\"blind\":0,\"auto_answered\":true,"
+                         "\"text\":\"PIN\"") != std::string::npos,
+           "fourth enquiry should have auto_answered:true");
+    ASSERT(json.find("9876") == std::string::npos &&
+               json.find("answer_length") == std::string::npos,
+           "PIN value and answer_length oracle must never appear in /mmi.json");
+
+    packing_cam_close();
+    ca_clear_mmi_messages();
+    return 0;
+}
+
+int test_mmi_menu_and_list_charset_and_0xff() {
+    ca_clear_mmi_messages();
+    packing_cam_open();
+    ca_session_t *s = &pcam->dev.sessions[1];
+    s->session_number = 2;
+
+    // Menu with choice_nb = 0xFF, split title (TEXT_MORE + TEXT_LAST),
+    // Latin-1 high bytes, 0x8A CR/LF + 0x86/0x87 emphasis, and >255-byte cap.
+    std::vector<uint8_t> menu = {0xFF};
+    append_mmi_line(menu, {0x10, 0x00, 0x01, 'M', 'e'}, TAG_TEXT_MORE);
+    append_mmi_line(menu, {'n', 0xFC}, TAG_TEXT_LAST); // joined -> "Menü"
+    append_mmi_line(menu, {'S', 'u', 'b'});
+    append_mmi_line(menu, {'O', 'K'});
+    append_mmi_line(menu, {'T', 'e', 's', 't', ' ', 0xE4, 0xF6, 0xFC});
+    append_mmi_line(menu,
+                    {0x01, 0x86, 'L', 'i', 'n', 'e', '1', 0x87, 0x8A, 'L', '2'});
+    // Overlong item: 200 'X' via 0x81 length in TEXT_MORE + 100 'X' in TEXT_LAST.
+    menu.insert(menu.end(), {0x9F, 0x88, 0x04, 0x81, 200});
+    menu.insert(menu.end(), 200, 'X');
+    menu.insert(menu.end(), {0x9F, 0x88, 0x03, 100});
+    menu.insert(menu.end(), 100, 'X');
+    menu.insert(menu.end(), {0x00, 0x00}); // 2 trailing padding bytes
+    APP_MMI_handler(s, TAG_MENU_LAST, menu.data(),
+                    static_cast<int>(menu.size()));
+    drain_cam_pipe(pcam->fds[0]);
+
+    // List with choice_nb = 1 plus trailing bytes after the 1st item.
+    std::vector<uint8_t> list_apdu = {0x01};
+    append_mmi_line(list_apdu, {'L', 'i', 's', 't'});
+    append_mmi_line(list_apdu, {'S', '2'});
+    append_mmi_line(list_apdu, {'B', '2'});
+    append_mmi_line(list_apdu, {'O', 'n', 'l', 'y'});
+    append_mmi_line(list_apdu, {'E', 'x', 't', 'r', 'a'});
+    APP_MMI_handler(s, TAG_LIST_LAST, list_apdu.data(),
+                    static_cast<int>(list_apdu.size()));
+    drain_cam_pipe(pcam->fds[0]);
+
+    std::string json = get_json_mmi();
+    std::string x255(MAX_MMI_TEXT_LEN, 'X');
+    std::string x256(MAX_MMI_TEXT_LEN + 1, 'X');
+    ASSERT(json.find("\"type\":\"menu\",\"title\":\"Men\xC3\xBC\","
+                     "\"subtitle\":\"Sub\",\"bottom\":\"OK\","
+                     "\"items\":[\"Test \xC3\xA4\xC3\xB6\xC3\xBC\","
+                     "\"Line1\\nL2\",\"" +
+                     x255 + "\"]") != std::string::npos,
+           "menu should join TEXT_MORE+TEXT_LAST, strip C0/0x86/0x87, map 0x8A "
+           "to \\n, and cap joined item at 255 bytes");
+    ASSERT(json.find(x256) == std::string::npos,
+           "joined item must not exceed MAX_MMI_TEXT_LEN");
+    ASSERT(json.find("\"type\":\"list\",\"title\":\"List\","
+                     "\"subtitle\":\"S2\",\"bottom\":\"B2\","
+                     "\"items\":[\"Only\"]") != std::string::npos,
+           "list with choice_nb=1 must stop after 1 item and ignore extra");
+    ASSERT(json.find("Extra") == std::string::npos,
+           "trailing item past choice_nb must not be recorded");
+
+    packing_cam_close();
+    ca_clear_mmi_messages();
+    return 0;
+}
+
+int test_mmi_bad_text_tag_rejected() {
+    ca_clear_mmi_messages();
+    packing_cam_open();
+    ca_session_t *s = &pcam->dev.sessions[1];
+
+    std::vector<uint8_t> bad_menu = {0x01};
+    append_mmi_line(bad_menu, {'T'});
+    append_mmi_line(bad_menu, {'S'}, 0x9F8899); // invalid text tag
+    append_mmi_line(bad_menu, {'B'});
+    append_mmi_line(bad_menu, {'I'});
+    APP_MMI_handler(s, TAG_MENU_LAST, bad_menu.data(),
+                    static_cast<int>(bad_menu.size()));
+    drain_cam_pipe(pcam->fds[0]);
+
+    std::string json = get_json_mmi();
+    ASSERT(json.find("\"messages\":[]") != std::string::npos,
+           "menu with invalid text tag must not be recorded");
+
+    packing_cam_close();
+    ca_clear_mmi_messages();
+    return 0;
+}
+
+int test_mmi_ring_eviction_and_teardown() {
+    ca_clear_mmi_messages();
+    packing_cam_open();
+    ca_session_t *s = &pcam->dev.sessions[1];
+
+    for (int i = 1; i <= 18; ++i) {
+        char label[16];
+        int n = snprintf(label, sizeof(label), "Prompt-%d", i);
+        std::vector<uint8_t> enq = {0x00, 4};
+        enq.insert(enq.end(), label, label + n);
+        APP_MMI_handler(s, TAG_ENQUIRY, enq.data(),
+                        static_cast<int>(enq.size()));
+        drain_cam_pipe(pcam->fds[0]);
+    }
+
+    std::string json = get_json_mmi();
+    ASSERT(json.find("\"last_seq\":18") != std::string::npos,
+           "last_seq should be 18 after 18 messages");
+    ASSERT(json.find("\"Prompt-1\"") == std::string::npos &&
+               json.find("\"Prompt-2\"") == std::string::npos,
+           "oldest 2 messages should be evicted when ring cap is 16");
+    ASSERT(json.find("\"seq\":3") != std::string::npos &&
+               json.find("\"Prompt-3\"") != std::string::npos &&
+               json.find("\"seq\":18") != std::string::npos &&
+               json.find("\"Prompt-18\"") != std::string::npos,
+           "messages 3..18 should remain in ring buffer");
+
+    // Teardown clears messages for this CA slot and advances last_seq once.
+    ca_teardown(&pcam->dev);
+    std::string after = get_json_mmi();
+    ASSERT(after.find("\"last_seq\":19") != std::string::npos,
+           "ca_teardown should bump last_seq when removing slot messages");
+    ASSERT(after.find("\"messages\":[]") != std::string::npos,
+           "ca_teardown should clear slot messages");
+
+    // Second teardown on an empty ring must not bump last_seq.
+    ca_teardown(&pcam->dev);
+    ASSERT(get_json_mmi().find("\"last_seq\":19") != std::string::npos,
+           "ca_teardown on empty ring must not bump last_seq");
+
+    packing_cam_close();
+    ca_clear_mmi_messages();
+    return 0;
+}
+
 int main() {
     opts.log = 1;
     opts.debug = 255;
@@ -2504,6 +2823,17 @@ int main() {
     TEST_FUNC(test_ca_read_resets_fails(), "testing ca_read sign of life");
     TEST_FUNC(test_send_skips_stale_set(), "testing stale mask-set skip");
     TEST_FUNC(test_ca_read_bad_session(), "testing bad session drop");
+    TEST_FUNC(test_mmi_short_apdus_and_choice_bounds(),
+              "testing MMI short APDU and choice_nb bounds");
+    TEST_FUNC(test_mmi_json_empty(), "testing empty /mmi.json output");
+    TEST_FUNC(test_mmi_enquiry_auto_answered_and_manual(),
+              "testing MMI enquiry recording and PIN privacy");
+    TEST_FUNC(test_mmi_menu_and_list_charset_and_0xff(),
+              "testing MMI menu/list charset decoding and choice_nb=0xFF");
+    TEST_FUNC(test_mmi_bad_text_tag_rejected(),
+              "testing MMI menu with invalid text tag is rejected");
+    TEST_FUNC(test_mmi_ring_eviction_and_teardown(),
+              "testing MMI ring buffer eviction and ca_teardown clear");
     free_all_adapters();
     pmts.destroy_all();
     fflush(stdout);

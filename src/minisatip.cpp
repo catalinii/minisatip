@@ -60,9 +60,7 @@
 #include "satipc.h"
 #endif
 
-#ifndef DISABLE_DVBCA
 #include "ca.h"
-#endif
 
 #ifndef DISABLE_DDCI
 #include "ddci.h"
@@ -1619,6 +1617,7 @@ int read_http(sockets *s) {
         http_response(
             s, 200,
             (char *)("Content-Type: application/json; charset=utf-8\r\n"
+                     "X-Content-Type-Options: nosniff\r\n"
                      "Connection: close\r\n"
                      "Access-Control-Allow-Origin: *"),
             json, 0, len);
@@ -1633,10 +1632,25 @@ int read_http(sockets *s) {
         http_response(
             s, 200,
             (char *)("Content-Type: application/json; charset=utf-8\r\n"
+                     "X-Content-Type-Options: nosniff\r\n"
                      "Connection: close\r\n"
                      "Access-Control-Allow-Origin: *"),
             json, 0, len);
         free(json);
+        return 0;
+    }
+
+    // Shares /state.json's unauthenticated LAN/CORS posture; PIN value and
+    // answer_length are never included in get_json_mmi().
+    if (url_sv == "/mmi.json") {
+        std::string json = get_json_mmi();
+        http_response(
+            s, 200,
+            (char *)("Content-Type: application/json; charset=utf-8\r\n"
+                     "X-Content-Type-Options: nosniff\r\n"
+                     "Connection: close\r\n"
+                     "Access-Control-Allow-Origin: *"),
+            json.data(), 0, static_cast<int>(json.size()));
         return 0;
     }
 

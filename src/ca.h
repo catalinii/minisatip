@@ -1,5 +1,17 @@
 #ifndef CA_H
 #define CA_H
+#include <string>
+
+#define MAX_MMI_ITEMS 32
+#define MAX_MMI_MESSAGES 16
+#define MAX_MMI_TEXT_LEN 255
+
+#ifdef DISABLE_DVBCA
+static inline std::string get_json_mmi() {
+    return "{\n\"last_changed\":0,\n\"last_seq\":0,\n\"messages\":[]\n}\n";
+}
+static inline void ca_clear_mmi_messages() {}
+#else
 #include "adapter.h"
 #include "pmt.h"
 #include <openssl/evp.h>
@@ -68,6 +80,8 @@
 #define TAG_CLOSE_MMI 0x9f8800
 #define TAG_DISPLAY_CONTROL 0x9f8801
 #define TAG_DISPLAY_REPLY 0x9f8802
+#define TAG_TEXT_LAST 0x9f8803
+#define TAG_TEXT_MORE 0x9f8804
 #define TAG_ENQUIRY 0x9f8807
 #define TAG_ANSWER 0x9f8808
 #define TAG_MENU_LAST 0x9f8809
@@ -300,5 +314,9 @@ void ca_cmd_watchdog(ca_device_t *d, int64_t now);
 
 struct struct_sockets;
 int ca_close(struct struct_sockets *s);
+// Serialize recent MMI messages; last_seq also advances when a slot is cleared.
+std::string get_json_mmi();
+void ca_clear_mmi_messages();
 
+#endif // DISABLE_DVBCA
 #endif
