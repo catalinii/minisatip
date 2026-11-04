@@ -1215,6 +1215,24 @@ std::string ca_tsclk_pick(const std::string &choices) {
     return "";
 }
 
+std::string ca_enigma_pvr_pick(const std::string &choices) {
+    if (ca_choices_has(choices, "PVR"))
+        return "PVR";
+    if (ca_choices_has(choices, "DVR"))
+        return "DVR";
+    return "";
+}
+
+// Whole-word PVR/DVR only: route programs bare values,
+// so DVR0-only drivers keep direct-tuner CI.
+bool ca_enigma_slot_has_pvr(int slot) {
+    if (!opts.enigma || slot < 0)
+        return false;
+    char path[64];
+    snprintf(path, sizeof(path), "/proc/stb/tsmux/ci%d_input_choices", slot);
+    return !ca_enigma_pvr_pick(ca_read_file(path)).empty();
+}
+
 // Raises the slot clock to high, saving the prior value;
 // silent no-op when already high or the knob is missing.
 static void ca_enigma_set_tsclk(ca_device_t *c) {
@@ -1258,23 +1276,19 @@ void ca_enigma_route_pvr(ca_device_t *c) {
     }
     char path[64];
     snprintf(path, sizeof(path), "/proc/stb/tsmux/ci%d_input_choices", slot);
-    std::string choices = ca_read_file(path);
-    const char *input = nullptr;
-    if (ca_choices_has(choices, "PVR"))
-        input = "PVR";
-    else if (ca_choices_has(choices, "DVR"))
-        input = "DVR";
-    if (!input) {
+    std::string input = ca_enigma_pvr_pick(ca_read_file(path));
+    if (input.empty()) {
         LOG("CA %d: CI slot %d offers no PVR/DVR input, leaving routing", c->id,
             slot);
         return;
     }
-    if (!set_ci_input_str(slot, input)) {
-        LOG("CA %d: CI slot %d input route to %s failed", c->id, slot, input);
+    if (!set_ci_input_str(slot, input.c_str())) {
+        LOG("CA %d: CI slot %d input route to %s failed", c->id, slot,
+            input.c_str());
         return;
     }
     ca_enigma_set_tsclk(c);
-    LOG("CA %d: CI slot %d input routed to %s", c->id, slot, input);
+    LOG("CA %d: CI slot %d input routed to %s", c->id, slot, input.c_str());
 }
 
 void set_tuner_input(int ci, int aid) {

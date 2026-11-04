@@ -271,6 +271,10 @@ bool set_ci_input_str(int ci, const char *val);
 void ca_enigma_route_pvr(ca_device_t *c);
 // Highest tsclk in a choices file; empty when none qualifies.
 std::string ca_tsclk_pick(const std::string &choices);
+// Loopback input the choices offer (PVR preferred); empty when neither.
+std::string ca_enigma_pvr_pick(const std::string &choices);
+// True when the slot can feed the CI from the loopback push.
+bool ca_enigma_slot_has_pvr(int slot);
 ca_device_t *alloc_ca_device();
 int ca_init(ca_device_t *d);
 void dvbca_init();
