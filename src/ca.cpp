@@ -2923,12 +2923,36 @@ int ca_app_mmi_close(ca_session_t *session, uint8_t answ_id) {
     return ca_write_apdu(session, TAG_CLOSE_MMI, &answ_id, 1);
 }
 
+// Bounds-checked ASN.1 length decoder; returns bytes consumed or -1.
+static int asn_1_decode_bounded(int *length, const uint8_t *buf,
+                                ptrdiff_t avail) {
+    *length = 0;
+    if (avail < 1)
+        return -1;
+    uint8_t field = buf[0];
+    if (field < 0x80) {
+        *length = field & 0x7f;
+        return 1;
+    }
+    if (field == 0x81 && avail >= 2) {
+        *length = buf[1];
+        return 2;
+    }
+    if (field == 0x82 && avail >= 3) {
+        *length = (buf[1] << 8) | buf[2];
+        return 3;
+    }
+    return -1;
+}
+
 int APP_MMI_handler(ca_session_t *session, int resource, uint8_t *buffer,
                     int len) {
     ca_device_t *d = session->ca;
     hexdump("Got MMI: ", buffer, len);
     switch (resource) {
     case TAG_DISPLAY_CONTROL: {
+        if (len < 2)
+            break;
         int cmd_id = buffer[0];
         int mmi_mode = buffer[1];
         if (cmd_id == MMI_DISPLAY_CONTROL_CMD_ID_SET_MMI_MODE) {
@@ -2943,6 +2967,8 @@ int APP_MMI_handler(ca_session_t *session, int resource, uint8_t *buffer,
         break;
     }
     case TAG_ENQUIRY: {
+        if (len < 2)
+            break;
 
         // extract the information
         uint8_t blind_answer = (buffer[0] & 0x01) ? 1 : 0;
@@ -2953,10 +2979,12 @@ int APP_MMI_handler(ca_session_t *session, int resource, uint8_t *buffer,
 
         snprintf(text_buf, sizeof(text_buf), "%.*s", len - 2, text);
 
-        LOG("MMI enquiry from CAM in CA %u:  %s (%s%u digits)", d->id, text_buf,
+        LOG("MMI enquiry from CAM in CA %u:  %s (%s%u digits)", d->id,
+            blind_answer ? "<redacted>" : text_buf,
             blind_answer ? "blind " : "", answer_length);
 
-        if (strlen((char *)d->pin_str) == answer_length) {
+        if (d->pin_str[0] != '\0' &&
+            strlen((char *)d->pin_str) == answer_length) {
             LOG("answering to PIN enquiry");
             ca_app_mmi_answ(session, MMI_ANSW_ID_ANSWER, (uint8_t *)d->pin_str,
                             answer_length);
@@ -2968,36 +2996,46 @@ int APP_MMI_handler(ca_session_t *session, int resource, uint8_t *buffer,
     }
     case TAG_LIST_LAST:
     case TAG_MENU_LAST: {
-        int i;
+        if (len < 1)
+            break;
         uint8_t *data = buffer;
         uint8_t *max = data + len;
-        if (data > max)
-            break;
-        int n = *data++;
-        if (n == 0xFF)
-            n = 0;
-        else
-            n++;
+        int choice_nb = *data++;
+        int max_items = (choice_nb == 0xFF)
+                            ? MAX_MMI_ITEMS
+                            : std::min<int>(choice_nb, MAX_MMI_ITEMS);
+        int max_lines = 3 + max_items;
         LOG("CA %d ======= MMI menu =======", d->id);
-        for (i = 0; i < (n + 3); ++i) {
-            int textlen;
-            if ((data + 3) > max)
+        for (int i = 0; i < max_lines && data < max;) {
+            int textlen = 0;
+            if (max - data < 4)
                 break;
+            int text_tag = (data[0] << 16) | (data[1] << 8) | data[2];
             DEBUGM("[%d] text tag: %02x %02x %02x", i, data[0], data[1],
                    data[2]);
+            if (text_tag != TAG_TEXT_LAST && text_tag != TAG_TEXT_MORE) {
+                LOG("CA %d unexpected MMI text tag: %06X", d->id, text_tag);
+                break;
+            }
             data += 3;
-            int llen = asn_1_decode(&textlen, data);
+            int llen = asn_1_decode_bounded(&textlen, data, max - data);
             if (llen < 0) {
-                LOG("CA %d asn_1_decode failed: %02X %02X %02X", d->id, data[0],
-                    data[1], data[2]);
+                if (max - data >= 3) {
+                    LOG("CA %d asn_1_decode failed: %02X %02X %02X", d->id,
+                        data[0], data[1], data[2]);
+                } else {
+                    LOG("CA %d asn_1_decode failed (truncated)", d->id);
+                }
                 break;
             }
             data += llen;
             DEBUGM("[%d] %d bytes text", i, textlen);
-            if ((data + textlen) > max)
+            if (max - data < textlen)
                 break;
             LOG("[UI %d] %.*s", i, textlen, data);
             data += textlen;
+            if (text_tag == TAG_TEXT_LAST)
+                ++i;
         }
         LOG("======================")
         ca_app_mmi_menu_answ(session, 0x01);
@@ -3492,11 +3530,25 @@ int ca_read_apdu(ca_session_t *session, uint8_t *buf, int buf_len) {
     int session_number = session->session_number;
     hexdump("APDU", buf, buf_len);
     while (i < buf_len) {
+        if (buf_len - i < 4) {
+            LOG("CA %d: truncated APDU header (%d bytes)", session->ca->id,
+                buf_len - i);
+            return 1;
+        }
         data = buf + i;
-        llen = asn_1_decode(&len, data + 3);
+        llen = asn_1_decode_bounded(&len, data + 3, buf_len - i - 3);
         if (llen < 0) {
-            LOG("Invalid APDU length %02X %02X %02X", data[3], data[4],
-                data[5]);
+            if (buf_len - i - 3 >= 3) {
+                LOG("Invalid APDU length %02X %02X %02X", data[3], data[4],
+                    data[5]);
+            } else {
+                LOG("Invalid APDU length (truncated)");
+            }
+            return 1;
+        }
+        if (len < 0 || len > buf_len - i - 3 - llen) {
+            LOG("CA %d: APDU length %d exceeds buffer (%d left), dropping",
+                session->ca->id, len, buf_len - i - 3 - llen);
             return 1;
         }
         tag = (data[0] << 16) | (data[1] << 8) | data[2];
@@ -3604,7 +3656,7 @@ int ca_read(sockets *s) {
         session = d->sessions + session_number - 1;
         if (session->handler.resource == 0) {
             LOG("CA %d: session %d is not registered", d->id, session_number)
-        } else {
+        } else if (s->rlen > i) {
             ca_read_apdu(session, data + i, s->rlen - i);
         }
         break;

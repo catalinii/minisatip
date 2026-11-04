@@ -74,6 +74,8 @@ int ca_read_apdu(ca_session_t *session, uint8_t *buf, int buf_len);
 int ca_read_tpdu(int socket, void *buf, int buf_len, sockets *ss, int *rb);
 int ca_read_enigma(int socket, void *buf, int len, sockets *ss, int *rb);
 int get_enabled_pmts_for_ca(ca_device_t *d);
+int APP_MMI_handler(ca_session_t *session, int resource, uint8_t *buffer,
+                    int len);
 
 ca_device_t d;
 
@@ -2399,6 +2401,74 @@ int test_capmt_zap_back_keeps_places() {
     return 0;
 }
 
+// Short or truncated MMI APDUs must not read past the buffer or send replies;
+// choice_nb bounds the number of items read when != 0xFF.
+int test_mmi_short_apdus_and_choice_bounds() {
+    packing_cam_open();
+    ca_session_t *s = &pcam->dev.sessions[1];
+    uint8_t drain[256];
+
+    // 0-byte and 1-byte buffers on heap so ASan catches any out-of-bounds read.
+    for (int tag :
+         {TAG_DISPLAY_CONTROL, TAG_ENQUIRY, TAG_MENU_LAST, TAG_LIST_LAST}) {
+        std::vector<uint8_t> empty;
+        APP_MMI_handler(s, tag, empty.data(), 0);
+        ASSERT(read(pcam->fds[0], drain, sizeof(drain)) < 0,
+               "empty MMI APDU sends no reply");
+    }
+    for (int tag : {TAG_DISPLAY_CONTROL, TAG_ENQUIRY}) {
+        std::vector<uint8_t> one = {0x01};
+        APP_MMI_handler(s, tag, one.data(), 1);
+        ASSERT(read(pcam->fds[0], drain, sizeof(drain)) < 0,
+               "1-byte display_control/enquiry sends no reply");
+    }
+
+    // Truncated 0x82 length at the end of a menu item must not read past max.
+    std::vector<uint8_t> trunc_len = {0xFF, 0x9F, 0x88, 0x03, 0x82, 0x00};
+    APP_MMI_handler(s, TAG_MENU_LAST, trunc_len.data(),
+                    static_cast<int>(trunc_len.size()));
+    ssize_t trunc_n = read(pcam->fds[0], drain, sizeof(drain));
+    ASSERT(trunc_n > 0, "truncated menu still closes the MMI session");
+    while (read(pcam->fds[0], drain, sizeof(drain)) > 0) {
+    }
+
+    // choice_nb = 1 means 4 text lines (title, subtitle, bottom, 1 choice);
+    // test 0x81 long-form length and ensure trailing 0x82 header is ignored.
+    std::vector<uint8_t> menu = {1};
+    for (int i = 0; i < 3; i++) {
+        menu.insert(menu.end(), {0x9F, 0x88, 0x03, 0x01, 'A'});
+    }
+    menu.insert(menu.end(), {0x9F, 0x88, 0x03, 0x81, 0x01, 'B'});
+    menu.insert(menu.end(), {0x9F, 0x88, 0x03, 0x82});
+    APP_MMI_handler(s, TAG_MENU_LAST, menu.data(),
+                    static_cast<int>(menu.size()));
+    ssize_t menu_n = read(pcam->fds[0], drain, sizeof(drain));
+    ASSERT(menu_n > 0, "valid choice_nb=1 menu sends close reply");
+    while (read(pcam->fds[0], drain, sizeof(drain)) > 0) {
+    }
+
+    // Outer ca_read_apdu length exceeding SPDU buffer must be dropped safely.
+    sockets cs{};
+    cs.sid = pcam->dev.id;
+    unsigned char open_mmi[6] = {0x91, 0x04, 0x00, 0x40, 0x00, 0x41};
+    cs.buf = open_mmi;
+    cs.rlen = sizeof(open_mmi);
+    ASSERT_EQUAL(ca_read(&cs), 0, "open MMI session parsed");
+    while (read(pcam->fds[0], drain, sizeof(drain)) > 0) {
+    }
+    std::vector<uint8_t> bad_apdu = {0x90, 0x02, 0x00, 0x01, 0x9F, 0x88,
+                                     0x07, 0x81, 0xC8, 0x00, 0x04, 'P',
+                                     'I',  'N'};
+    cs.buf = bad_apdu.data();
+    cs.rlen = static_cast<int>(bad_apdu.size());
+    ASSERT_EQUAL(ca_read(&cs), 0, "inflated outer APDU handled");
+    ASSERT(read(pcam->fds[0], drain, sizeof(drain)) < 0,
+           "inflated outer APDU must be dropped before APP_MMI_handler");
+
+    packing_cam_close();
+    return 0;
+}
+
 int main() {
     opts.log = 1;
     opts.debug = 255;
@@ -2504,6 +2574,8 @@ int main() {
     TEST_FUNC(test_ca_read_resets_fails(), "testing ca_read sign of life");
     TEST_FUNC(test_send_skips_stale_set(), "testing stale mask-set skip");
     TEST_FUNC(test_ca_read_bad_session(), "testing bad session drop");
+    TEST_FUNC(test_mmi_short_apdus_and_choice_bounds(),
+              "testing MMI short APDU and choice_nb bounds");
     free_all_adapters();
     pmts.destroy_all();
     fflush(stdout);
