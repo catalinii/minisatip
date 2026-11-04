@@ -1176,121 +1176,6 @@ bool set_ci_input_str(int ci, const char *val) {
     return ok;
 }
 
-// Slurps a small proc file; empty when missing. One getline
-// beats the iterator range GCC flags for null-dereference.
-static std::string ca_read_file(const char *path) {
-    std::ifstream f(path);
-    std::string s;
-    if (f)
-        std::getline(f, s, '\0');
-    return s;
-}
-
-// CI slot bound to this CA, or -1 when unbound or closed.
-static int ca_enigma_slot(const ca_device_t *c) {
-    if (c && c->fd >= 0)
-        return c->ci_slot;
-    return -1;
-}
-
-// Whole-word match in a choices file; mirrors enigma2 CI detection.
-static bool ca_choices_has(const std::string &choices, const char *word) {
-    size_t len = strlen(word);
-    for (size_t pos = choices.find(word); pos != std::string::npos;
-         pos = choices.find(word, pos + 1)) {
-        bool left_ok = pos == 0 || isspace((unsigned char)choices[pos - 1]);
-        size_t end = pos + len;
-        bool right_ok =
-            end >= choices.size() || isspace((unsigned char)choices[end]);
-        if (left_ok && right_ok)
-            return true;
-    }
-    return false;
-}
-
-std::string ca_tsclk_pick(const std::string &choices) {
-    // Driver rejects extra_high (dmesg "invalid tsclk"), so high is max.
-    if (ca_choices_has(choices, "high"))
-        return "high";
-    return "";
-}
-
-std::string ca_enigma_pvr_pick(const std::string &choices) {
-    if (ca_choices_has(choices, "PVR"))
-        return "PVR";
-    if (ca_choices_has(choices, "DVR"))
-        return "DVR";
-    return "";
-}
-
-// Whole-word PVR/DVR only: route programs bare values,
-// so DVR0-only drivers keep direct-tuner CI.
-bool ca_enigma_slot_has_pvr(int slot) {
-    if (!opts.enigma || slot < 0)
-        return false;
-    char path[64];
-    snprintf(path, sizeof(path), "/proc/stb/tsmux/ci%d_input_choices", slot);
-    return !ca_enigma_pvr_pick(ca_read_file(path)).empty();
-}
-
-// Raises the slot clock to high, saving the prior value;
-// silent no-op when already high or the knob is missing.
-static void ca_enigma_set_tsclk(ca_device_t *c) {
-    if (!opts.enigma || !c || c->tsclk_saved[0])
-        return;
-    int slot = ca_enigma_slot(c);
-    if (slot < 0)
-        return;
-    char path[64], cur[64];
-    snprintf(path, sizeof(path), "/proc/stb/tsmux/ci%d_tsclk_choices", slot);
-    std::string choices = ca_read_file(path);
-    if (choices.empty())
-        return;
-    std::string best = ca_tsclk_pick(choices);
-    if (best.empty())
-        return;
-    snprintf(path, sizeof(path), "/proc/stb/tsmux/ci%d_tsclk", slot);
-    std::ifstream cf(path);
-    cur[0] = 0;
-    if (!cf || !cf.getline(cur, sizeof(cur)) || !cur[0])
-        return;
-    if (best == cur)
-        return;
-    snprintf(c->tsclk_saved, sizeof(c->tsclk_saved), "%.15s", cur);
-    std::ofstream out(path);
-    if (out << best) {
-        LOG("CA %d: CI slot %d tsclk %s -> %s", c->id, slot, cur, best.c_str());
-        return;
-    }
-    LOG("CA %d: CI slot %d tsclk write %s failed", c->id, slot, best.c_str());
-    c->tsclk_saved[0] = 0;
-}
-
-void ca_enigma_route_pvr(ca_device_t *c) {
-    if (!opts.enigma || !c)
-        return;
-    int slot = ca_enigma_slot(c);
-    if (slot < 0) {
-        LOG("CA %d: no CI slot bound, skipping PVR route", c->id);
-        return;
-    }
-    char path[64];
-    snprintf(path, sizeof(path), "/proc/stb/tsmux/ci%d_input_choices", slot);
-    std::string input = ca_enigma_pvr_pick(ca_read_file(path));
-    if (input.empty()) {
-        LOG("CA %d: CI slot %d offers no PVR/DVR input, leaving routing", c->id,
-            slot);
-        return;
-    }
-    if (!set_ci_input_str(slot, input.c_str())) {
-        LOG("CA %d: CI slot %d input route to %s failed", c->id, slot,
-            input.c_str());
-        return;
-    }
-    ca_enigma_set_tsclk(c);
-    LOG("CA %d: CI slot %d input routed to %s", c->id, slot, input.c_str());
-}
-
 void set_tuner_input(int ci, int aid) {
     char filename[100];
     char val[] = "CI0";
@@ -4367,6 +4252,10 @@ static SMutex &ca_dev_lock(int id) {
     return ca_dev_mutex[id];
 }
 
+#ifndef DISABLE_DDCI
+extern ddci_device_t *ddci_devices[MAX_ADAPTERS];
+#endif
+
 int dvbca_init_dev(adapter *ad) {
     ca_device_t *c;
     int fd, result = 0;
@@ -4471,8 +4360,10 @@ int dvbca_init_dev(adapter *ad) {
     }
     // Claim-time route: the slot is published above, so PVR
     // programs the right input without waiting for a kick.
+#ifndef DISABLE_DDCI
     if (mode == ca_mode::ENIGMA_DDCI)
-        ca_enigma_route_pvr(c);
+        ddci_enigma_route_pvr(ddci_devices[ad->id]);
+#endif
 
     if (!c->force_ci) {
         if (access("/etc/ssl/certs/root.pem", F_OK) != 0) {
