@@ -20,10 +20,16 @@
  *
  */
 #include "api/variables.h"
+#include "ca.h"
 #include "minisatip.h"
+#include "socketworks.h"
 #include "utils/testing.h"
 #include <stdlib.h>
 #include <string.h>
+#include <string>
+#include <sys/socket.h>
+#include <sys/uio.h>
+#include <unistd.h>
 
 int test_get_command_line_string() {
     int argc = 4;
@@ -148,11 +154,68 @@ int test_escape_json_string() {
     return 0;
 }
 
+static std::string captured_http;
+static ssize_t capture_http_writev(int fd, const struct iovec *io, int len) {
+    (void)fd;
+    ssize_t total = 0;
+    for (int i = 0; i < len; i++) {
+        captured_http.append((const char *)io[i].iov_base, io[i].iov_len);
+        total += (ssize_t)io[i].iov_len;
+    }
+    return total;
+}
+
+int test_read_http_mmi_json() {
+    ca_clear_mmi_messages();
+    char dt_buf[64] = {};
+    char tr_buf[64] = {};
+    opts.datetime_current = dt_buf;
+    opts.time_running = tr_buf;
+    opts.disable_ssdp = 1;
+
+    int sp[2];
+    ASSERT(socketpair(AF_UNIX, SOCK_STREAM, 0, sp) == 0, "socketpair failed");
+    int id = sockets_add(sp[0], NULL, -1, TYPE_HTTP, NULL, NULL, NULL);
+    ASSERT(id >= 0, "sockets_add failed");
+    sockets *s = get_sockets(id);
+    ASSERT(s != NULL, "get_sockets returned NULL");
+
+    char req[] = "GET /mmi.json HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
+    s->buf = (unsigned char *)req;
+    s->rlen = static_cast<int>(strlen(req));
+    mywritev saved = _writev;
+    captured_http.clear();
+    _writev = capture_http_writev;
+    read_http(s);
+    _writev = saved;
+    sockets_del(id);
+    close(sp[1]);
+
+    ASSERT(captured_http.find("HTTP/1.0 200 OK\r\n") != std::string::npos,
+           "missing 200 OK status on /mmi.json");
+    ASSERT(captured_http.find(
+               "Content-Type: application/json; charset=utf-8\r\n") !=
+               std::string::npos,
+           "missing JSON Content-Type header on /mmi.json");
+    ASSERT(captured_http.find("X-Content-Type-Options: nosniff\r\n") !=
+               std::string::npos,
+           "missing X-Content-Type-Options: nosniff header on /mmi.json");
+    ASSERT(captured_http.find("Access-Control-Allow-Origin: *\r\n") !=
+               std::string::npos,
+           "missing CORS header on /mmi.json");
+    ASSERT(captured_http.find(
+               "\r\n\r\n{\n\"last_changed\":0,\n\"last_seq\":0,\n"
+               "\"messages\":[]\n}\n") != std::string::npos,
+           "missing expected JSON body on /mmi.json");
+    return 0;
+}
+
 int main() {
     TEST_FUNC(test_get_command_line_string(), "test get_command_line_string()");
     TEST_FUNC(test_log_module_mask(), "test -l/-v module name to log bit");
     TEST_FUNC(test_version_var_eval(), "test $version$ expansion");
     TEST_FUNC(test_escape_json_string(), "test escape_json_string()");
+    TEST_FUNC(test_read_http_mmi_json(), "test GET /mmi.json via read_http()");
 
     return 0;
 }

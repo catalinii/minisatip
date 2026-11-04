@@ -31,11 +31,16 @@ alternative source
 #include "api/symbols.h"
 #include "api/variables.h"
 #include "utils.h"
+#include "utils/dvb/dvb_support.h"
 #include "utils/ticks.h"
 #include <algorithm>
 #include <array>
 #include <charconv>
+#include <deque>
 #include <memory>
+#include <string>
+#include <string_view>
+#include <vector>
 #include <openssl/aes.h>
 #include <openssl/crypto.h>
 #include <openssl/err.h>
@@ -817,6 +822,8 @@ void ca_release_pmts(ca_device_t *d) {
     memset(d->capmt, -1, sizeof(d->capmt));
 }
 
+static void ca_clear_mmi_for_device(int ca_id);
+
 // Drop volatile CAM state after a disconnect: sessions, keys,
 // PMT mappings and the dead handle. Keeps enabled sticky.
 void ca_teardown(ca_device_t *d) {
@@ -838,6 +845,7 @@ void ca_teardown(ca_device_t *d) {
     d->fd = -1;
     d->sock = -1;
     d->state = CA_STATE_INACTIVE;
+    ca_clear_mmi_for_device(d->id);
 }
 
 // Enabled but not initialized covers both initial activation and
@@ -2945,6 +2953,209 @@ static int asn_1_decode_bounded(int *length, const uint8_t *buf,
     return -1;
 }
 
+struct MmiMessage {
+    uint64_t seq = 0;
+    int ca_id = 0;
+    int session_number = 0;
+    time_t timestamp = 0;
+    std::string type;
+    std::string title;
+    std::string subtitle;
+    std::string bottom;
+    std::vector<std::string> items;
+    std::string text;
+    int blind = 0;
+    bool auto_answered = false;
+};
+
+static SMutex mmi_mutex;
+static std::deque<MmiMessage> mmi_messages;
+static uint64_t mmi_last_seq = 0;
+static time_t mmi_last_changed = 0;
+
+void ca_clear_mmi_messages() {
+    std::lock_guard<SMutex> lock(mmi_mutex);
+    mmi_messages.clear();
+    mmi_last_seq = 0;
+    mmi_last_changed = 0;
+}
+
+// Remove a disconnected slot's messages; bumps last_seq so pollers refetch.
+static void ca_clear_mmi_for_device(int ca_id) {
+    std::lock_guard<SMutex> lock(mmi_mutex);
+    size_t removed = std::erase_if(
+        mmi_messages, [ca_id](const MmiMessage &m) { return m.ca_id == ca_id; });
+    if (removed > 0) {
+        ++mmi_last_seq;
+        mmi_last_changed = time(nullptr);
+    }
+}
+
+static void record_mmi_message(MmiMessage msg) {
+    std::lock_guard<SMutex> lock(mmi_mutex);
+    msg.seq = ++mmi_last_seq;
+    msg.timestamp = time(nullptr);
+    mmi_last_changed = msg.timestamp;
+    if (mmi_messages.size() >= MAX_MMI_MESSAGES)
+        mmi_messages.pop_front();
+    mmi_messages.push_back(std::move(msg));
+}
+
+// Strip C0/DEL except '\n', ensure valid UTF-8, and cap at MAX_MMI_TEXT_LEN.
+static std::string mmi_sanitize_utf8(std::string_view sv) {
+    std::string out;
+    out.reserve(std::min<size_t>(sv.size(), MAX_MMI_TEXT_LEN));
+    size_t i = 0;
+    while (i < sv.size()) {
+        uint8_t b = static_cast<uint8_t>(sv[i]);
+        if (b < 0x80) {
+            if ((b < 0x20 && b != '\n') || b == 0x7F) {
+                ++i;
+                continue;
+            }
+            if (out.size() + 1 > MAX_MMI_TEXT_LEN)
+                break;
+            out.push_back(static_cast<char>(b));
+            ++i;
+            continue;
+        }
+        size_t seq_len = 0;
+        if ((b & 0xE0) == 0xC0 && b >= 0xC2)
+            seq_len = 2;
+        else if ((b & 0xF0) == 0xE0)
+            seq_len = 3;
+        else if ((b & 0xF8) == 0xF0 && b <= 0xF4)
+            seq_len = 4;
+
+        bool valid_utf8 = (seq_len > 0 && i + seq_len <= sv.size());
+        if (valid_utf8) {
+            for (size_t k = 1; k < seq_len; ++k) {
+                if ((static_cast<uint8_t>(sv[i + k]) & 0xC0) != 0x80)
+                    valid_utf8 = false;
+            }
+            uint8_t b1 = (seq_len > 1) ? static_cast<uint8_t>(sv[i + 1]) : 0;
+            if (seq_len == 3 &&
+                ((b == 0xE0 && b1 < 0xA0) || (b == 0xED && b1 >= 0xA0)))
+                valid_utf8 = false;
+            if (seq_len == 4 &&
+                ((b == 0xF0 && b1 < 0x90) || (b == 0xF4 && b1 >= 0x90)))
+                valid_utf8 = false;
+        }
+        if (valid_utf8) {
+            if (out.size() + seq_len > MAX_MMI_TEXT_LEN)
+                break;
+            out.append(sv.substr(i, seq_len));
+            i += seq_len;
+        } else if (b < 0xA0) {
+            // EN 300 468 control codes 0x80-0x9F: 0x8A is CR/LF, others dropped.
+            if (b == 0x8A) {
+                if (out.size() + 1 > MAX_MMI_TEXT_LEN)
+                    break;
+                out.push_back('\n');
+            }
+            ++i;
+        } else {
+            // Map stray 0xA0-0xFF byte (unprefixed Latin-1) to UTF-8.
+            if (out.size() + 2 > MAX_MMI_TEXT_LEN)
+                break;
+            out.push_back(static_cast<char>(0xC0 | (b >> 6)));
+            out.push_back(static_cast<char>(0x80 | (b & 0x3F)));
+            ++i;
+        }
+    }
+    return out;
+}
+
+// Decode EN 300 468 Annex A text and sanitize to bounded UTF-8.
+static std::string mmi_decode_text(const uint8_t *src, size_t srclen) {
+    if (srclen == 0)
+        return {};
+    if (src[0] < 0x20) {
+        char decoded[MAX_MMI_TEXT_LEN * 4 + 4];
+        if (dvb_get_string(decoded, sizeof(decoded), src, srclen) == 0)
+            return mmi_sanitize_utf8(decoded);
+        size_t skip = 1;
+        if (src[0] == 0x10)
+            skip = std::min<size_t>(srclen, 3);
+        else if (src[0] == 0x1F)
+            skip = std::min<size_t>(srclen, 2);
+        return mmi_sanitize_utf8(std::string_view(
+            reinterpret_cast<const char *>(src + skip), srclen - skip));
+    }
+    return mmi_sanitize_utf8(
+        std::string_view(reinterpret_cast<const char *>(src), srclen));
+}
+
+static void append_json_escaped(std::string &out, std::string_view s) {
+    char buf[MAX_MMI_TEXT_LEN * 6 + 4];
+    int n = escape_json_string(buf, static_cast<int>(sizeof(buf)),
+                               const_cast<char *>(s.data()),
+                               static_cast<int>(s.size()));
+    if (n > 0)
+        out.append(buf, static_cast<size_t>(n));
+    else
+        out.append("\"\"");
+}
+
+std::string get_json_mmi() {
+    std::deque<MmiMessage> snapshot;
+    uint64_t last_seq = 0;
+    time_t last_changed = 0;
+    {
+        std::lock_guard<SMutex> lock(mmi_mutex);
+        snapshot = mmi_messages;
+        last_seq = mmi_last_seq;
+        last_changed = mmi_last_changed;
+    }
+    std::string out;
+    out.reserve(512);
+    char hdr[128];
+    snprintf(hdr, sizeof(hdr),
+             "{\n\"last_changed\":%lld,\n\"last_seq\":%llu,\n\"messages\":[",
+             static_cast<long long>(last_changed),
+             static_cast<unsigned long long>(last_seq));
+    out.append(hdr);
+    for (size_t idx = 0; idx < snapshot.size(); ++idx) {
+        const MmiMessage &m = snapshot[idx];
+        out.append(idx == 0 ? "\n{" : ",\n{");
+        char meta[160];
+        snprintf(
+            meta, sizeof(meta),
+            "\"seq\":%llu,\"ca\":%d,\"session\":%d,\"timestamp\":%lld,\"type\":",
+            static_cast<unsigned long long>(m.seq), m.ca_id, m.session_number,
+            static_cast<long long>(m.timestamp));
+        out.append(meta);
+        append_json_escaped(out, m.type);
+        if (m.type == "enquiry") {
+            char enq[64];
+            snprintf(enq, sizeof(enq),
+                     ",\"blind\":%d,\"auto_answered\":%s,\"text\":", m.blind,
+                     m.auto_answered ? "true" : "false");
+            out.append(enq);
+            append_json_escaped(out, m.text);
+        } else {
+            out.append(",\"title\":");
+            append_json_escaped(out, m.title);
+            out.append(",\"subtitle\":");
+            append_json_escaped(out, m.subtitle);
+            out.append(",\"bottom\":");
+            append_json_escaped(out, m.bottom);
+            out.append(",\"items\":[");
+            for (size_t k = 0; k < m.items.size(); ++k) {
+                if (k > 0)
+                    out.push_back(',');
+                append_json_escaped(out, m.items[k]);
+            }
+            out.push_back(']');
+        }
+        out.push_back('}');
+    }
+    if (!snapshot.empty())
+        out.push_back('\n');
+    out.append("]\n}\n");
+    return out;
+}
+
 int APP_MMI_handler(ca_session_t *session, int resource, uint8_t *buffer,
                     int len) {
     ca_device_t *d = session->ca;
@@ -2975,22 +3186,31 @@ int APP_MMI_handler(ca_session_t *session, int resource, uint8_t *buffer,
         uint8_t answer_length = buffer[1];
         uint8_t *text = buffer + 2;
 
-        char text_buf[256];
-
-        snprintf(text_buf, sizeof(text_buf), "%.*s", len - 2, text);
+        std::string decoded_text =
+            mmi_decode_text(text, static_cast<size_t>(len - 2));
 
         LOG("MMI enquiry from CAM in CA %u:  %s (%s%u digits)", d->id,
-            blind_answer ? "<redacted>" : text_buf,
+            blind_answer ? "<redacted>" : decoded_text.c_str(),
             blind_answer ? "blind " : "", answer_length);
 
-        if (d->pin_str[0] != '\0' &&
-            strlen((char *)d->pin_str) == answer_length) {
+        bool auto_answered = (d->pin_str[0] != '\0' &&
+                              strlen((char *)d->pin_str) == answer_length);
+        if (auto_answered) {
             LOG("answering to PIN enquiry");
             ca_app_mmi_answ(session, MMI_ANSW_ID_ANSWER, (uint8_t *)d->pin_str,
                             answer_length);
         }
 
         ca_app_mmi_close(session, MMI_CLOSE_MMI_CMD_ID_IMMEDIATE);
+
+        MmiMessage msg;
+        msg.ca_id = d->id;
+        msg.session_number = session->session_number;
+        msg.type = "enquiry";
+        msg.text = std::move(decoded_text);
+        msg.blind = blind_answer;
+        msg.auto_answered = auto_answered;
+        record_mmi_message(std::move(msg));
 
         break;
     }
@@ -3005,14 +3225,16 @@ int APP_MMI_handler(ca_session_t *session, int resource, uint8_t *buffer,
                             ? MAX_MMI_ITEMS
                             : std::min<int>(choice_nb, MAX_MMI_ITEMS);
         int max_lines = 3 + max_items;
+        std::vector<std::string> lines;
+        std::vector<uint8_t> pending;
         LOG("CA %d ======= MMI menu =======", d->id);
-        for (int i = 0; i < max_lines && data < max;) {
+        while (static_cast<int>(lines.size()) < max_lines && data < max) {
             int textlen = 0;
             if (max - data < 4)
                 break;
             int text_tag = (data[0] << 16) | (data[1] << 8) | data[2];
-            DEBUGM("[%d] text tag: %02x %02x %02x", i, data[0], data[1],
-                   data[2]);
+            DEBUGM("[%zu] text tag: %02x %02x %02x", lines.size(), data[0],
+                   data[1], data[2]);
             if (text_tag != TAG_TEXT_LAST && text_tag != TAG_TEXT_MORE) {
                 LOG("CA %d unexpected MMI text tag: %06X", d->id, text_tag);
                 break;
@@ -3029,15 +3251,46 @@ int APP_MMI_handler(ca_session_t *session, int resource, uint8_t *buffer,
                 break;
             }
             data += llen;
-            DEBUGM("[%d] %d bytes text", i, textlen);
+            DEBUGM("[%zu] %d bytes text", lines.size(), textlen);
             if (max - data < textlen)
                 break;
-            LOG("[UI %d] %.*s", i, textlen, data);
+            LOG("[UI %zu] %.*s", lines.size(), textlen, data);
+            if (text_tag == TAG_TEXT_MORE) {
+                if (pending.size() < MAX_MMI_TEXT_LEN * 4) {
+                    size_t room = MAX_MMI_TEXT_LEN * 4 - pending.size();
+                    size_t n =
+                        std::min<size_t>(static_cast<size_t>(textlen), room);
+                    pending.insert(pending.end(), data, data + n);
+                }
+            } else if (pending.empty()) {
+                lines.push_back(
+                    mmi_decode_text(data, static_cast<size_t>(textlen)));
+            } else {
+                if (pending.size() < MAX_MMI_TEXT_LEN * 4) {
+                    size_t room = MAX_MMI_TEXT_LEN * 4 - pending.size();
+                    size_t n =
+                        std::min<size_t>(static_cast<size_t>(textlen), room);
+                    pending.insert(pending.end(), data, data + n);
+                }
+                lines.push_back(
+                    mmi_decode_text(pending.data(), pending.size()));
+                pending.clear();
+            }
             data += textlen;
-            if (text_tag == TAG_TEXT_LAST)
-                ++i;
         }
         LOG("======================")
+        if (lines.size() >= 3) {
+            MmiMessage msg;
+            msg.ca_id = d->id;
+            msg.session_number = session->session_number;
+            msg.type = (resource == TAG_MENU_LAST) ? "menu" : "list";
+            msg.title = std::move(lines[0]);
+            msg.subtitle = std::move(lines[1]);
+            msg.bottom = std::move(lines[2]);
+            for (size_t k = 3; k < lines.size(); ++k)
+                msg.items.push_back(std::move(lines[k]));
+            record_mmi_message(std::move(msg));
+        }
         ca_app_mmi_menu_answ(session, 0x01);
         /* cancel menu */
         ca_app_mmi_close(session, MMI_CLOSE_MMI_CMD_ID_IMMEDIATE);
