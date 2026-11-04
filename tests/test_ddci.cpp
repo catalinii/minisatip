@@ -2471,25 +2471,25 @@ int test_ddci_two_loopbacks_own_distinct_slots() {
 }
 
 int test_ddci_pvr_pick() {
-    ASSERT(ca_enigma_pvr_pick("A B PVR DVR\n") == "PVR", "PVR preferred");
-    ASSERT(ca_enigma_pvr_pick("A B DVR\n") == "DVR", "DVR fallback");
-    ASSERT(ca_enigma_pvr_pick("A B\n").empty(), "tuner-only offers nothing");
-    ASSERT(ca_enigma_pvr_pick("A DVR0\n").empty(), "DVR0-only stays direct");
-    ASSERT(ca_enigma_pvr_pick("APVR\n").empty(), "substring rejected");
-    ASSERT(ca_enigma_pvr_pick("").empty(), "empty offers nothing");
+    ASSERT(ddci_enigma_pvr_pick("A B PVR DVR\n") == "PVR", "PVR preferred");
+    ASSERT(ddci_enigma_pvr_pick("A B DVR\n") == "DVR", "DVR fallback");
+    ASSERT(ddci_enigma_pvr_pick("A B\n").empty(), "tuner-only offers nothing");
+    ASSERT(ddci_enigma_pvr_pick("A DVR0\n").empty(), "DVR0-only stays direct");
+    ASSERT(ddci_enigma_pvr_pick("APVR\n").empty(), "substring rejected");
+    ASSERT(ddci_enigma_pvr_pick("").empty(), "empty offers nothing");
     return 0;
 }
 
 int test_ddci_tsclk_pick() {
-    ASSERT(ca_tsclk_pick("normal high extra_high\n") == "high",
+    ASSERT(ddci_tsclk_pick("normal high extra_high\n") == "high",
            "high wins over extra_high");
-    ASSERT(ca_tsclk_pick("normal high\n") == "high", "high wins");
-    ASSERT(ca_tsclk_pick("normal\n").empty(), "normal offers nothing");
-    ASSERT(ca_tsclk_pick("normal extra_high\n").empty(),
+    ASSERT(ddci_tsclk_pick("normal high\n") == "high", "high wins");
+    ASSERT(ddci_tsclk_pick("normal\n").empty(), "normal offers nothing");
+    ASSERT(ddci_tsclk_pick("normal extra_high\n").empty(),
            "extra_high alone offers nothing");
-    ASSERT(ca_tsclk_pick("highest\n").empty(), "prefix match rejected");
-    ASSERT(ca_tsclk_pick("xhigh\n").empty(), "suffix match rejected");
-    ASSERT(ca_tsclk_pick("").empty(), "empty offers nothing");
+    ASSERT(ddci_tsclk_pick("highest\n").empty(), "prefix match rejected");
+    ASSERT(ddci_tsclk_pick("xhigh\n").empty(), "suffix match rejected");
+    ASSERT(ddci_tsclk_pick("").empty(), "empty offers nothing");
     return 0;
 }
 
