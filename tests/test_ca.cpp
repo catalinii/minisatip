@@ -2609,9 +2609,8 @@ int test_mmi_short_apdus_and_choice_bounds() {
     ASSERT_EQUAL(ca_read(&cs), 0, "open MMI session parsed");
     while (read(pcam->fds[0], drain, sizeof(drain)) > 0) {
     }
-    std::vector<uint8_t> bad_apdu = {0x90, 0x02, 0x00, 0x01, 0x9F, 0x88,
-                                     0x07, 0x81, 0xC8, 0x00, 0x04, 'P',
-                                     'I',  'N'};
+    std::vector<uint8_t> bad_apdu = {0x90, 0x02, 0x00, 0x01, 0x9F, 0x88, 0x07,
+                                     0x81, 0xC8, 0x00, 0x04, 'P',  'I',  'N'};
     cs.buf = bad_apdu.data();
     cs.rlen = static_cast<int>(bad_apdu.size());
     ASSERT_EQUAL(ca_read(&cs), 0, "inflated outer APDU handled");
@@ -2674,17 +2673,15 @@ int test_mmi_enquiry_auto_answered_and_manual() {
     // Empty pin_str with answer_length == 0 must not send TAG_ANSWER.
     pcam->dev.pin_str[0] = '\0';
     std::vector<uint8_t> enq0 = {0x00, 0, 'I', 'n', 'f', 'o'};
-    APP_MMI_handler(s, TAG_ENQUIRY, enq0.data(),
-                    static_cast<int>(enq0.size()));
+    APP_MMI_handler(s, TAG_ENQUIRY, enq0.data(), static_cast<int>(enq0.size()));
     std::vector<uint8_t> r0 = drain_cam_pipe(pcam->fds[0]);
     ASSERT(!has_apdu_tag(r0, TAG_ANSWER) && has_apdu_tag(r0, TAG_CLOSE_MMI),
            "0-length manual enquiry must send CLOSE without ANSWER");
 
     // Empty pin_str with answer_length == 4 must not send TAG_ANSWER.
-    std::vector<uint8_t> enq1 = {0x01, 4, 'E', 'n', 't', 'e', 'r', ' ',
+    std::vector<uint8_t> enq1 = {0x01, 4,   'E', 'n', 't', 'e', 'r', ' ',
                                  'P',  'I', 'N', ':', ' ', '"', '1', '"'};
-    APP_MMI_handler(s, TAG_ENQUIRY, enq1.data(),
-                    static_cast<int>(enq1.size()));
+    APP_MMI_handler(s, TAG_ENQUIRY, enq1.data(), static_cast<int>(enq1.size()));
     std::vector<uint8_t> r1 = drain_cam_pipe(pcam->fds[0]);
     ASSERT(!has_apdu_tag(r1, TAG_ANSWER) && has_apdu_tag(r1, TAG_CLOSE_MMI),
            "manual enquiry must send CLOSE without ANSWER");
@@ -2700,8 +2697,7 @@ int test_mmi_enquiry_auto_answered_and_manual() {
 
     // Configured pin_str matching answer_length == 4 -> sends TAG_ANSWER.
     std::vector<uint8_t> enq2 = {0x00, 4, 'P', 'I', 'N'};
-    APP_MMI_handler(s, TAG_ENQUIRY, enq2.data(),
-                    static_cast<int>(enq2.size()));
+    APP_MMI_handler(s, TAG_ENQUIRY, enq2.data(), static_cast<int>(enq2.size()));
     std::vector<uint8_t> r3 = drain_cam_pipe(pcam->fds[0]);
     ASSERT(has_apdu_tag(r3, TAG_ANSWER) && has_apdu_tag(r3, TAG_CLOSE_MMI),
            "matching PIN length must send both ANSWER and CLOSE");
@@ -2749,9 +2745,10 @@ int test_mmi_menu_and_list_charset_and_0xff() {
     append_mmi_line(menu, {'S', 'u', 'b'});
     append_mmi_line(menu, {'O', 'K'});
     append_mmi_line(menu, {'T', 'e', 's', 't', ' ', 0xE4, 0xF6, 0xFC});
-    append_mmi_line(menu,
-                    {0x01, 0x86, 'L', 'i', 'n', 'e', '1', 0x87, 0x8A, 'L', '2'});
-    // Overlong item: 200 'X' via 0x81 length in TEXT_MORE + 100 'X' in TEXT_LAST.
+    append_mmi_line(
+        menu, {0x01, 0x86, 'L', 'i', 'n', 'e', '1', 0x87, 0x8A, 'L', '2'});
+    // Overlong item: 200 'X' via 0x81 length in TEXT_MORE + 100 'X' in
+    // TEXT_LAST.
     menu.insert(menu.end(), {0x9F, 0x88, 0x04, 0x81, 200});
     menu.insert(menu.end(), 200, 'X');
     menu.insert(menu.end(), {0x9F, 0x88, 0x03, 100});
@@ -2861,6 +2858,9 @@ int test_mmi_ring_eviction_and_teardown() {
 
     packing_cam_close();
     ca_clear_mmi_messages();
+    return 0;
+}
+
 int main() {
     opts.log = 1;
     opts.debug = 255;
