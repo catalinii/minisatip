@@ -2443,7 +2443,8 @@ int test_ddci_two_loopbacks_own_distinct_slots() {
     d1.enabled = 1;
     d1.loopback = 1;
     d1.ci_slot = 1;
-    d0.slot_claimed = d1.slot_claimed = true;
+    d0.slot_claimed.store(true);
+    d1.slot_claimed.store(true);
     ddci_devices[10] = &d0;
     ddci_devices[11] = &d1;
 
@@ -2455,8 +2456,10 @@ int test_ddci_two_loopbacks_own_distinct_slots() {
     ASSERT(ddci_loopback_slot_for(11) == 1, "adapter 11 drives slot 1");
     ASSERT(ddci_loopback_slot_for(8) == -1, "tuner owns no slot");
 
+    d0.slot_claimed.store(false);
+    ASSERT(ddci_loopback_slot_for(10) == -1, "unclaimed loopback declines");
     d0.ci_slot = d1.ci_slot = -1;
-    d0.slot_claimed = d1.slot_claimed = false;
+    d1.slot_claimed.store(false);
     ASSERT(!ddci_loopback_owns_slot(0), "released slot reads free");
     ASSERT(ddci_loopback_slot_for(10) == -1, "slotless loopback declines");
 
