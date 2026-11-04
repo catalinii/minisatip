@@ -87,7 +87,8 @@ typedef struct ddci_device {
     char loopback; // enigma DVR loopback, no sec/ci hardware
     int ci_slot;   // claimed /dev/ciN, -1 until bound
     std::atomic<bool> slot_claimed{false}; // reservation; close releases
-    SFIFO push_backlog;                    // queued push bytes, oldest first
+    char tsclk_saved[16];     // prior ciN_tsclk; nonzero once raised
+    SFIFO push_backlog;       // queued push bytes, oldest first
     uint64_t push_dropped{0}; // refused while full: CAM backpressure only
     std::atomic<uint64_t> shed_bytes{0}; // voluntary sheds: tune + stop
     int64_t push_last_drop_log{0}; // last ring-full report, push_mutex only
@@ -139,6 +140,12 @@ int ddci_is_loopback(int id);
 int ddci_loopback_owns_slot(int slot);
 // CI slot claimed by loopback id; -1 when it claims none.
 int ddci_loopback_slot_for(int id);
+// Routes the slot input to PVR/DVR and raises tsclk.
+void ddci_enigma_route_pvr(ddci_device_t *d);
+// Highest tsclk in a choices file; empty when none qualifies.
+std::string ddci_tsclk_pick(const std::string &choices);
+// Loopback input the choices offer (PVR preferred); empty when neither.
+std::string ddci_enigma_pvr_pick(const std::string &choices);
 int add_pid_mapping_table(int ad, int pid, int pmt, ddci_device_t *d,
                           int force_add_pid);
 int push_ts_to_adapter(ddci_device_t *d, adapter *ad, uint16_t *mapping);
