@@ -1185,11 +1185,9 @@ bool set_ci_input_str(int ci, const char *val) {
     return ok;
 }
 
-extern ddci_device_t *ddci_devices[MAX_ADAPTERS];
-
 // Slurps a small proc file; empty when missing. One getline
 // beats the iterator range GCC flags for null-dereference.
-static std::string ddci_read_file(const char *path) {
+static std::string ca_read_file(const char *path) {
     std::ifstream f(path);
     std::string s;
     if (f)
@@ -1197,16 +1195,15 @@ static std::string ddci_read_file(const char *path) {
     return s;
 }
 
-// CI slot feeding this loopback, published by DVBCA at open.
-static int ddci_enigma_slot(ddci_device_t *d) {
-    if (d && d->id >= 0 && d->id < MAX_ADAPTERS && ca_devices[d->id] &&
-        ca_devices[d->id]->fd >= 0)
-        return ca_devices[d->id]->ci_slot;
+// CI slot bound to this CA, or -1 when unbound or closed.
+static int ca_enigma_slot(const ca_device_t *c) {
+    if (c && c->fd >= 0)
+        return c->ci_slot;
     return -1;
 }
 
 // Whole-word match in a choices file; mirrors enigma2 CI detection.
-static bool ddci_choices_has(const std::string &choices, const char *word) {
+static bool ca_choices_has(const std::string &choices, const char *word) {
     size_t len = strlen(word);
     for (size_t pos = choices.find(word); pos != std::string::npos;
          pos = choices.find(word, pos + 1)) {
@@ -1220,27 +1217,27 @@ static bool ddci_choices_has(const std::string &choices, const char *word) {
     return false;
 }
 
-std::string ddci_tsclk_pick(const std::string &choices) {
+std::string ca_tsclk_pick(const std::string &choices) {
     // Driver rejects extra_high (dmesg "invalid tsclk"), so high is max.
-    if (ddci_choices_has(choices, "high"))
+    if (ca_choices_has(choices, "high"))
         return "high";
     return "";
 }
 
 // Raises the slot clock to high, saving the prior value;
 // silent no-op when already high or the knob is missing.
-static void ddci_enigma_set_tsclk(ddci_device_t *d) {
-    if (!opts.enigma || !d || d->tsclk_saved[0])
+static void ca_enigma_set_tsclk(ca_device_t *c) {
+    if (!opts.enigma || !c || c->tsclk_saved[0])
         return;
-    int slot = ddci_enigma_slot(d);
+    int slot = ca_enigma_slot(c);
     if (slot < 0)
         return;
     char path[64], cur[64];
     snprintf(path, sizeof(path), "/proc/stb/tsmux/ci%d_tsclk_choices", slot);
-    std::string choices = ddci_read_file(path);
+    std::string choices = ca_read_file(path);
     if (choices.empty())
         return;
-    std::string best = ddci_tsclk_pick(choices);
+    std::string best = ca_tsclk_pick(choices);
     if (best.empty())
         return;
     snprintf(path, sizeof(path), "/proc/stb/tsmux/ci%d_tsclk", slot);
@@ -1250,44 +1247,43 @@ static void ddci_enigma_set_tsclk(ddci_device_t *d) {
         return;
     if (best == cur)
         return;
-    snprintf(d->tsclk_saved, sizeof(d->tsclk_saved), "%.15s", cur);
+    snprintf(c->tsclk_saved, sizeof(c->tsclk_saved), "%.15s", cur);
     std::ofstream out(path);
     if (out << best) {
-        LOG("DDCI %d: CI slot %d tsclk %s -> %s", d->id, slot, cur,
-            best.c_str());
+        LOG("CA %d: CI slot %d tsclk %s -> %s", c->id, slot, cur, best.c_str());
         return;
     }
-    LOG("DDCI %d: CI slot %d tsclk write %s failed", d->id, slot, best.c_str());
-    d->tsclk_saved[0] = 0;
+    LOG("CA %d: CI slot %d tsclk write %s failed", c->id, slot, best.c_str());
+    c->tsclk_saved[0] = 0;
 }
 
-void ddci_enigma_route_pvr(ddci_device_t *d) {
-    if (!opts.enigma || !d)
+void ca_enigma_route_pvr(ca_device_t *c) {
+    if (!opts.enigma || !c)
         return;
-    int slot = ddci_enigma_slot(d);
+    int slot = ca_enigma_slot(c);
     if (slot < 0) {
-        LOG("DDCI %d: no CI slot bound, skipping PVR route", d->id);
+        LOG("CA %d: no CI slot bound, skipping PVR route", c->id);
         return;
     }
     char path[64];
     snprintf(path, sizeof(path), "/proc/stb/tsmux/ci%d_input_choices", slot);
-    std::string choices = ddci_read_file(path);
+    std::string choices = ca_read_file(path);
     const char *input = nullptr;
-    if (ddci_choices_has(choices, "PVR"))
+    if (ca_choices_has(choices, "PVR"))
         input = "PVR";
-    else if (ddci_choices_has(choices, "DVR"))
+    else if (ca_choices_has(choices, "DVR"))
         input = "DVR";
     if (!input) {
-        LOG("DDCI %d: CI slot %d offers no PVR/DVR input, leaving routing",
-            d->id, slot);
+        LOG("CA %d: CI slot %d offers no PVR/DVR input, leaving routing", c->id,
+            slot);
         return;
     }
     if (!set_ci_input_str(slot, input)) {
-        LOG("DDCI %d: CI slot %d input route to %s failed", d->id, slot, input);
+        LOG("CA %d: CI slot %d input route to %s failed", c->id, slot, input);
         return;
     }
-    ddci_enigma_set_tsclk(d);
-    LOG("DDCI %d: CI slot %d input routed to %s", d->id, slot, input);
+    ca_enigma_set_tsclk(c);
+    LOG("CA %d: CI slot %d input routed to %s", c->id, slot, input);
 }
 
 void set_tuner_input(int ci, int aid) {
@@ -4475,7 +4471,7 @@ int dvbca_init_dev(adapter *ad) {
     // Claim-time route: the slot is published above, so PVR
     // programs the right input without waiting for a kick.
     if (mode == ca_mode::ENIGMA_DDCI)
-        ddci_enigma_route_pvr(ddci_devices[ad->id]);
+        ca_enigma_route_pvr(c);
 
     if (!c->force_ci) {
         if (access("/etc/ssl/certs/root.pem", F_OK) != 0) {

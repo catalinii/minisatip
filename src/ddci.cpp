@@ -1454,7 +1454,7 @@ void ddci_push_kick(adapter *ad, ddci_device_t *d) {
         return;
     }
     ad->fe = fd;
-    ddci_enigma_route_pvr(d);
+    ca_enigma_route_pvr(ca_devices[ad->id]);
     ddci_push_start(d);
     LOG("kicked push dvr %s fd:%d", buf, fd);
 }
