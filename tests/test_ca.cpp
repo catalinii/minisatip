@@ -2444,13 +2444,13 @@ int test_loopback_owns_ci_slot() {
     ddci_device_t loop = {};
     loop.id = 71;
     loop.loopback = 1;
-    loop.slot_claimed = true;
+    loop.slot_claimed.store(true);
     loop.ci_slot = 1;
     ddci_devices[71] = &loop;
     ASSERT_EQUAL(ddci_loopback_owns_slot(1), 1, "stored claim is read");
-    loop.slot_claimed = false;
+    loop.slot_claimed.store(false);
     ASSERT_EQUAL(ddci_loopback_owns_slot(1), 0, "close releases the claim");
-    loop.slot_claimed = true;
+    loop.slot_claimed.store(true);
 
     adapter tuner = {};
     tuner.id = 1;
@@ -2490,7 +2490,7 @@ int test_loopback_init_without_stack_fails_loud() {
     loop.id = 73;
     loop.enabled = 1;
     loop.loopback = 1;
-    loop.slot_claimed = true;
+    loop.slot_claimed.store(true);
     loop.ci_slot = 7; // no /dev/ci7 in test envs
     ddci_devices[73] = &loop;
     ca_device_t *saved_ca73 = ca_devices[73];

@@ -212,7 +212,8 @@ int ddci_loopback_owns_slot(int slot) {
         return 0;
     auto it =
         std::ranges::find_if(ddci_devices, [slot](const ddci_device_t *d) {
-            return d && d->loopback && d->slot_claimed && d->ci_slot == slot;
+            return d && d->loopback && d->slot_claimed.load() &&
+                   d->ci_slot == slot;
         });
     return it != std::end(ddci_devices);
 }
@@ -220,9 +221,22 @@ int ddci_loopback_owns_slot(int slot) {
 // CI slot claimed by loopback id; -1 when it claims none.
 int ddci_loopback_slot_for(int id) {
     ddci_device_t *d = get_ddci(id);
-    if (!opts.enigma || !d || !d->loopback)
+    if (!opts.enigma || !d || !d->loopback || !d->slot_claimed.load())
         return -1;
     return d->ci_slot;
+}
+
+// Live enigma tuner holding this CI slot; the loopback must not
+// retake a slot a tuner claimed while the loopback was closed.
+static bool ddci_slot_live_held(int slot) {
+    if (slot < 0)
+        return false;
+    for (int i = 0; i < MAX_ADAPTERS; i++) {
+        ca_device_t *c = ca_devices[i];
+        if (c && c->fd >= 0 && c->mode == ca_mode::ENIGMA && c->ci_slot == slot)
+            return true;
+    }
+    return false;
 }
 
 // Last N with demuxN+dvrN present, frontendN absent, and N owned by
@@ -385,7 +399,7 @@ int ddci_close_adapter(adapter *ad) {
     ddci_device_t *d = ddci_devices[ad->id];
     if (d && d->loopback) {
         ddci_push_stop(d);
-        d->slot_claimed = false;
+        d->slot_claimed.store(false);
     }
     return 0;
 }
@@ -1480,8 +1494,8 @@ void ddci_output_shed(adapter *ad, ddci_device_t *d) {
             drained += static_cast<size_t>(r);
         }
     }
-    // Reset under A, then flag: the socket action takes A
-    // before pushing, so no stale batch slips in between.
+    // Reset then flag under A->D; the socket push re-checks
+    // the flag under the same order, so orphans drop.
     size_t left = 0;
     {
         std::lock_guard<SMutex> alock(ad->mutex);
@@ -1754,6 +1768,13 @@ int ddci_read_sec_data(sockets *s) {
     ddci_device_t *d = get_ddci(s->sid);
     b = ad->buf;
     size_t left = 0;
+    // Re-check under A->D: a shed may have reset+flagged after
+    // read_dmx staged this batch; drop the orphan, keep the flag.
+    std::lock_guard<SMutex> alock(ad->mutex);
+    if (ad->drop_buffer) {
+        ad->rlen = 0;
+        return 0;
+    }
     int rlen = ad->rlen;
 
     // Same mutex as the pop side: plain fifo indices
@@ -1814,8 +1835,11 @@ static int ddci_open_enigma(adapter *ad, ddci_device_t *d) {
     // The driver never blocks (O_NONBLOCK ignored): a full
     // playpump returns EAGAIN, retried in the push loop below.
     int write_fd = open(buf, O_WRONLY | O_CLOEXEC);
-    if (write_fd < 0)
+    if (write_fd < 0) {
+        // A failed open must not hold the CI: a tuner may need it.
+        d->slot_claimed.store(false);
         LOG_AND_RETURN(1, "could not open %s: %s", buf, strerror(errno));
+    }
     // Read TS from the DVR like live adapters; the demux device only
     // trickles TS on drivers without demux-level TS output.
     int use_demux = opts.use_demux_device == USE_DEMUX ||
@@ -1829,6 +1853,7 @@ static int ddci_open_enigma(adapter *ad, ddci_device_t *d) {
         open(buf, use_demux ? O_RDWR | O_NONBLOCK : O_RDONLY | O_NONBLOCK);
     if (read_fd < 0) {
         close(write_fd);
+        d->slot_claimed.store(false);
         LOG_AND_RETURN(1, "could not open %s: %s", buf, strerror(errno));
     }
     if (ioctl(read_fd, DMX_SET_BUFFER_SIZE, opts.dvr_buffer) < 0)
@@ -1861,7 +1886,10 @@ static int ddci_open_enigma(adapter *ad, ddci_device_t *d) {
         fifo_reset(&d->push_backlog);
     }
     d->enabled = 1;
-    d->slot_claimed = d->ci_slot >= 0;
+    // Retake unless a live tuner claimed it while closed; then
+    // slot_for declines and init fails loud instead of sharing.
+    if (!ddci_slot_live_held(d->ci_slot))
+        d->slot_claimed.store(d->ci_slot >= 0);
     ad->enabled = 1;
     LOG("opened enigma loopback %d push dvr%d fd:%d read fd:%d source:%d",
         ad->id, push_dvr, ad->fe, ad->dvr, ad->dmx_source);
@@ -2240,7 +2268,7 @@ static bool ddci_add_one_enigma_loopback(int slot) {
         }
         // Hold from boot so a tuner never grabs it first; close
         // releases, open retakes.
-        dd->slot_claimed = dd->ci_slot >= 0;
+        dd->slot_claimed.store(dd->ci_slot >= 0);
     }
     load_channels();
     LOG("enigma loopback adapter %d on demux %d", id, fn);

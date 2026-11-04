@@ -84,9 +84,9 @@ typedef struct ddci_device {
     int sdt_data_mask; // channels with real SDT data at last SDT generation
     int16_t pat_cc, sdt_cc, eit_cc;
     char disable_cat;
-    char loopback;            // enigma DVR loopback, no sec/ci hardware
-    int ci_slot;              // claimed /dev/ciN, -1 until bound
-    bool slot_claimed{false}; // reservation live; close releases it
+    char loopback; // enigma DVR loopback, no sec/ci hardware
+    int ci_slot;   // claimed /dev/ciN, -1 until bound
+    std::atomic<bool> slot_claimed{false}; // reservation; close releases
     char tsclk_saved[16];     // prior ciN_tsclk, restored on release
     SFIFO push_backlog;       // queued push bytes, oldest first
     uint64_t push_dropped{0}; // refused while full: CAM backpressure only
