@@ -87,8 +87,7 @@ typedef struct ddci_device {
     char loopback; // enigma DVR loopback, no sec/ci hardware
     int ci_slot;   // claimed /dev/ciN, -1 until bound
     std::atomic<bool> slot_claimed{false}; // reservation; close releases
-    char tsclk_saved[16];     // prior ciN_tsclk, restored on release
-    SFIFO push_backlog;       // queued push bytes, oldest first
+    SFIFO push_backlog;                    // queued push bytes, oldest first
     uint64_t push_dropped{0}; // refused while full: CAM backpressure only
     std::atomic<uint64_t> shed_bytes{0}; // voluntary sheds: tune + stop
     int64_t push_last_drop_log{0}; // last ring-full report, push_mutex only
