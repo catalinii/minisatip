@@ -144,8 +144,6 @@ int ddci_loopback_slot_for(int id);
 void ddci_enigma_route_pvr(ddci_device_t *d);
 // Highest tsclk in a choices file; empty when none qualifies.
 std::string ddci_tsclk_pick(const std::string &choices);
-// Loopback input the choices offer (PVR preferred); empty when neither.
-std::string ddci_enigma_pvr_pick(const std::string &choices);
 int add_pid_mapping_table(int ad, int pid, int pmt, ddci_device_t *d,
                           int force_add_pid);
 int push_ts_to_adapter(ddci_device_t *d, adapter *ad, uint16_t *mapping);
