@@ -2231,6 +2231,22 @@ static bool ddci_add_one_enigma_loopback(int slot) {
         LOG("no free demux/dvr pair for the enigma loopback");
         return false;
     }
+    // Claim a CI slot offering PVR/DVR first: without one the loopback
+    // cannot feed the CI, so the slot stays free for live tuners.
+    int ci_slot = -1;
+    for (int k = 0; k < MAX_VU_CI_SLOTS && ci_slot < 0; k++) {
+        int c = (slot + k) % MAX_VU_CI_SLOTS;
+        if (ddci_loopback_owns_slot(c))
+            continue;
+        snprintf(buf, sizeof(buf), "/dev/ci%d", c);
+        if (access(buf, R_OK | W_OK) || !ca_enigma_slot_has_pvr(c))
+            continue;
+        ci_slot = c;
+    }
+    if (ci_slot < 0) {
+        LOG("no CI slot with PVR/DVR input for the enigma loopback");
+        return false;
+    }
     if (!a[static_cast<size_t>(id)])
         a[static_cast<size_t>(id)] = adapter_alloc();
 
@@ -2255,17 +2271,8 @@ static bool ddci_add_one_enigma_loopback(int slot) {
         dd = ddci_alloc(id);
     if (dd) {
         dd->loopback = 1;
-        // Claim slot once here; later readers use the stored slot.
-        // Pair N binds ciN, falling back to any free CI when missing.
-        dd->ci_slot = -1;
-        for (int k = 0; k < MAX_VU_CI_SLOTS && dd->ci_slot < 0; k++) {
-            int c = (slot + k) % MAX_VU_CI_SLOTS;
-            if (ddci_loopback_owns_slot(c))
-                continue;
-            snprintf(buf, sizeof(buf), "/dev/ci%d", c);
-            if (!access(buf, R_OK | W_OK))
-                dd->ci_slot = c;
-        }
+        // Stored once here; later readers (open, claim, route) use it.
+        dd->ci_slot = ci_slot;
         // Hold from boot so a tuner never grabs it first; close
         // releases, open retakes.
         dd->slot_claimed.store(dd->ci_slot >= 0);
