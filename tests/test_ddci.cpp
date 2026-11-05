@@ -50,14 +50,45 @@
 #include <unistd.h>
 
 #include <array>
+#include <dlfcn.h>
 #include <poll.h>
 #include <vector>
 
 #define DEFAULT_LOG LOG_DVBCA
 
+// DVB nodes never exist under CI: record the attempt,
+// fail it, and forward everything else to libc.
+static std::vector<std::string> g_dvb_opens;
+static int record_or_forward_open(const char *path, int flags, mode_t mode) {
+    static auto real_open =
+        (int (*)(const char *, int, ...))dlsym(RTLD_NEXT, "open");
+    std::string p = path ? path : "";
+    if (p.compare(0, 9, "/dev/dvb/") == 0) {
+        g_dvb_opens.push_back(p);
+        errno = ENOENT;
+        return -1;
+    }
+    return real_open(path, flags, mode);
+}
+extern "C" int open(const char *path, int flags, ...) {
+    va_list ap;
+    va_start(ap, flags);
+    mode_t mode = va_arg(ap, mode_t);
+    va_end(ap);
+    return record_or_forward_open(path, flags, mode);
+}
+extern "C" int open64(const char *path, int flags, ...) {
+    va_list ap;
+    va_start(ap, flags);
+    mode_t mode = va_arg(ap, mode_t);
+    va_end(ap);
+    return record_or_forward_open(path, flags, mode);
+}
+
 extern ddci_device_t *ddci_devices[MAX_ADAPTERS];
 extern int ddci_id;
 int ddci_post_init(adapter *ad);
+int ddci_set_pid(adapter *ad, int pid);
 extern SCA_op dvbca;
 extern ca_device_t *ca_devices[MAX_ADAPTERS];
 extern std::unordered_map<int, Sddci_channel> channels;
@@ -221,6 +252,37 @@ int test_ddci_post_init_without_dvr_socket() {
     ddci_devices[0] = NULL;
     a[0] = nullptr;
     ASSERT(rv == 0, "ddci_post_init without a DVR socket");
+    return 0;
+}
+
+// A loopback adds pids on its demux device, like a live
+// adapter: DEMUX ioctls on the DVR fd fail with EINVAL.
+int test_ddci_loopback_set_pid_opens_demux_device() {
+    ddci_device_t d = {};
+    adapter ad = {};
+    for (auto &slot : a)
+        slot = nullptr;
+    memset(ddci_devices, 0, sizeof(ddci_devices));
+    create_adapter(&ad, 0);
+    ad.type = ADAPTER_CI;
+    ad.pa = 0;
+    ad.fn = 18;
+    ad.dvr = -1;
+    int saved_enigma = opts.enigma;
+    opts.enigma = 1;
+    d.id = 0;
+    d.enabled = 1;
+    d.loopback = 1;
+    ddci_devices[0] = &d;
+    g_dvb_opens.clear();
+    int rc = ddci_set_pid(&ad, 100);
+    opts.enigma = saved_enigma;
+    ddci_devices[0] = NULL;
+    a[0] = nullptr;
+    ASSERT(rc == -1, "set_pid fails without hardware");
+    ASSERT(g_dvb_opens.size() == 1, "one DVB open expected");
+    ASSERT(g_dvb_opens[0] == "/dev/dvb/adapter0/demux18",
+           "loopback set_pid must open the demux device");
     return 0;
 }
 
@@ -2578,6 +2640,8 @@ int main() {
               "testing DDCI channel accounting on re-send and delete");
     TEST_FUNC(test_ddci_post_init_without_dvr_socket(),
               "testing ddci_post_init without a DVR socket");
+    TEST_FUNC(test_ddci_loopback_set_pid_opens_demux_device(),
+              "testing loopback set_pid opens the demux device");
     TEST_FUNC(test_update_resend_keeps_slot(),
               "testing update re-send keeps the slot and drops one pid");
     TEST_FUNC(test_mandatory_pat_stays_mapped(),
