@@ -1726,11 +1726,13 @@ int ddci_set_pid(adapter *ad, int pid) {
         std::lock_guard<SMutex> lock(ad->mutex);
         // Idle -> active: shed stale output so the fresh tune
         // starts clean; the push side keeps flowing.
-        if (ad->active_demux_pids <= 0) {
+        if (ad->active_pids <= 0) {
             if (ddci_device_t *dd = get_ddci(ad->id))
                 ddci_output_shed(ad, dd);
         }
-        int rc = dvb_demux_set_pid(ad, pid);
+        // One demux fd per pid, like live adapters: the DVR
+        // fd takes no DEMUX ioctls (SET_PES_FILTER: EINVAL).
+        int rc = dvb_set_pid(ad, pid);
         LOGM("%s: loopback %d add pid %d -> %d", __FUNCTION__, ad->id, pid, rc);
         return rc;
     }
@@ -1744,7 +1746,7 @@ int ddci_del_filters(adapter *ad, [[maybe_unused]] int fd, int pid) {
     if (opts.enigma && ddci_is_loopback(ad->id)) {
         // Same serialization as the add path, for the idle counter.
         std::lock_guard<SMutex> lock(ad->mutex);
-        int rc = dvb_demux_del_filters(ad, fd, pid);
+        int rc = dvb_del_filters(ad, fd, pid);
         LOGM("%s: loopback %d del pid %d -> %d", __FUNCTION__, ad->id, pid, rc);
         return rc;
     }
