@@ -253,9 +253,8 @@ int dvb_get_string(char *dst, size_t dstlen, const uint8_t *src,
     }
 
     if (dvb_charset_override == DVB_CHARSET_LATIN1) {
-        /* forced Latin-1: decode every byte as ISO-8859-1, ignoring any
-         * DVB charset prefix (conv 0 is the 8859-1 table, same as the
-         * Table A.4 path with table byte 1). */
+        /* forced Latin-1: every byte as ISO-8859-1 (conv 0), ignoring
+         * any DVB charset prefix. */
         outlen = dstlen - 1;
         if (dvb_convert(0, src, srclen, out, &outlen) == -1)
             return -1;

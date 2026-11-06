@@ -23,7 +23,9 @@
 #include "minisatip.h"
 #include "socketworks.h"
 #include "stream.h"
+#include "utils/ticks.h"
 #include <atomic>
+#include <cstdint>
 #include <mutex>
 #include <srt/srt.h>
 #include <stdio.h>
@@ -31,15 +33,22 @@
 #include <thread>
 #include <unistd.h>
 #include <unordered_map>
+#include <vector>
 
 #define DEFAULT_LOG LOG_STREAM
 #define SRT_PENDING_MAX 64
+#define SRT_PENDING_TTL_MS 30000
+
+struct srt_pending_entry {
+    SRTSOCKET sock;
+    int64_t at;
+};
 
 // Mutex guards map access only, never srt_* calls (SRT lock-order safety).
 static std::atomic<SRTSOCKET> srt_listener_sock{SRT_INVALID_SOCK};
 static int srt_listener_udp_fd = -1;
 static std::mutex srt_pending_mutex;
-static std::unordered_map<std::string, SRTSOCKET> srt_pending;
+static std::unordered_map<std::string, srt_pending_entry> srt_pending;
 // Drain thread handle: close joins it so srt_cleanup never runs beneath.
 static std::thread srt_drain_thread;
 
@@ -54,15 +63,28 @@ int srt_socket_is_connected(SRTSOCKET sock) {
     return state == SRTS_CONNECTED;
 }
 
-// Try to match a pending accepted socket to a stream by streamid.
-// Called from decode_transport_srt when a stream is ready.
-// Returns the accepted SRTSOCKET or SRT_INVALID_SOCK if not found.
+// Drop entries older than the TTL; call with the mutex held, the
+// caller closes the victims outside it (SRT lock-order safety).
+static void srt_pending_sweep_locked(int64_t now,
+                                     std::vector<SRTSOCKET> *dead) {
+    for (auto it = srt_pending.begin(); it != srt_pending.end();) {
+        if (now - it->second.at >= SRT_PENDING_TTL_MS) {
+            dead->push_back(it->second.sock);
+            it = srt_pending.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+// Match a pending accepted socket by streamid for decode_transport_srt;
+// returns SRT_INVALID_SOCK when absent.
 SRTSOCKET srt_pending_take(const std::string &streamid) {
     std::lock_guard<std::mutex> lock(srt_pending_mutex);
     auto it = srt_pending.find(streamid);
     if (it == srt_pending.end())
         return SRT_INVALID_SOCK;
-    SRTSOCKET s = it->second;
+    SRTSOCKET s = it->second.sock;
     srt_pending.erase(it);
     return s;
 }
@@ -79,18 +101,32 @@ void srt_pending_return(SRTSOCKET sock, const std::string &streamid) {
             streamid.c_str());
         return;
     }
-    SRTSOCKET old = SRT_INVALID_SOCK;
+    std::vector<SRTSOCKET> dead;
+    bool stored = false;
     {
         std::lock_guard<std::mutex> lock(srt_pending_mutex);
+        srt_pending_sweep_locked(getTick(), &dead);
         auto it = srt_pending.find(streamid);
-        if (it != srt_pending.end() && it->second != sock) {
-            old = it->second;
-            srt_pending.erase(it);
+        if (it != srt_pending.end()) {
+            if (it->second.sock != sock)
+                dead.push_back(it->second.sock);
+            it->second = {sock, getTick()};
+            stored = true;
+        } else if (srt_pending.size() < SRT_PENDING_MAX) {
+            srt_pending.emplace(streamid, srt_pending_entry{sock, getTick()});
+            stored = true;
         }
-        srt_pending[streamid] = sock;
     }
-    if (old != SRT_INVALID_SOCK)
-        srt_close(old);
+    for (SRTSOCKET s : dead)
+        srt_close(s);
+    // Cap like the accept path: a full pool closes the return
+    // instead of growing without bound on fresh streamids.
+    if (!stored) {
+        srt_close(sock);
+        LOG("SRT socket %d closed, pending pool full (%d)", sock,
+            SRT_PENDING_MAX);
+        return;
+    }
     LOG("SRT socket %d returned to pending pool for reuse, streamid='%s'", sock,
         streamid.c_str());
 }
@@ -103,29 +139,35 @@ static int srt_accept_poll(void *, SRTSOCKET ns, int, const struct sockaddr *,
         LOG("SRT accept: empty streamid, rejecting connection");
         return -1; // reject
     }
-    SRTSOCKET old = SRT_INVALID_SOCK;
+    std::vector<SRTSOCKET> dead;
     size_t pending = 0;
+    int verdict = 0;
     {
         std::lock_guard<std::mutex> lock(srt_pending_mutex);
+        srt_pending_sweep_locked(getTick(), &dead);
+        auto it = srt_pending.find(streamid);
         if (srt_pending.size() >= SRT_PENDING_MAX) {
             LOG("SRT accept: pending pool full (%d), rejecting connection",
                 SRT_PENDING_MAX);
-            return -1; // reject
+            verdict = -1; // reject
+        } else if (it != srt_pending.end() && it->second.sock != ns) {
+            // A duplicate streamid evicts nobody: the first claim
+            // wins, later ones re-handshake (never DoS the victim).
+            LOG("SRT accept: duplicate streamid '%s', rejecting connection",
+                streamid);
+            verdict = -1; // reject
+        } else {
+            // No waiting stream found, queue in pending
+            srt_pending[streamid] = {ns, getTick()};
+            pending = srt_pending.size();
         }
-        auto it = srt_pending.find(streamid);
-        if (it != srt_pending.end() && it->second != ns) {
-            old = it->second;
-            srt_pending.erase(it);
-        }
-        // No waiting stream found, queue in pending
-        srt_pending[streamid] = ns;
-        pending = srt_pending.size();
     }
-    if (old != SRT_INVALID_SOCK)
-        srt_close(old);
-    LOG("SRT accepted connection srt_sock=%d, streamid='%s' (%zu pending)", ns,
-        streamid, pending);
-    return 0; // accept
+    for (SRTSOCKET s : dead)
+        srt_close(s);
+    if (!verdict)
+        LOG("SRT accepted connection srt_sock=%d, streamid='%s' (%zu pending)",
+            ns, streamid, pending);
+    return verdict;
 }
 
 // Callback-held sockets still occupy accept-queue slots until popped:
@@ -206,13 +248,13 @@ void srt_listener_close() {
     if (srt_drain_thread.joinable())
         srt_drain_thread.join();
     // Close any pending accepted sockets
-    std::unordered_map<std::string, SRTSOCKET> dropped;
+    std::unordered_map<std::string, srt_pending_entry> dropped;
     {
         std::lock_guard<std::mutex> lock(srt_pending_mutex);
         dropped.swap(srt_pending);
     }
     for (auto &p : dropped)
-        srt_close(p.second);
+        srt_close(p.second.sock);
 }
 
 #endif // DISABLE_SRT

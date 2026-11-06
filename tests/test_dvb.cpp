@@ -66,13 +66,77 @@ int test_detect_dvb_parameters_general() {
     return 0;
 }
 
+// A freq URL retunes: omitted modulation/coding reset to AUTO and
+// selectors to zero like master init, never keep stale values.
+int test_detect_freq_url_resets_tuning() {
+    transponder tp;
+    tp.mtype = QPSK;
+    tp.fec = FEC_1_2;
+    tp.ro = ROLLOFF_25;
+    tp.sr = 27500000;
+    tp.pol = 1;
+    tp.pids = {100, 200};
+    tp.x_pmt = 5;
+    char query[128] = "?freq=11734&sr=29900";
+    detect_dvb_parameters(query, &tp);
+    ASSERT(tp.mtype == QAM_AUTO, "mtype resets to AUTO on retune");
+    ASSERT(tp.fec == FEC_AUTO, "fec resets to AUTO on retune");
+    ASSERT(tp.ro == ROLLOFF_AUTO, "ro resets to AUTO on retune");
+    ASSERT(tp.plts == PILOT_AUTO, "plts resets to AUTO on retune");
+    ASSERT(tp.inversion == INVERSION_AUTO, "inversion resets on retune");
+    ASSERT(tp.sr == 29900000, "explicit sr kept");
+    ASSERT(tp.pol == 0, "pol resets to 0 on retune");
+    ASSERT(tp.diseqc == 0, "src resets to 0 on retune");
+    ASSERT(tp.pids.empty(), "pids clear without pid keys");
+    ASSERT(tp.x_pmt == std::nullopt, "x_pmt clears without its key");
+
+    // Explicit 0 is a value (range validation rejects it); only an
+    // empty value reads back as unspecified.
+    strcpy(query, "?freq=0");
+    detect_dvb_parameters(query, &tp);
+    ASSERT(tp.freq == 0, "explicit freq 0 stored, not preserved");
+    strcpy(query, "?freq=");
+    detect_dvb_parameters(query, &tp);
+    ASSERT(tp.freq == std::nullopt, "empty freq stays unspecified");
+    strcpy(query, "?src=0");
+    detect_dvb_parameters(query, &tp);
+    ASSERT(tp.diseqc == 0, "explicit src 0 stored, not preserved");
+    return 0;
+}
+
+// Without freq there is no reset: tuning reads nullopt and pid keys
+// alone decide the set (add/del merge into the seed, else clear).
+int test_detect_non_freq_url_pid_rules() {
+    transponder tp;
+    tp.pids = {100, 200};
+    char query[128] = "?sr=29900";
+    detect_dvb_parameters(query, &tp);
+    ASSERT(tp.mtype == std::nullopt, "mtype unspecified without its key");
+    ASSERT(tp.pids.empty(), "pids clear without pid keys");
+
+    tp.pids = {100, 200};
+    strcpy(query, "?sr=29900&addpids=300");
+    detect_dvb_parameters(query, &tp);
+    ASSERT(tp.pids.size() == 3 && tp.pids.contains(300), "addpids merges");
+
+    tp.pids = {100, 200};
+    strcpy(query, "?sr=29900&delpids=100");
+    detect_dvb_parameters(query, &tp);
+    ASSERT(tp.pids.size() == 1 && tp.pids.contains(200), "delpids removes");
+
+    strcpy(query, "?sr=29900&pids=300");
+    detect_dvb_parameters(query, &tp);
+    ASSERT(tp.pids.size() == 1 && tp.pids.contains(300), "pids replaces");
+    return 0;
+}
+
 int test_detect_dvb_parameters_roll_off() {
     transponder tp;
 
-    // Undefined (should remain nullopt)
+    // Undefined on a freq URL resets to AUTO like master init
     char query[128] = "?freq=11734";
     detect_dvb_parameters(query, &tp);
-    ASSERT(tp.ro == std::nullopt, "ro parsed incorrectly");
+    ASSERT(tp.ro == ROLLOFF_AUTO, "ro parsed incorrectly");
 
     // Various recognized values
     strcpy(query, "?freq=11734&ro=0.35");
@@ -180,6 +244,13 @@ int test_dvb_lock_recovery_eligibility() {
 
     ad.lock_retries = 5;
     ASSERT(!dvb_lock_retry_due(&ad, 6000), "retries give up after the cap");
+    ad.tp.diseqc_param.switch_type = SWITCH_JESS;
+    ASSERT(dvb_lock_retry_due(&ad, 6000),
+           "single-cable retries past the cap like master");
+    ad.tp.diseqc_param.switch_type = SWITCH_UNICABLE;
+    ASSERT(dvb_lock_retry_due(&ad, 6000),
+           "Unicable retries past the cap like master");
+    ad.tp.diseqc_param.switch_type = 0;
     ad.lock_retries = 0;
 
     ad.master_source = 0;
@@ -651,6 +722,10 @@ int main() {
               "test detect_dvb_parameters clamps numeric values");
     TEST_FUNC(test_detect_dvb_parameters_general(),
               "test detect_dvb_parameters with general parameters");
+    TEST_FUNC(test_detect_freq_url_resets_tuning(),
+              "test freq URL resets tuning like master");
+    TEST_FUNC(test_detect_non_freq_url_pid_rules(),
+              "test non-freq URL pid rules");
     TEST_FUNC(test_detect_dvb_parameters_roll_off(),
               "test detect_dvb_parameters roll-off parsing");
     TEST_FUNC(test_detect_dvb_parameters_edge_cases(),

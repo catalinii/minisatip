@@ -141,14 +141,12 @@ typedef struct struct_pmt {
     std::vector<SStreamPid> stream_pids;
     int id;
     size_t blen;
-    // ca_mask: the PMT was sent to that CA. pmt_add_caid() clears it to force
-    // a re-send when a new CA descriptor shows up.
-    //
-    // ca_registered_mask: that CA holds the PMT and must be told when it
-    // stops. Cleared when the registration, CA, or cached PMT is removed.
-    // Writers take the PMT lock; readers re-read every pass, so a stale
-    // read only delays one cycle (see ca_mask_mutex for the same rule).
-    int ca_mask, disabled_ca_mask, ca_registered_mask;
+    // Sent to that CA; cleared to force a re-send on new descriptors.
+    int ca_mask;
+    int disabled_ca_mask;
+    // Held by that CA, told on stop; cleared with the registration.
+    // Writers take the PMT lock; a stale read delays one cycle.
+    int ca_registered_mask;
     SPMT_batch *batch;
     std::vector<SPMT_batch> batch_buffer; // storage behind batch
     // Set on the adapter thread, read from send_cw() on dvbapi/ca threads.

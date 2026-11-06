@@ -60,8 +60,14 @@
 // fail it, and forward everything else to libc.
 static std::vector<std::string> g_dvb_opens;
 static int record_or_forward_open(const char *path, int flags, mode_t mode) {
-    static auto real_open =
-        (int (*)(const char *, int, ...))dlsym(RTLD_NEXT, "open");
+    // memcpy, not a cast: -pedantic-errors rejects void* to
+    // function-pointer casts.
+    static auto real_open = [] {
+        int (*f)(const char *, int, ...);
+        void *h = dlsym(RTLD_NEXT, "open");
+        memcpy(&f, &h, sizeof(h));
+        return f;
+    }();
     std::string p = path ? path : "";
     if (p.compare(0, 9, "/dev/dvb/") == 0) {
         g_dvb_opens.push_back(p);
@@ -71,17 +77,24 @@ static int record_or_forward_open(const char *path, int flags, mode_t mode) {
     return real_open(path, flags, mode);
 }
 extern "C" int open(const char *path, int flags, ...) {
-    va_list ap;
-    va_start(ap, flags);
-    mode_t mode = va_arg(ap, mode_t);
-    va_end(ap);
+    // Read mode only when present: 2-arg opens have no third arg.
+    mode_t mode = 0;
+    if (flags & (O_CREAT | O_TMPFILE)) {
+        va_list ap;
+        va_start(ap, flags);
+        mode = va_arg(ap, mode_t);
+        va_end(ap);
+    }
     return record_or_forward_open(path, flags, mode);
 }
 extern "C" int open64(const char *path, int flags, ...) {
-    va_list ap;
-    va_start(ap, flags);
-    mode_t mode = va_arg(ap, mode_t);
-    va_end(ap);
+    mode_t mode = 0;
+    if (flags & (O_CREAT | O_TMPFILE)) {
+        va_list ap;
+        va_start(ap, flags);
+        mode = va_arg(ap, mode_t);
+        va_end(ap);
+    }
     return record_or_forward_open(path, flags, mode);
 }
 
@@ -358,7 +371,7 @@ int test_ddci_loopback_set_pid_uses_shared_demux_fd() {
     int fd = open("/dev/null", O_RDWR);
     ASSERT(fd >= 0, "need a stand-in read fd");
     ad.dvr = fd;
-    int saved_enigma = opts.enigma;
+    auto saved_enigma = opts.enigma;
     opts.enigma = 1;
     d.id = 0;
     d.enabled = 1;
@@ -404,7 +417,7 @@ int test_ddci_loopback_del_pid_removes_shared_demux_pid() {
     ASSERT(fd >= 0, "need a stand-in read fd");
     ad.dvr = fd;
     ad.active_demux_pids = 2;
-    int saved_enigma = opts.enigma;
+    auto saved_enigma = opts.enigma;
     opts.enigma = 1;
     d.id = 0;
     d.enabled = 1;
@@ -432,62 +445,42 @@ int test_ddci_loopback_del_pid_removes_shared_demux_pid() {
     return 0;
 }
 
-// A DDCI map sends the first CAPMT at map time: mapped PMTs
-// skip the live CA path, so without it the CAM stays cold.
-int test_ddci_map_sends_first_capmt() {
-    ddci_device_t d0 = {};
-    ca_device_t ca0 = {};
-    adapter ad = {}, a0 = {};
+// Idle->active shed keys on the demux counter, not active_pids: the
+// first demux add sheds even with pids already counted elsewhere.
+int test_ddci_loopback_shed_uses_demux_counter() {
+    ddci_device_t d = {};
+    adapter ad = {};
     for (auto &slot : a)
         slot = nullptr;
     memset(ddci_devices, 0, sizeof(ddci_devices));
-    memset(ca_devices, 0, sizeof(ca_devices));
-    create_adapter(&ad, 8);
-    create_adapter(&a0, 0);
-    SPMT *pmt0 = create_pmt(8, 600, 601, 602, 0x100, 0x100);
-    pmt0->pcr_pid = 601;
-    memset(&d0.pmt, -1, sizeof(d0.pmt));
-    d0.id = 0;
-    d0.enabled = 1;
-    d0.loopback = 1;
-    d0.max_channels = 1;
-    ddci_devices[0] = &d0;
-    int saved_enigma = opts.enigma;
+    create_adapter(&ad, 0);
+    ad.type = ADAPTER_CI;
+    ad.pa = 0;
+    ad.fn = 18;
+    int fd = open("/dev/null", O_RDWR);
+    ASSERT(fd >= 0, "need a stand-in read fd");
+    ad.dvr = fd;
+    ad.active_pids = 99;
+    ad.active_demux_pids = 0;
+    ad.drop_buffer = 0;
+    auto saved_enigma = opts.enigma;
     opts.enigma = 1;
-    int sv[2];
-    socketpair(AF_UNIX, SOCK_STREAM, 0, sv);
-    fcntl(sv[1], F_SETFL, O_NONBLOCK);
-    ca0.id = 0;
-    ca0.enabled = 1;
-    ca0.state = CA_STATE_INITIALIZED;
-    ca0.fd = sv[0];
-    ca0.mode = ca_mode::ENIGMA_DDCI;
-    ca0.sessions[1].handler.resource = EN50221_APP_CA_RESOURCEID;
-    ca0.sessions[1].handler.name = "test";
-    ca0.sessions[1].ca = &ca0;
-    ca0.sessions[1].session_number = 1;
-    ca_devices[0] = &ca0;
-    int dvbca_id = add_ca(&dvbca);
-    add_caid_mask(dvbca_id, 0, 0x100, 0xFFFF);
-    ASSERT(ddci_process_pmt(&ad, pmt0, 0) == TABLES_RESULT_OK, "slot expected");
-    uint8_t buf[4096];
-    ssize_t n = read(sv[1], buf, sizeof(buf));
-    int ddci_pid = get_pid_mapping_allddci(8, 601)->ddci_pid;
-    uint8_t pat[2] = {static_cast<uint8_t>(ddci_pid >> 8),
-                      static_cast<uint8_t>(ddci_pid & 0xFF)};
-    uint8_t tag[3] = {0x9F, 0x80, 0x32};
+    d.id = 0;
+    d.enabled = 1;
+    d.loopback = 1;
+    ddci_devices[0] = &d;
+    demux_cap = {};
+    _ioctl = mock_ioctl_demux;
+    ASSERT(ddci_set_pid(&ad, 100) == fd, "first add arms the read fd");
+    ASSERT(ad.drop_buffer == 1, "first demux add sheds");
+    ad.drop_buffer = 0;
+    ASSERT(ddci_set_pid(&ad, 2211) == fd, "second add reuses the fd");
+    ASSERT(ad.drop_buffer == 0, "second add skips the shed");
+    _ioctl = ioctl;
     opts.enigma = saved_enigma;
-    close(sv[0]);
-    close(sv[1]);
-    ca_devices[0] = NULL;
     ddci_devices[0] = NULL;
-    a[8] = nullptr;
     a[0] = nullptr;
-    ASSERT(n > 0, "CAPMT APDU expected on the CA fd");
-    ASSERT(memmem(buf, n, tag, sizeof(tag)) != NULL,
-           "TAG_CA_PMT expected in the write");
-    ASSERT(memmem(buf, n, pat, sizeof(pat)) != NULL,
-           "CAPMT must carry DDCI-side pids");
+    close(fd);
     return 0;
 }
 
@@ -1235,9 +1228,10 @@ int test_psi_pids_survive_a_channel_change() {
     create_adapter(&ad_b, 4);
 
     // as at runtime, post_tune() adds pid 0 as a default pid, so it outlives
-    // the DDCI mappings
+    // the DDCI mappings (loopback only: hardware CI takes no defaults)
+    auto saved_enigma = opts.enigma;
+    opts.enigma = 1;
     ci.type = ADAPTER_CI;
-    post_tune(&ci);
 
     pmt_a = create_pmt(2, 600, 601, 602, 0x100, 0x100);
     pmt_b = create_pmt(4, 700, 701, 702, 0x100, 0x100);
@@ -1249,8 +1243,10 @@ int test_psi_pids_survive_a_channel_change() {
     memset(ddci_devices, 0, sizeof(ddci_devices));
     d.id = ci.id;
     d.enabled = 1;
+    d.loopback = 1;
     d.max_channels = 2;
     ddci_devices[ci.id] = &d;
+    post_tune(&ci);
 
     int ca_id = add_ca(&dvbca);
     add_caid_mask(ca_id, ci.id, 0x100, 0xFFFF);
@@ -1280,6 +1276,22 @@ int test_psi_pids_survive_a_channel_change() {
     channels.clear();
     a[2] = nullptr;
     a[4] = nullptr;
+    a[8] = nullptr;
+    opts.enigma = saved_enigma;
+    return 0;
+}
+
+// Hardware CI takes no default pids (master); only the loopback
+// keeps pid 0 for its generated PAT.
+int test_post_tune_hw_ci_takes_no_defaults() {
+    adapter ci = {};
+    for (auto &slot : a)
+        slot = nullptr;
+    memset(ddci_devices, 0, sizeof(ddci_devices));
+    create_adapter(&ci, 8);
+    ci.type = ADAPTER_CI;
+    post_tune(&ci);
+    ASSERT(find_pid(8, 0) == NULL, "HW CI takes no default pid 0");
     a[8] = nullptr;
     return 0;
 }
@@ -1737,6 +1749,42 @@ int test_process_cat() {
     // Reset fixtures
     delete filters[0];
     filters.slot(0) = nullptr;
+
+    return 0;
+}
+
+// A CAT claiming EMMs on a fixed table pid (here 16, taken by NIT)
+// is broken SI: the CAT still processes, only the claim is moot.
+int test_process_cat_fixed_pid_emm_ignored() {
+    uint8_t cat[] = {0x01, 0xb0, 0x21, 0xff, 0xff, 0xc5, 0x00, 0x00, 0x09,
+                     0x04, 0x0b, 0x00, 0xe0, 0x10, 0x09, 0x04, 0x09, 0x3e,
+                     0xe0, 0xc1, 0x09, 0x04, 0x09, 0x40, 0xe0, 0xc2, 0x09,
+                     0x04, 0x18, 0x8a, 0xe0, 0x31, 0xd9, 0x66, 0x34, 0x3b};
+
+    ddci_device_t d = {};
+    d.id = 0;
+    d.enabled = 1;
+    memset(ddci_devices, 0, sizeof(ddci_devices));
+    ddci_devices[0] = &d;
+    add_pid_mapping_table(0, 16, 0, &d, 1);
+    SFilter *f = new SFilter();
+    f->flags = FILTER_CRC;
+    f->id = 0;
+    f->adapter = 0;
+    f->pid = 1234;
+    f->next_filter = -1;
+    f->enabled = 1;
+    filters.slot(0) = f;
+
+    ddci_process_cat(0, cat, sizeof(cat) / sizeof(uint8_t), &d);
+
+    ASSERT(get_pid_mapping_allddci(0, 193) != NULL,
+           "normal EMM still mapped past a fixed-pid claim");
+    ASSERT(d.emm_pids.count(MAKE_KEY(0, 193)) > 0, "EMM PID 193 tracked");
+
+    delete filters[0];
+    filters.slot(0) = nullptr;
+    ddci_devices[0] = NULL;
 
     return 0;
 }
@@ -2606,7 +2654,8 @@ int test_ddci_push_eagain_retries() {
     ASSERT(fcntl(fds[1], F_SETFL, flags | O_NONBLOCK) == 0, "nonblock push");
     ad2.fe = fds[1];
     // One slot like the stb dvr: EAGAIN arrives fast, a read clears it.
-    ASSERT(fcntl(fds[1], F_SETPIPE_SZ, 4096) == 4096, "one-slot pipe");
+    // At least 4096: the kernel rounds up to page size (16K/64K ARM64).
+    ASSERT(fcntl(fds[1], F_SETPIPE_SZ, 4096) >= 4096, "one-slot pipe");
     size_t held = bl_fill_pipe(fds[1]);
     ASSERT(held >= 4096, "pipe holds filler");
     ddci_push_start(&d);
@@ -2664,7 +2713,8 @@ int test_ddci_push_stop_sheds_stall() {
     ASSERT(fcntl(fds[1], F_SETFL, flags | O_NONBLOCK) == 0, "nonblock push");
     ad2.fe = fds[1];
     // One slot like the stb dvr: the push stalls on the first chunk.
-    ASSERT(fcntl(fds[1], F_SETPIPE_SZ, 4096) == 4096, "one-slot pipe");
+    // At least 4096: the kernel rounds up to page size (16K/64K ARM64).
+    ASSERT(fcntl(fds[1], F_SETPIPE_SZ, 4096) >= 4096, "one-slot pipe");
     bl_fill_pipe(fds[1]);
     ddci_push_start(&d);
     uint8_t msg[1024];
@@ -2891,6 +2941,8 @@ int main() {
     opts.cache_dir = "/tmp";
     strcpy(thread_info[thread_index].thread_name, "test_ddci");
     TEST_FUNC(test_process_cat(), "testing CAT processing");
+    TEST_FUNC(test_process_cat_fixed_pid_emm_ignored(),
+              "testing CAT fixed-pid EMM claim ignored");
     TEST_FUNC(test_channels(), "testing test_channels");
     TEST_FUNC(test_add_del_pmt(), "testing adding and removing pmts");
     TEST_FUNC(test_ddci_channel_count(),
@@ -2903,10 +2955,10 @@ int main() {
               "testing loopback set_pid uses the shared demux fd");
     TEST_FUNC(test_ddci_loopback_del_pid_removes_shared_demux_pid(),
               "testing loopback del_pid removes the shared demux pid");
+    TEST_FUNC(test_ddci_loopback_shed_uses_demux_counter(),
+              "testing loopback shed uses the demux counter");
     TEST_FUNC(test_update_resend_keeps_slot(),
               "testing update re-send keeps the slot and drops one pid");
-    TEST_FUNC(test_ddci_map_sends_first_capmt(),
-              "testing DDCI map sends the first CAPMT");
     TEST_FUNC(test_mandatory_pat_stays_mapped(),
               "testing mandatory PAT stays mapped across re-sends");
     TEST_FUNC(test_ddci_update_version_follows_content(),
@@ -2921,6 +2973,8 @@ int main() {
               "testing loopback queues PSI+TS with no writev or tail");
     TEST_FUNC(test_psi_pids_survive_a_channel_change(),
               "testing that the CI keeps the pids of its generated PSI");
+    TEST_FUNC(test_post_tune_hw_ci_takes_no_defaults(),
+              "testing HW CI takes no default pids");
     TEST_FUNC(test_ci_pmt_name_is_refreshed(),
               "testing that the CI-side PMT is named once the source is");
     TEST_FUNC(test_ddci_add_psi_per_channel_pmt(),

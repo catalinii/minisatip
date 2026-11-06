@@ -55,6 +55,7 @@
 #ifndef DISABLE_SRT
 #include <srt/srt.h>
 #define SRT_LATENCY_MS 1000
+#define SRT_CONNECT_TIMEOUT_MS 2000
 #endif
 
 #define TCP_DATA_SIZE                                                          \
@@ -754,6 +755,10 @@ static int satipc_open_srt(adapter *ad, satipc *sip) {
 
     int latency = SRT_LATENCY_MS;
     srt_setsockflag(sip->srt_sock, SRTO_LATENCY, &latency, sizeof(latency));
+    // Bound the sync connect: a slow server must not stall opens.
+    int conntimeo = SRT_CONNECT_TIMEOUT_MS;
+    srt_setsockflag(sip->srt_sock, SRTO_CONNTIMEO, &conntimeo,
+                    sizeof(conntimeo));
     // No SRTO_RENDEZVOUS — caller mode (default)
     // Blocking mode for sync connect
     sip->srt_streamid = std::to_string(get_random_uint32());

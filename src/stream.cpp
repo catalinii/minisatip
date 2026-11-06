@@ -622,9 +622,6 @@ int streams_add() {
     ss->len = 0;
     ss->st_sock = -1;
     ss->srt_sock = SRT_INVALID_SOCK;
-    //	ss->seq = 0; // set the sequence to 0 for testing purposes - it
-    // should
-    // be random
     /* coverity[DC.WEAK_CRYPTO] */
     ss->ssrc = static_cast<int>(random());
     ss->timeout = opts.timeout_sec;
@@ -932,9 +929,6 @@ int check_cc(adapter *ad) {
             else
                 p->cc = (p->cc + 1) % 16;
 
-            //	if(b[1] ==0x40 && b[2]==0) LOG("PAT TID = %d", b[8] *
-            // 256 +
-            // b[9]);
             if (p->cc != cc) {
                 LOG("PID Continuity error (adapter %d, pos %d): pid: %03d, "
                     "Expected "
@@ -1024,9 +1018,8 @@ void check_cc2(adapter *ad) {
     }
 }
 
-// Locks the used structs in order to avoid race conditions (sockets ->
-// stream
-// -> adapter) Requires the adapter lock to not be held before calling
+// Locks used structs in order (sockets -> stream -> adapter) to
+// avoid races. Requires the adapter lock not held on entry.
 int process_packets_for_stream(streams *sid, adapter *ad) {
     int i, st_id = sid->sid;
     SPid *p;

@@ -248,9 +248,6 @@ int netcv_commit(adapter *ad) {
 
             /* set roll-off */
             // TODO: check if needed for DVB-S2 transponders
-            // unreachable code
-            //			m_fep.u.qpsk.fec_inner |= (ro << 24);
-            //			break;
         }
 
         case SYS_DVBC_ANNEX_A:

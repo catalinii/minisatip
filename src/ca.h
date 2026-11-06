@@ -128,7 +128,6 @@ static inline void ca_clear_mmi_messages() {}
 #define MAKE_SID_FOR_CA(id, idx) (id * 100 + idx)
 #define MKRID(CLASS, TYPE, VERSION)                                            \
     ((((CLASS) & 0xffff) << 16) | (((TYPE) & 0x3ff) << 6) | ((VERSION) & 0x3f))
-#define EN50221_APP_CA_RESOURCEID MKRID(3, 1, 1)
 
 #define CA_STATE_INACTIVE 0
 #define CA_STATE_ACTIVE 1
@@ -268,10 +267,6 @@ extern ca_device_t *ca_devices[];
 
 bool set_ci_input_str(int ci, const char *val);
 ca_device_t *alloc_ca_device();
-int ca_write_apdu(ca_session_t *s, int tag, const void *data, size_t len);
-ca_session_t *find_session_for_resource(ca_device_t *d, int resource);
-int CAPMT_add_PMT(uint8_t *capmt, int len, SPMT *pmt, uint8_t cmd_id,
-                  int added_only, int ca_id);
 int ca_init(ca_device_t *d);
 void dvbca_init();
 int create_capmt(SCAPMT *ca, uint8_t listmgmt, uint8_t *capmt, int capmt_len,
