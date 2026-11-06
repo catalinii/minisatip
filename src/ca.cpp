@@ -19,6 +19,9 @@ alternative source
 
 #include "adapter.h"
 #include "ca.h"
+#ifndef DISABLE_DDCI
+#include "ddci.h"
+#endif
 #include "dvb.h"
 #include "dvbapi.h"
 #include "minisatip.h"
@@ -38,9 +41,6 @@ alternative source
 #include <charconv>
 #include <deque>
 #include <memory>
-#include <string>
-#include <string_view>
-#include <vector>
 #include <openssl/aes.h>
 #include <openssl/crypto.h>
 #include <openssl/err.h>
@@ -50,6 +50,9 @@ alternative source
 #include <openssl/rsa.h>
 #include <openssl/sha.h>
 #include <openssl/x509.h>
+#include <string>
+#include <string_view>
+#include <vector>
 #if OPENSSL_VERSION_NUMBER >= 0x30000000L
 #include <openssl/core_names.h>
 #include <openssl/param_build.h>
@@ -1148,17 +1151,22 @@ int get_active_capmts(ca_device_t *d) {
 }
 
 void set_input_ci(int ci, int aid) {
+    char val[2] = {(char)('A' + aid), 0};
+    set_ci_input_str(ci, val);
+}
+
+bool set_ci_input_str(int ci, const char *val) {
     char filename[100];
-    int val = 'A' + aid;
-    sprintf(filename, "/proc/stb/tsmux/ci%d_input", ci);
-    LOG("%s: %s -> %c", __FUNCTION__, filename, val);
+    snprintf(filename, sizeof(filename), "/proc/stb/tsmux/ci%d_input", ci);
+    LOG("%s: %s -> %s", __FUNCTION__, filename, val);
     FILE *fp = fopen(filename, "w");
-    if (fp) {
-        fprintf(fp, "%c", val);
-        fclose(fp);
-    } else {
+    if (!fp) {
         LOG("%s open failed, %s", __FUNCTION__, filename);
+        return false;
     }
+    bool ok = fprintf(fp, "%s", val) > 0;
+    fclose(fp);
+    return ok;
 }
 
 void set_tuner_input(int ci, int aid) {
@@ -1192,6 +1200,25 @@ int any_ca_initializing() {
     return 0;
 }
 
+// Mode for this adapter: loopback owns ENIGMA_DDCI, any other
+// CI adapter is hardware DDCI, enigma tuners are ENIGMA.
+static ca_mode ca_mode_for_adapter(const adapter *ad) {
+#ifndef DISABLE_DDCI
+    if (ddci_is_loopback(ad->id))
+        return ca_mode::ENIGMA_DDCI;
+#endif
+    if (ad->type == ADAPTER_CI)
+        return ca_mode::DDCI;
+    if (opts.enigma && ad->type == ADAPTER_DVB)
+        return ca_mode::ENIGMA;
+    return ca_mode::DVB;
+}
+
+// Both enigma modes drive /dev/ciN with raw SPDUs.
+[[nodiscard]] static constexpr bool ca_mode_is_enigma(ca_mode mode) {
+    return mode == ca_mode::ENIGMA || mode == ca_mode::ENIGMA_DDCI;
+}
+
 ca_device_t *find_dvbca_for_pmt(SPMT *pmt) {
     ca_device_t *d;
     extern SCA ca[MAX_CA];
@@ -1200,6 +1227,10 @@ ca_device_t *find_dvbca_for_pmt(SPMT *pmt) {
     for (i = 0; i < MAX_ADAPTERS; i++)
         if (ca_devices[i] && ca_devices[i]->state == CA_STATE_INITIALIZED) {
             d = ca_devices[i];
+            // Live PMTs must not steal the loopback stack (its tsmux
+            // input moves); a busy single CI correctly finds nothing.
+            if (d->mode == ca_mode::ENIGMA_DDCI)
+                continue;
             // add_caid_mask writes ad_info under ca_mask_mutex: read
             // it under the same lock so count/caid/mask stay together.
             std::lock_guard<SMutex> lock(ca_mask_mutex);
@@ -1230,8 +1261,8 @@ static void restore_ci_link(ca_device_t *d, adapter *ad, int prev_linked) {
         d->linked_adapter = -1;
         return;
     }
-    set_tuner_input(d->id, prev_linked);
-    set_input_ci(d->id, prev_linked);
+    set_tuner_input(d->ci_slot, prev_linked);
+    set_input_ci(d->ci_slot, prev_linked);
     d->linked_adapter = prev_linked;
 }
 
@@ -1244,7 +1275,9 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt, int update) {
     int prev_linked = -2; // -2: CI was not moved for this call
     SPMT *first = NULL;
 
-    if (opts.enigma) {
+    // Live enigma adapters move the CI between tuners; DDCI adapters
+    // drive their own stack exactly like hardware DDCI off-enigma.
+    if (ca_mode_for_adapter(ad) == ca_mode::ENIGMA) {
         // enigma allows attaching the CI to the adapter that needs it
         d = find_dvbca_for_pmt(spmt);
         if (!d) {
@@ -1259,8 +1292,8 @@ int dvbca_process_pmt(adapter *ad, SPMT *spmt, int update) {
         if (d->linked_adapter != ad->id) {
             set_tuner_input(-1, d->linked_adapter);
         }
-        set_tuner_input(d->id, ad->id);
-        set_input_ci(d->id, ad->id);
+        set_tuner_input(d->ci_slot, ad->id);
+        set_input_ci(d->ci_slot, ad->id);
         d->linked_adapter = ad->id;
     }
 
@@ -2983,8 +3016,9 @@ void ca_clear_mmi_messages() {
 // Remove a disconnected slot's messages; bumps last_seq so pollers refetch.
 static void ca_clear_mmi_for_device(int ca_id) {
     std::lock_guard<SMutex> lock(mmi_mutex);
-    size_t removed = std::erase_if(
-        mmi_messages, [ca_id](const MmiMessage &m) { return m.ca_id == ca_id; });
+    size_t removed = std::erase_if(mmi_messages, [ca_id](const MmiMessage &m) {
+        return m.ca_id == ca_id;
+    });
     if (removed > 0) {
         ++mmi_last_seq;
         mmi_last_changed = time(nullptr);
@@ -3047,7 +3081,8 @@ static std::string mmi_sanitize_utf8(std::string_view sv) {
             out.append(sv.substr(i, seq_len));
             i += seq_len;
         } else if (b < 0xA0) {
-            // EN 300 468 control codes 0x80-0x9F: 0x8A is CR/LF, others dropped.
+            // EN 300 468 control codes 0x80-0x9F: 0x8A is CR/LF, others
+            // dropped.
             if (b == 0x8A) {
                 if (out.size() + 1 > MAX_MMI_TEXT_LEN)
                     break;
@@ -3119,11 +3154,11 @@ std::string get_json_mmi() {
         const MmiMessage &m = snapshot[idx];
         out.append(idx == 0 ? "\n{" : ",\n{");
         char meta[160];
-        snprintf(
-            meta, sizeof(meta),
-            "\"seq\":%llu,\"ca\":%d,\"session\":%d,\"timestamp\":%lld,\"type\":",
-            static_cast<unsigned long long>(m.seq), m.ca_id, m.session_number,
-            static_cast<long long>(m.timestamp));
+        snprintf(meta, sizeof(meta),
+                 "\"seq\":%llu,\"ca\":%d,\"session\":%d,\"timestamp\":%lld,"
+                 "\"type\":",
+                 static_cast<unsigned long long>(m.seq), m.ca_id,
+                 m.session_number, static_cast<long long>(m.timestamp));
         out.append(meta);
         append_json_escaped(out, m.type);
         if (m.type == "enquiry") {
@@ -3465,7 +3500,7 @@ size_t asn_1_encode(size_t length, uint8_t *asn_1_array) {
 // to the CA device For dvbca codepath, this wraps the session data into a TPDU
 // and sends it to the device.
 int ca_write_tpdu(ca_device_t *d, uint8_t tag, uint8_t *buf, size_t len) {
-    if (opts.enigma) {
+    if (ca_mode_is_enigma(d->mode)) {
 
         ssize_t written;
         do {
@@ -3948,7 +3983,7 @@ int ca_timeout(sockets *s) {
     if (s->sid < 0 || s->sid >= MAX_ADAPTERS || !ca_devices[s->sid])
         return 0;
     d = ca_devices[s->sid];
-    if (!opts.enigma) {
+    if (!ca_mode_is_enigma(d->mode)) {
         int rc;
         if (d->state == CA_STATE_INACTIVE) {
             rc = ca_write_tpdu(d, T_CREATE_TC, NULL, 0);
@@ -4143,6 +4178,9 @@ ca_device_t *alloc_ca_device() {
         LOG_AND_RETURN(NULL, "Could not allocate memory for CA device");
     }
     memset(d, 0, sizeof(ca_device_t));
+    // Unopened fds must read invalid, or pre-created devices look live.
+    d->fd = -1;
+    d->sock = -1;
     // maximum 1 channel per CA
     d->max_ca_pmt = DEFAULT_CA_PMT;
     return d;
@@ -4177,6 +4215,19 @@ static int ca_slot_present(int fd) {
     if (ioctl(fd, CA_GET_SLOT_INFO, &info))
         return 1;
     return ca_slot_has_module(&info);
+}
+
+// True when /dev/ciN holds a module; fail-open on errors,
+// an unproven slot keeps the old claim behavior (surfcu-8).
+int ca_ci_module_present(int ci_slot) {
+    char path[32];
+    snprintf(path, sizeof(path), "/dev/ci%d", ci_slot);
+    int fd = open(path, O_RDWR | O_NONBLOCK | O_CLOEXEC);
+    if (fd < 0)
+        return 1;
+    int present = ca_slot_present(fd);
+    close(fd);
+    return present;
 }
 
 // Record a failed init: drop the handle, stay enabled for the
@@ -4233,12 +4284,41 @@ int dvbca_init_dev(adapter *ad) {
     if (ad->type != ADAPTER_DVB && ad->type != ADAPTER_CI)
         return TABLES_RESULT_ERROR_NORETRY;
     sprintf(ca_dev_path, "/dev/dvb/adapter%d/ca%d", ad->pa, ad->fn);
-    if (opts.enigma) {
-        sprintf(ca_dev_path, "/dev/ci%d", ad->id);
+    int ci_slot = ad->id;
+    ca_mode mode = ca_mode_for_adapter(ad);
+    if (ca_mode_is_enigma(mode)) {
+#ifndef DISABLE_DDCI
+        // DDCI owns slot choice; ca drives the claimed device.
+        if (mode == ca_mode::ENIGMA_DDCI) {
+            ci_slot = ddci_loopback_slot_for(ad->id);
+            LOG("loopback adapter %d auto-picked CI slot %d", ad->id, ci_slot);
+            if (ci_slot < 0)
+                LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY,
+                               "no usable CI slot for loopback adapter %d",
+                               ad->id);
+        }
+#endif
+        snprintf(ca_dev_path, sizeof(ca_dev_path), "/dev/ci%d", ci_slot);
     }
+#ifndef DISABLE_DDCI
+    // Loopback owns its CI slot; the enigma tuner stands down.
+    if (mode == ca_mode::ENIGMA && ddci_loopback_owns_slot(ci_slot))
+        LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY,
+                       "CI slot %d owned by the loopback, skip adapter %d",
+                       ci_slot, ad->id);
+#endif
+    // Ownership is by policy (mode), so concurrent opens race
+    // nothing: each adapter publishes its own device slot below.
     fd = open(ca_dev_path, O_RDWR);
+    if (fd >= 0)
+        flush_handle(fd);
     if (fd < 0) {
-        if (opts.enigma && has_ci) {
+        // A loopback with no stack must fail loudly, not inherit a bit.
+        if (mode == ca_mode::ENIGMA_DDCI)
+            LOG_AND_RETURN(TABLES_RESULT_ERROR_NORETRY,
+                           "No CA device for loopback adapter %d: file %s",
+                           ad->id, ca_dev_path);
+        if (ca_mode_is_enigma(mode) && has_ci) {
             LOG_AND_RETURN(TABLES_RESULT_OK,
                            "No CA device detected on adapter %d: enabling "
                            "already registered CAs",
@@ -4248,7 +4328,6 @@ int dvbca_init_dev(adapter *ad) {
                        "No CA device detected on adapter %d: file %s", ad->id,
                        ca_dev_path);
     }
-    flush_handle(fd);
     if (!c) {
         c = ca_devices[ad->id] = alloc_ca_device();
         if (!c) {
@@ -4264,6 +4343,8 @@ int dvbca_init_dev(adapter *ad) {
         std::lock_guard<SMutex> lock(ca_dev_lock(ad->id));
         c->fd = fd;
         c->id = ad->id;
+        c->ci_slot = ci_slot;
+        c->mode = mode;
         c->state = CA_STATE_INACTIVE;
         c->sock = -1;
         c->pending_tag = 0;
@@ -4281,7 +4362,6 @@ int dvbca_init_dev(adapter *ad) {
         memset(c->iv[0], 0, sizeof(c->iv[0]));
         memset(c->iv[1], 0, sizeof(c->iv[1]));
     }
-
     if (!c->force_ci) {
         if (access("/etc/ssl/certs/root.pem", F_OK) != 0) {
             c->force_ci = 1;
@@ -4289,12 +4369,12 @@ int dvbca_init_dev(adapter *ad) {
     }
 
     // Empty slot: skip the reset storm, the poller retries later.
-    if (!opts.enigma && !ca_slot_present(fd)) {
+    if (!ca_mode_is_enigma(mode) && !ca_slot_present(fd)) {
         LOG("CA %d: no module in slot, deferring init", c->id);
         return ca_init_failed(c);
     }
 
-    if (opts.enigma)
+    if (ca_mode_is_enigma(mode))
         result = ca_init_enigma(c);
     else
         result = ca_init_en50221(c);

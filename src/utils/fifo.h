@@ -4,13 +4,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
-// Circular Buffer/Ring Buffer implementation:
-// Uses 64 bit read and write index and prevents wrapping to be able to use
-// modulo operation. Allows also to peek from an offset related to the
-// read_index and exposes the internal buffer to enable 0-copy use cases (write
-// to a handle)
-
-typedef struct fifo {
+// Ring buffer with 64-bit never-wrapping indices; peek exposes
+// the internal buffer for 0-copy writes straight into the ring.
+typedef struct fifo { // plain indices: cross-thread users lock
     const char *file;
     int line;
     uint64_t read_index;
@@ -32,7 +28,12 @@ static inline void fifo_skip_bytes(SFIFO *f, size_t len) {
     if (f->size > 0)
         f->read_index += len;
 }
+static inline void fifo_reset(SFIFO *f) {
+    f->read_index = 0;
+    f->write_index = 0;
+}
 
+// Returns bytes queued; 0 when refused (full without force).
 size_t fifo_push_force(SFIFO *fifo, void *src, size_t len, int force);
 
 size_t fifo_pop_offset(SFIFO *fifo, void *dst, size_t len, uint64_t *offset);
