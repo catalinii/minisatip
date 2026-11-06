@@ -52,6 +52,24 @@
 #define DEV_DVR "/dev/dvb/adapter%d/dvr%d"
 #define DEV_SEC "/dev/dvb/adapter%d/sec%d"
 
+#ifndef DMX_SET_SOURCE
+/**
+ * DMX_SET_SOURCE and dmx_source enum removed on 4.14 kernel
+ * From Github.com/OpenPLI/enigma2 commit 7996dbb
+ **/
+enum dmx_source {
+    DMX_SOURCE_FRONT0 = 0,
+    DMX_SOURCE_FRONT1,
+    DMX_SOURCE_FRONT2,
+    DMX_SOURCE_FRONT3,
+    DMX_SOURCE_DVR0 = 16,
+    DMX_SOURCE_DVR1,
+    DMX_SOURCE_DVR2,
+    DMX_SOURCE_DVR3
+};
+#define DMX_SET_SOURCE _IOW('o', 49, enum dmx_source)
+#endif
+
 #ifndef ROLLOFF_15
 #define ROLLOFF_15 ((fe_rolloff_t)4)
 #endif
@@ -255,7 +273,6 @@ int detect_dvb_parameters(std::string_view s, transponder *tp) {
 
     std::string old_pids = iterable_to_string(tp->pids);
     bool pids_specified = false;
-    bool x_pmt_specified = false;
 
     auto qm_pos = s.find('?');
     if (qm_pos == std::string_view::npos)
@@ -264,25 +281,6 @@ int detect_dvb_parameters(std::string_view s, transponder *tp) {
     std::string_view query = s.substr(qm_pos + 1);
     if (query.contains("freq=")) {
         tp->clear();
-        // Retune resets like master init: AUTO modulation/coding,
-        // zeroed selectors; ds/plp stay unset (never carried).
-        tp->inversion = INVERSION_AUTO;
-        tp->hprate = FEC_AUTO;
-        tp->tmode = TRANSMISSION_MODE_AUTO;
-        tp->gi = GUARD_INTERVAL_AUTO;
-        tp->bw = 8000000;
-        tp->ro = ROLLOFF_AUTO;
-        tp->mtype = QAM_AUTO;
-        tp->plts = PILOT_AUTO;
-        tp->fec = FEC_AUTO;
-        tp->sys = SYS_UNDEFINED;
-        tp->fe = 0;
-        tp->sr = 0;
-        tp->pol = 0;
-        tp->diseqc = 0;
-        tp->sm = 0;
-        tp->t2id = 0;
-        tp->c2tft = 0;
     }
 
     LOG("detect_dvb_parameters (S)-> %.*s", (int)query.size(), query.data());
@@ -302,12 +300,8 @@ int detect_dvb_parameters(std::string_view s, transponder *tp) {
         if (key == "msys")
             tp->sys = fe_delsys_map.lookup(val);
         else if (key == "freq") {
-            // Explicit 0 stays 0 for range validation; only an
-            // empty value reads back as unspecified.
-            if (val.empty())
-                tp->freq = std::nullopt;
-            else
-                tp->freq = parse_float(val, 1000);
+            int f = parse_float(val, 1000);
+            tp->freq = f ? std::optional<int>(f) : std::nullopt;
         } else if (key == "pol")
             tp->pol = fe_pol_map.lookup(val);
         else if (key == "sr") {
@@ -318,10 +312,8 @@ int detect_dvb_parameters(std::string_view s, transponder *tp) {
         } else if (key == "fe")
             tp->fe = parse_int(val);
         else if (key == "src") {
-            if (val.empty())
-                tp->diseqc = std::nullopt;
-            else
-                tp->diseqc = parse_int(val);
+            int d = parse_int(val);
+            tp->diseqc = d ? std::optional<int>(d) : std::nullopt;
         } else if (key == "ro")
             tp->ro = fe_rolloff_map.lookup(val);
         else if (key == "mtype")
@@ -359,7 +351,6 @@ int detect_dvb_parameters(std::string_view s, transponder *tp) {
                 tp->x_pmt = parsed;
             else
                 tp->x_pmt = std::nullopt;
-            x_pmt_specified = true;
         } else if (key == "pids") {
             tp->pids.clear();
             auto parsed = parse_pids_list(val);
@@ -382,12 +373,6 @@ int detect_dvb_parameters(std::string_view s, transponder *tp) {
         LOG("detect_dvb_parameters: PIDs changed: old = %s, new = %s",
             old_pids.c_str(), iterable_to_string(tp->pids).c_str());
     }
-    // Seeded pids/x_pmt die here like master: only pid keys carry
-    // them, so a retune never re-adds stale pids or mappings.
-    if (!pids_specified)
-        tp->pids.clear();
-    if (!x_pmt_specified)
-        tp->x_pmt = std::nullopt;
 
     if (tp->pls_mode == PLS_MODE_ROOT)
         tp->pls_code = pls_scrambling_index(tp);
@@ -2294,9 +2279,7 @@ bool dvb_lock_retry_due(adapter *ad, int64_t now) {
     if ((!single_cable && ad->master_source >= 0) ||
         switch_type == SWITCH_SLAVE)
         return false;
-    // Single-cable retries past the cap like master, which resent
-    // slot commands on every poll: slow splitters need more time.
-    if (!single_cable && ad->lock_retries >= LOCK_RETRY_MAX)
+    if (ad->lock_retries >= LOCK_RETRY_MAX)
         return false;
     const int delay =
         ad->lock_retries == 0 ? LOCK_RETRY_INITIAL_MS : LOCK_RETRY_INTERVAL_MS;

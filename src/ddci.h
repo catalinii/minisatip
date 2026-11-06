@@ -122,11 +122,15 @@ void ddci_init();
 int ddci_pick_free_pair(const int *demux, int ndemux, const int *dvr, int ndvr,
                         const int *fe, int nfe, const int *used, int nused);
 
+#ifndef DISABLE_LINUXDVB
 int ddci_pick_free_slot();
+#endif
 // Starts the push thread once; the queue feeds it.
 void ddci_push_start(ddci_device_t *d);
 // Stops the push thread, shedding the backlog; safe to call twice.
 void ddci_push_stop(ddci_device_t *d);
+// Loopback close: stops the push, unroutes the CI, frees the claim.
+int ddci_close_adapter(adapter *ad);
 // Tune shed, output side: drain the demux, drop queued output.
 void ddci_output_shed(adapter *ad, ddci_device_t *d);
 // Micro-kick: close/open re-primes a dead CAM pull, backlog kept.
@@ -140,10 +144,12 @@ int ddci_is_loopback(int id);
 int ddci_loopback_owns_slot(int slot);
 // CI slot claimed by loopback id; -1 when it claims none.
 int ddci_loopback_slot_for(int id);
+#ifndef DISABLE_LINUXDVB
 // Routes the slot input to PVR/DVR and raises tsclk.
 void ddci_enigma_route_pvr(ddci_device_t *d);
 // Highest tsclk in a choices file; empty when none qualifies.
 std::string ddci_tsclk_pick(const std::string &choices);
+#endif
 int add_pid_mapping_table(int ad, int pid, int pmt, ddci_device_t *d,
                           int force_add_pid);
 int push_ts_to_adapter(ddci_device_t *d, adapter *ad, uint16_t *mapping);

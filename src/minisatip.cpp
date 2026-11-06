@@ -665,6 +665,7 @@ void set_options(int argc, char *argv[]) {
     } else {
         opts.cache_dir = "/var/cache/minisatip";
     }
+
     opts.xml_path = DESC_XML;
     opts.th_priority = -1;
     opts.diseqc_addr = 0x10;

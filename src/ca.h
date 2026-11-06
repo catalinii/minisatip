@@ -210,8 +210,8 @@ struct cc_ctrl_data {
 // CI stack owner: live tuner, hardware DDCI, enigma tuner, loopback.
 enum class ca_mode : uint8_t { DVB = 0, DDCI, ENIGMA, ENIGMA_DDCI };
 
-// Vu+ boxes expose at most two CI slots; enigma scans these.
-constexpr int MAX_VU_CI_SLOTS = 2;
+// Enigma boxes expose at most two CI slots; enigma scans these.
+constexpr int MAX_ENIGMA_CI_SLOTS = 2;
 
 struct ca_device {
     // enabled/fd/sock/state are plain cross-thread ints: writers
@@ -266,6 +266,7 @@ struct ca_device {
 extern ca_device_t *ca_devices[];
 
 bool set_ci_input_str(int ci, const char *val);
+int ca_ci_module_present(int ci_slot);
 ca_device_t *alloc_ca_device();
 int ca_init(ca_device_t *d);
 void dvbca_init();
