@@ -552,6 +552,14 @@ int test_sockets_destructor() {
     }
     ASSERT_EQUAL(dtor_close_calls, 0, "destructor must not run close");
     ASSERT(fcntl(p[0], F_GETFD) == -1, "destructor left the fd open");
+    // Value-init zeroes what the destructor reads: a bare scope
+    // exit must neither close nor free (satipc tmp_sock{}).
+    {
+        sockets z = {};
+        ASSERT(z.flags == 0 && z.buf == nullptr && z.prio_data == nullptr &&
+                   !z.close_unix_socket && fifo_used(&z.fifo) == 0,
+               "value-init zeroes destructor-read members");
+    }
     close(p[1]);
     return 0;
 }
