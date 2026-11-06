@@ -257,7 +257,7 @@ int test_setup_after_play_other_fe_releases_adapter() {
     return 0;
 }
 
-int test_setup_stream_unspecified_vs_empty_pids() {
+int test_setup_stream_pids_cleared_when_unspecified() {
     setup_test_env();
 
     sockets mock_sock = {};
@@ -278,12 +278,11 @@ int test_setup_stream_unspecified_vs_empty_pids() {
            "pids not set correctly");
 
     // Call setup_stream again with UNSPECIFIED pids and NO freq= in request.
-    // They should inherit the previous values.
+    // Like master, only pid keys carry pids: a pol retune without them
+    // clears the set instead of re-adding the old mux's pids.
     std::string_view req2 = "?pol=v";
     setup_stream(req2, &mock_sock);
-    ASSERT(sid->tp.pids.size() == 3 && sid->tp.pids.contains(0) &&
-               sid->tp.pids.contains(16) && sid->tp.pids.contains(100),
-           "pids should be inherited when unspecified");
+    ASSERT(sid->tp.pids.empty(), "pids should clear when unspecified");
 
     // Call setup_stream again with freq= in request.
     // They should be cleared.
@@ -935,8 +934,8 @@ int main() {
     TEST_FUNC(test_setup_stream_new(), "test setup_stream for a new stream");
     TEST_FUNC(test_setup_stream_existing(),
               "test setup_stream with an existing stream");
-    TEST_FUNC(test_setup_stream_unspecified_vs_empty_pids(),
-              "test setup_stream unspecified vs empty pids inheritance");
+    TEST_FUNC(test_setup_stream_pids_cleared_when_unspecified(),
+              "test setup_stream pids cleared when unspecified");
     TEST_FUNC(test_start_play_no_transport(),
               "test start_play returns error when transport is missing");
     TEST_FUNC(test_start_play_success(), "test start_play success under HTTP");
