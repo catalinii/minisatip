@@ -90,8 +90,7 @@ size_t fifo_pop_offset(SFIFO *fifo, void *dst, size_t len, uint64_t *offset) {
     if ((*offset < fifo->write_index - size) && (fifo->write_index > size)) {
         if (*offset > 0) {
             LOG("Lost %jd bytes in fifo created at %s:%d",
-                (intmax_t)(fifo->write_index - size - *offset), fifo->file,
-                fifo->line);
+                fifo->write_index - size - *offset, fifo->file, fifo->line);
         }
 
         *offset = fifo->write_index - size;
