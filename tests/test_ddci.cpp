@@ -89,6 +89,7 @@ extern ddci_device_t *ddci_devices[MAX_ADAPTERS];
 extern int ddci_id;
 int ddci_post_init(adapter *ad);
 int ddci_set_pid(adapter *ad, int pid);
+int ddci_del_filters(adapter *ad, int fd, int pid);
 extern SCA_op dvbca;
 extern ca_device_t *ca_devices[MAX_ADAPTERS];
 extern std::unordered_map<int, Sddci_channel> channels;
@@ -231,6 +232,52 @@ int test_ddci_channel_count() {
     return 0;
 }
 
+// The CAM needs NIT next to PAT/CAT/TDT to play: every
+// mandatory pid joins the mapping queued to the push.
+int test_ddci_maps_nit_mandatory() {
+    SPMT *pmt0;
+    ddci_device_t d0 = {};
+    ca_device_t ca0 = {};
+    adapter ad = {}, a0 = {};
+
+    for (auto &slot : a)
+        slot = nullptr;
+    create_adapter(&ad, 8);
+    create_adapter(&a0, 0);
+    pmt0 = create_pmt(8, 600, 601, 602, 0x100, 0x100);
+    memset(&d0.pmt, -1, sizeof(d0.pmt));
+    d0.id = 0;
+    d0.enabled = 1;
+    d0.max_channels = 2;
+    memset(ddci_devices, 0, sizeof(ddci_devices));
+    ddci_devices[0] = &d0;
+
+    ca0.id = 0;
+    ca0.enabled = 1;
+    ca0.state = CA_STATE_INITIALIZED;
+    memset(ca_devices, 0, sizeof(ca_devices));
+    ca_devices[0] = &ca0;
+    int dvbca_id = add_ca(&dvbca);
+    add_caid_mask(dvbca_id, 0, 0x100, 0xFFFF);
+
+    ASSERT(ddci_process_pmt(&ad, pmt0, 0) == TABLES_RESULT_OK,
+           "PMT 0 expected to get a DDCI slot");
+    for (int pid : {0, 1, 16, 20}) {
+        auto it = d0.mapping.find(MAKE_KEY(8, pid));
+        ASSERT(it != d0.mapping.end(), "mandatory pid must be mapped");
+        ASSERT(it->second.rewrite == 1, "mandatory pid must be queued");
+    }
+
+    channels.clear();
+    filters.destroy_all();
+    del_ca(&dvbca);
+    ddci_devices[0] = NULL;
+    ca_devices[0] = NULL;
+    a[0] = nullptr;
+    a[8] = nullptr;
+    return 0;
+}
+
 // PCR pid carried by the regenerated PMT section for a DDCI slot.
 // No DVR socket: sockets_add() failed, or the adapter thread already
 // deleted it. ddci_post_init() must not dereference it.
@@ -255,9 +302,50 @@ int test_ddci_post_init_without_dvr_socket() {
     return 0;
 }
 
-// A loopback adds pids on its demux device, like a live
-// adapter: DEMUX ioctls on the DVR fd fail with EINVAL.
-int test_ddci_loopback_set_pid_opens_demux_device() {
+static struct {
+    int set_pes_count;
+    struct dmx_pes_filter_params last_pes;
+    int add_pid_count;
+    uint16_t last_add_pid;
+    int remove_count;
+    int stop_count;
+    int last_fd;
+    uint16_t last_pid;
+} demux_cap;
+
+static int mock_ioctl_demux(int fd, unsigned long req, ...) {
+    va_list ap;
+    va_start(ap, req);
+    void *arg = va_arg(ap, void *);
+    va_end(ap);
+    switch (req) {
+    case DMX_SET_PES_FILTER:
+        demux_cap.set_pes_count++;
+        demux_cap.last_fd = fd;
+        demux_cap.last_pes = *static_cast<struct dmx_pes_filter_params *>(arg);
+        return 0;
+    case DMX_ADD_PID:
+        demux_cap.add_pid_count++;
+        demux_cap.last_fd = fd;
+        demux_cap.last_add_pid = *static_cast<uint16_t *>(arg);
+        return 0;
+    case DMX_REMOVE_PID:
+        demux_cap.remove_count++;
+        demux_cap.last_fd = fd;
+        demux_cap.last_pid = *static_cast<uint16_t *>(arg);
+        return 0;
+    case DMX_STOP:
+        demux_cap.stop_count++;
+        demux_cap.last_fd = fd;
+        return 0;
+    }
+    errno = EINVAL;
+    return -1;
+}
+
+// A loopback adds pids on its read fd, like enigma2 record:
+// first pid SET_PES_FILTER, rest ADD_PID, no device opens.
+int test_ddci_loopback_set_pid_uses_shared_demux_fd() {
     ddci_device_t d = {};
     adapter ad = {};
     for (auto &slot : a)
@@ -267,7 +355,9 @@ int test_ddci_loopback_set_pid_opens_demux_device() {
     ad.type = ADAPTER_CI;
     ad.pa = 0;
     ad.fn = 18;
-    ad.dvr = -1;
+    int fd = open("/dev/null", O_RDWR);
+    ASSERT(fd >= 0, "need a stand-in read fd");
+    ad.dvr = fd;
     int saved_enigma = opts.enigma;
     opts.enigma = 1;
     d.id = 0;
@@ -275,14 +365,129 @@ int test_ddci_loopback_set_pid_opens_demux_device() {
     d.loopback = 1;
     ddci_devices[0] = &d;
     g_dvb_opens.clear();
-    int rc = ddci_set_pid(&ad, 100);
+    demux_cap = {};
+    _ioctl = mock_ioctl_demux;
+    ASSERT(ddci_set_pid(&ad, 100) == fd, "first set_pid arms the read fd");
+    ASSERT(demux_cap.set_pes_count == 1, "first set issues SET_PES_FILTER");
+    ASSERT(demux_cap.last_fd == fd, "SET_PES targets the read fd");
+    ASSERT(demux_cap.last_pes.pid == 100, "SET_PES carries the pid");
+    ASSERT(demux_cap.last_pes.output == DMX_OUT_TSDEMUX_TAP,
+           "SET_PES taps the demux side");
+    ASSERT(demux_cap.last_pes.flags == DMX_IMMEDIATE_START,
+           "SET_PES starts immediately");
+    ASSERT(ddci_set_pid(&ad, 2211) == fd, "second set_pid reuses the fd");
+    ASSERT(demux_cap.set_pes_count == 1, "second set adds, not re-arms");
+    ASSERT(demux_cap.add_pid_count == 1, "second set issues ADD_PID");
+    ASSERT(demux_cap.last_add_pid == 2211, "ADD_PID carries the pid");
+    ASSERT(g_dvb_opens.empty(), "set_pid opens no device");
+    _ioctl = ioctl;
     opts.enigma = saved_enigma;
     ddci_devices[0] = NULL;
     a[0] = nullptr;
-    ASSERT(rc == -1, "set_pid fails without hardware");
-    ASSERT(g_dvb_opens.size() == 1, "one DVB open expected");
-    ASSERT(g_dvb_opens[0] == "/dev/dvb/adapter0/demux18",
-           "loopback set_pid must open the demux device");
+    close(fd);
+    return 0;
+}
+
+// Loopback dels share the read fd: REMOVE_PID on ad->dvr,
+// STOP only when the last pid leaves, no device opens.
+int test_ddci_loopback_del_pid_removes_shared_demux_pid() {
+    ddci_device_t d = {};
+    adapter ad = {};
+    for (auto &slot : a)
+        slot = nullptr;
+    memset(ddci_devices, 0, sizeof(ddci_devices));
+    create_adapter(&ad, 0);
+    ad.type = ADAPTER_CI;
+    ad.pa = 0;
+    ad.fn = 18;
+    int fd = open("/dev/null", O_RDWR);
+    ASSERT(fd >= 0, "need a stand-in read fd");
+    ad.dvr = fd;
+    ad.active_demux_pids = 2;
+    int saved_enigma = opts.enigma;
+    opts.enigma = 1;
+    d.id = 0;
+    d.enabled = 1;
+    d.loopback = 1;
+    ddci_devices[0] = &d;
+    g_dvb_opens.clear();
+    demux_cap = {};
+    _ioctl = mock_ioctl_demux;
+    ASSERT(ddci_del_filters(&ad, -1, 100) == 0, "del pid reports ok");
+    ASSERT(demux_cap.remove_count == 1, "del issues REMOVE_PID");
+    ASSERT(demux_cap.last_fd == fd, "REMOVE_PID targets the read fd");
+    ASSERT(demux_cap.last_pid == 100, "REMOVE_PID carries the pid");
+    ASSERT(demux_cap.stop_count == 0, "non-last del keeps the demux armed");
+    ASSERT(ad.active_demux_pids == 1, "del drops the demux counter");
+    ASSERT(ddci_del_filters(&ad, -1, 2211) == 0, "last del reports ok");
+    ASSERT(demux_cap.remove_count == 2, "last del removes its pid");
+    ASSERT(demux_cap.stop_count == 1, "last del stops the demux");
+    ASSERT(ad.active_demux_pids == 0, "last del drains the counter");
+    ASSERT(g_dvb_opens.empty(), "del opens no device");
+    _ioctl = ioctl;
+    opts.enigma = saved_enigma;
+    ddci_devices[0] = NULL;
+    a[0] = nullptr;
+    close(fd);
+    return 0;
+}
+
+// A DDCI map sends the first CAPMT at map time: mapped PMTs
+// skip the live CA path, so without it the CAM stays cold.
+int test_ddci_map_sends_first_capmt() {
+    ddci_device_t d0 = {};
+    ca_device_t ca0 = {};
+    adapter ad = {}, a0 = {};
+    for (auto &slot : a)
+        slot = nullptr;
+    memset(ddci_devices, 0, sizeof(ddci_devices));
+    memset(ca_devices, 0, sizeof(ca_devices));
+    create_adapter(&ad, 8);
+    create_adapter(&a0, 0);
+    SPMT *pmt0 = create_pmt(8, 600, 601, 602, 0x100, 0x100);
+    pmt0->pcr_pid = 601;
+    memset(&d0.pmt, -1, sizeof(d0.pmt));
+    d0.id = 0;
+    d0.enabled = 1;
+    d0.loopback = 1;
+    d0.max_channels = 1;
+    ddci_devices[0] = &d0;
+    int saved_enigma = opts.enigma;
+    opts.enigma = 1;
+    int sv[2];
+    socketpair(AF_UNIX, SOCK_STREAM, 0, sv);
+    fcntl(sv[1], F_SETFL, O_NONBLOCK);
+    ca0.id = 0;
+    ca0.enabled = 1;
+    ca0.state = CA_STATE_INITIALIZED;
+    ca0.fd = sv[0];
+    ca0.mode = ca_mode::ENIGMA_DDCI;
+    ca0.sessions[1].handler.resource = EN50221_APP_CA_RESOURCEID;
+    ca0.sessions[1].handler.name = "test";
+    ca0.sessions[1].ca = &ca0;
+    ca0.sessions[1].session_number = 1;
+    ca_devices[0] = &ca0;
+    int dvbca_id = add_ca(&dvbca);
+    add_caid_mask(dvbca_id, 0, 0x100, 0xFFFF);
+    ASSERT(ddci_process_pmt(&ad, pmt0, 0) == TABLES_RESULT_OK, "slot expected");
+    uint8_t buf[4096];
+    ssize_t n = read(sv[1], buf, sizeof(buf));
+    int ddci_pid = get_pid_mapping_allddci(8, 601)->ddci_pid;
+    uint8_t pat[2] = {static_cast<uint8_t>(ddci_pid >> 8),
+                      static_cast<uint8_t>(ddci_pid & 0xFF)};
+    uint8_t tag[3] = {0x9F, 0x80, 0x32};
+    opts.enigma = saved_enigma;
+    close(sv[0]);
+    close(sv[1]);
+    ca_devices[0] = NULL;
+    ddci_devices[0] = NULL;
+    a[8] = nullptr;
+    a[0] = nullptr;
+    ASSERT(n > 0, "CAPMT APDU expected on the CA fd");
+    ASSERT(memmem(buf, n, tag, sizeof(tag)) != NULL,
+           "TAG_CA_PMT expected in the write");
+    ASSERT(memmem(buf, n, pat, sizeof(pat)) != NULL,
+           "CAPMT must carry DDCI-side pids");
     return 0;
 }
 
@@ -538,6 +743,58 @@ int test_ddci_update_version_follows_content() {
     ddci_create_pmt(&d0, pmt0, psi, sizeof(psi), &d0.pmt[0]);
     ASSERT(d0.pmt[0].ver == ((ver + 1) & 0xF),
            "changed re-send must bump the version once");
+
+    ddci_del_pmt(&ad, pmt0);
+    channels.clear();
+    filters.destroy_all();
+    del_ca(&dvbca);
+    ddci_devices[0] = NULL;
+    ca_devices[0] = NULL;
+    a[0] = nullptr;
+    a[8] = nullptr;
+    return 0;
+}
+
+// The generated PMT is a long section: syntax bit set,
+// length covering content plus CRC, CRC over the section.
+int test_ddci_created_pmt_is_long_section() {
+    ddci_device_t d0 = {};
+    ca_device_t ca0 = {};
+    adapter ad = {}, a0 = {};
+
+    for (auto &slot : a)
+        slot = nullptr;
+    create_adapter(&ad, 8);
+    create_adapter(&a0, 0);
+    SPMT *pmt0 = create_pmt(8, 600, 601, 602, 0x100, 0x100);
+    memset(&d0.pmt, -1, sizeof(d0.pmt));
+    d0.id = 0;
+    d0.enabled = 1;
+    d0.max_channels = 1;
+    memset(ddci_devices, 0, sizeof(ddci_devices));
+    ddci_devices[0] = &d0;
+
+    ca0.id = 0;
+    ca0.enabled = 1;
+    ca0.state = CA_STATE_INITIALIZED;
+    memset(ca_devices, 0, sizeof(ca_devices));
+    ca_devices[0] = &ca0;
+    int dvbca_id = add_ca(&dvbca);
+    add_caid_mask(dvbca_id, 0, 0x100, 0xFFFF);
+
+    ASSERT(ddci_process_pmt(&ad, pmt0, 0) == TABLES_RESULT_OK, "slot expected");
+    uint8_t psi[1500];
+    int len = ddci_create_pmt(&d0, pmt0, psi, sizeof(psi), &d0.pmt[0]);
+    ASSERT(len > 0, "PMT section expected");
+    ASSERT(psi[0] == 0 && psi[1] == 0x02, "pointer plus PMT table id");
+    ASSERT((psi[2] & 0xF0) == 0xB0, "section syntax indicator must be set");
+    int sec_len = ((psi[2] & 0xF) << 8) | psi[3];
+    ASSERT(sec_len == len - 4, "length covers content plus CRC");
+    uint32_t crc = crc_32(psi + 1, len - 5);
+    uint32_t stored = (uint32_t(psi[len - 4]) << 24) |
+                      (uint32_t(psi[len - 3]) << 16) |
+                      (uint32_t(psi[len - 2]) << 8) | psi[len - 1];
+    ASSERT(crc == stored, "CRC covers the section");
 
     ddci_del_pmt(&ad, pmt0);
     channels.clear();
@@ -2638,16 +2895,24 @@ int main() {
     TEST_FUNC(test_add_del_pmt(), "testing adding and removing pmts");
     TEST_FUNC(test_ddci_channel_count(),
               "testing DDCI channel accounting on re-send and delete");
+    TEST_FUNC(test_ddci_maps_nit_mandatory(),
+              "testing DDCI maps NIT next to PAT/CAT/TDT");
     TEST_FUNC(test_ddci_post_init_without_dvr_socket(),
               "testing ddci_post_init without a DVR socket");
-    TEST_FUNC(test_ddci_loopback_set_pid_opens_demux_device(),
-              "testing loopback set_pid opens the demux device");
+    TEST_FUNC(test_ddci_loopback_set_pid_uses_shared_demux_fd(),
+              "testing loopback set_pid uses the shared demux fd");
+    TEST_FUNC(test_ddci_loopback_del_pid_removes_shared_demux_pid(),
+              "testing loopback del_pid removes the shared demux pid");
     TEST_FUNC(test_update_resend_keeps_slot(),
               "testing update re-send keeps the slot and drops one pid");
+    TEST_FUNC(test_ddci_map_sends_first_capmt(),
+              "testing DDCI map sends the first CAPMT");
     TEST_FUNC(test_mandatory_pat_stays_mapped(),
               "testing mandatory PAT stays mapped across re-sends");
     TEST_FUNC(test_ddci_update_version_follows_content(),
               "testing the DDCI PMT version follows content, not re-sends");
+    TEST_FUNC(test_ddci_created_pmt_is_long_section(),
+              "testing the created PMT is a long section");
     TEST_FUNC(test_copy_ts_from_ddci(), "testing test_copy_ts_from_ddci");
     TEST_FUNC(test_ddci_process_ts(), "testing ddci_process_ts");
     TEST_FUNC(test_ddci_process_ts_null_tail(),

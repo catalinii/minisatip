@@ -103,10 +103,11 @@ int add_pid_mapping_table(int ad, int pid, int pmt, ddci_device_t *d,
     int ddci_pid = -1;
     ddci_mapping_table_t *m;
     if (!has_pid_mapping(d, ad, pid)) {
-        // Table pids stay fixed: the CAM expects PAT/CAT/TDT on
-        // their pid even when several tuners map them.
-        ddci_pid =
-            (pid == 0 || pid == 1 || pid == 20) ? pid : find_ddci_pid(d, pid);
+        // Table pids stay fixed: the CAM expects PAT/CAT/NIT/TDT
+        // on their pid even when several tuners map them.
+        ddci_pid = (pid == 0 || pid == 1 || pid == 16 || pid == 20)
+                       ? pid
+                       : find_ddci_pid(d, pid);
         m = &d->mapping[MAKE_KEY(ad, pid)];
         m->ad = ad;
         m->pid = pid;
@@ -262,12 +263,16 @@ int ddci_pick_free_pair(const int *demux, int ndemux, const int *dvr, int ndvr,
 }
 
 // DVR DMX_SET_SOURCE base; enigma honors the same override file.
-static int ddci_dvr_source_offset() {
+static int ddci_dvr_source_offset(adapter *ad) {
+    if (const char *env = getenv("DDCI_DVR_SOURCE"))
+        return atoi(env);
     std::ifstream f("/proc/stb/frontend/dvr_source_offset");
     int off = 16;
     if (f >> off)
         return off;
-    return 16;
+    // No published offset: the loopback pair feeds itself,
+    // like the published one does for its dvr elsewhere.
+    return ad ? ad->fn : 16;
 }
 
 // Drop one last-user mapping entry: the DDCI-side pid, its filter,
@@ -352,7 +357,7 @@ int del_pmt_mapping_table(ddci_device_t *d, int ad, int pmt) {
 // until their last user is gone. Call with d->mutex held.
 static size_t unmap_removed_pids(ddci_device_t *d, int ad, SPMT *pmt) {
     auto still_needed = [d, pmt, ad](int pid) {
-        if (pid == pmt->pid || pid == 0 || pid == 1 || pid == 20)
+        if (pid == pmt->pid || pid == 0 || pid == 1 || pid == 16 || pid == 20)
             return true;
         if (d->emm_pids.count(MAKE_KEY(ad, pid)) > 0)
             return true;
@@ -547,6 +552,62 @@ static int get_ddci_channel_for_pmt(SPMT *pmt, Sddci_channel **channel) {
     return TABLES_RESULT_OK;
 }
 
+// DDCI-mapped PMTs skip the live CA path, so no CAPMT would
+// ever select the program: send the first one at map time.
+static int ddci_send_first_capmt(ddci_device_t *d, int aid, SPMT *pmt) {
+    int id = d->id;
+    ca_device_t *ca = (id >= 0 && id < MAX_ADAPTERS) ? ca_devices[id] : NULL;
+    if (!ca || !ca->enabled || ca->state != CA_STATE_INITIALIZED)
+        return TABLES_RESULT_ERROR_RETRY;
+    auto ddci_pid = [&](int pid) {
+        auto it = get_pid_mapping(d, aid, pid);
+        return it == d->mapping.end() ? pid : it->second.ddci_pid;
+    };
+    SPMT shadow{};
+    shadow.id = pmt->id;
+    shadow.adapter = id;
+    shadow.sid = pmt->sid;
+    shadow.version = pmt->version;
+    shadow.pcr_pid = ddci_pid(pmt->pcr_pid);
+    shadow.caids = pmt->caids;
+    SPMTCA ca_copy[MAX_CAID];
+    for (int i = 0; i < shadow.caids && i < MAX_CAID; i++) {
+        ca_copy[i] = *pmt->ca[i];
+        ca_copy[i].pid = ddci_pid(pmt->ca[i]->pid);
+        shadow.ca[i] = &ca_copy[i];
+    }
+    shadow.stream_pids = pmt->stream_pids;
+    for (auto &sp : shadow.stream_pids)
+        sp.pid = ddci_pid(sp.pid);
+    uint8_t es[8192];
+    int len = CAPMT_add_PMT(es, sizeof(es), &shadow,
+                            CA_PMT_CMD_ID_OK_DESCRAMBLING, 0, dvbca_id);
+    // ca[] borrows stack copies: detach before the destructor runs.
+    for (int i = 0; i < MAX_CAID; i++)
+        shadow.ca[i] = NULL;
+    if (len <= 0)
+        return TABLES_RESULT_ERROR_NORETRY;
+    uint8_t apdu[8200];
+    int ver = d->capmt_ver = (d->capmt_ver + 1) & 0xF;
+    int pos = 0;
+    apdu[pos++] = CLM_ONLY;
+    copy16(apdu, pos, shadow.sid);
+    pos += 2;
+    apdu[pos++] = static_cast<uint8_t>(((ver & 0xF) << 1) | 0x1);
+    apdu[pos++] = 0;
+    apdu[pos++] = 0;
+    memcpy(apdu + pos, es, static_cast<size_t>(len));
+    pos += len;
+    ca_session_t *session =
+        find_session_for_resource(ca, EN50221_APP_CA_RESOURCEID);
+    if (!session)
+        return TABLES_RESULT_ERROR_RETRY;
+    if (ca_write_apdu(session, TAG_CA_PMT, apdu, static_cast<size_t>(pos)))
+        return TABLES_RESULT_ERROR_RETRY;
+    LOG("DDCI %d: sent first CAPMT for pmt %d sid %d", id, pmt->id, pmt->sid);
+    return TABLES_RESULT_OK;
+}
+
 // determine if the pids from this PMT needs to be added to the virtual adapter,
 // also adds the PIDs to the translation table
 int ddci_process_pmt(adapter *ad, SPMT *pmt, int update) {
@@ -627,6 +688,8 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt, int update) {
     }
 
     d->pmt[pos].id = pmt->id;
+    if (!already_registered)
+        d->pmt[pos].capmt_sent = 0;
     // A (re-)registered channel emits on the next tick.
     d->pmt[pos].last_pmt = 0;
 
@@ -652,8 +715,8 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt, int update) {
     };
 
     // Map mandatory PIDs, PAT included so the CAM sees it like live.
-    // Some CAMs also need the TDT to "wake up", so map it too.
-    for (const int pid : {0, 1, 20}) {
+    // Some CAMs also need NIT/TDT to play, so map them too.
+    for (const int pid : {0, 1, 16, 20}) {
         if (!has_pid_mapping(d, pmt->adapter, pid)) {
             LOG("Mapping mandatory PID %d to PMT %d on DDCI %d", pid, pmt->id,
                 d->id);
@@ -711,6 +774,12 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt, int update) {
     update_pids(ad->id);
     // Loopback TAPs live on the DDCI adapter; hardware DDCI needs none.
     update_pids(ddid);
+    // First CAPMT rides the same unlock: mapped PMTs skip live.
+    // Best-effort like live re-sends: a CAM that is not ready
+    // yet keeps the slot pending for the next re-process.
+    if (pos >= 0 && !d->pmt[pos].capmt_sent && ddci_is_loopback(ddid) &&
+        ddci_send_first_capmt(d, ad->id, pmt) == TABLES_RESULT_OK)
+        d->pmt[pos].capmt_sent = 1;
     rv = TABLES_RESULT_OK;
     lock.lock();
     dump_mapping_table();
@@ -1143,8 +1212,8 @@ int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *new_pmt, int pmt_size,
         LOGM("%s: pmt %d added pid %04X, type %02X, es_len %d", __FUNCTION__,
              pmt->id, stream_pid.pid, stream_pid.type, es_info_len);
     }
-    // set the length (b + 4 bytes from crc)
-    copy16(start_pmt, -2, 4 + b - start_pmt);
+    // set the length (b + 4 bytes from crc), long section
+    copy16(start_pmt, -2, 0xB000 | (4 + b - start_pmt));
 
     uint32_t crc = crc_32(new_pmt + 1, b - new_pmt - 1);
 
@@ -1719,7 +1788,7 @@ void ddci_init() // you can search the devices here and fill the ddci_devices,
 
 int ddci_set_pid(adapter *ad, int pid) {
 #ifndef DISABLE_LINUXDVB
-    // Loopback reads the real DVR; hardware DDCI needs no demux filters.
+    // Loopback filters the read fd; hardware DDCI needs no demux filters.
     if (opts.enigma && ddci_is_loopback(ad->id)) {
         // Serialized check->shed->arm: concurrent first adds
         // must not double-shed (recursive, callers may hold A).
@@ -1730,9 +1799,9 @@ int ddci_set_pid(adapter *ad, int pid) {
             if (ddci_device_t *dd = get_ddci(ad->id))
                 ddci_output_shed(ad, dd);
         }
-        // One demux fd per pid, like live adapters: the DVR
-        // fd takes no DEMUX ioctls (SET_PES_FILTER: EINVAL).
-        int rc = dvb_set_pid(ad, pid);
+        // Enigma opens the read fd on the demux device: one shared
+        // filter on the fd we read, first pid SET_PES, rest ADD_PID.
+        int rc = dvb_demux_set_pid(ad, pid);
         LOGM("%s: loopback %d add pid %d -> %d", __FUNCTION__, ad->id, pid, rc);
         return rc;
     }
@@ -1746,7 +1815,8 @@ int ddci_del_filters(adapter *ad, [[maybe_unused]] int fd, int pid) {
     if (opts.enigma && ddci_is_loopback(ad->id)) {
         // Same serialization as the add path, for the idle counter.
         std::lock_guard<SMutex> lock(ad->mutex);
-        int rc = dvb_del_filters(ad, fd, pid);
+        // Shared read fd: REMOVE_PID, STOP when the last pid leaves.
+        int rc = dvb_demux_del_filters(ad, ad->dvr, pid);
         LOGM("%s: loopback %d del pid %d -> %d", __FUNCTION__, ad->id, pid, rc);
         return rc;
     }
@@ -1823,6 +1893,7 @@ ddci_device_t *ddci_alloc(int id) {
     create_fifo(&d->push_backlog, DDCI_PUSH_BACKLOG_MAX);
     d->id = id;
     d->ci_slot = -1;
+    d->capmt_ver = 0;
     return d;
 }
 
@@ -1831,9 +1902,13 @@ ddci_device_t *ddci_alloc(int id) {
 // Demux and dvr always share the index on both models.
 static int ddci_open_enigma(adapter *ad, ddci_device_t *d) {
     char buf[100];
-    int dvr_offset = ddci_dvr_source_offset();
+    int dvr_offset = ddci_dvr_source_offset(ad);
     ad->dmx_source = dvr_offset;
     int push_dvr = ad->fn;
+    // Some drivers drain only one playpump; override the push
+    // dvr without moving the TAP pair (dm8000: dvr0).
+    if (const char *push_env = getenv("DDCI_PUSH_DVR"))
+        push_dvr = atoi(push_env);
     snprintf(buf, sizeof(buf), "/dev/dvb/adapter%d/dvr%d", ad->pa, push_dvr);
     // The driver never blocks (O_NONBLOCK ignored): a full
     // playpump returns EAGAIN, retried in the push loop below.

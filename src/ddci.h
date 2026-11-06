@@ -43,6 +43,7 @@ static_assert(DDCI_PUSH_CHUNK % 188 == 0, "chunk stays frame-aligned");
 typedef struct ddci_pmt {
     int id;
     int ver;
+    int capmt_sent;
     int pcr_pid;
     int16_t cc;
     uint32_t crc;
@@ -72,6 +73,7 @@ typedef struct ddci_device {
     int fd;
     int channels;
     int max_channels;
+    int capmt_ver;
     ddci_pmt_t pmt[MAX_CHANNELS_ON_CI + 1];
     int cat_processed;
     uint64_t read_index[MAX_ADAPTERS]; // read index per adapter
