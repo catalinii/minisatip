@@ -411,6 +411,7 @@ int ddci_close_dev(adapter *ad) {
 }
 SCA_op ddci;
 #ifndef DISABLE_LINUXDVB
+static void ddci_enigma_route_pvr(ddci_device_t *d);
 static void ddci_enigma_route_none(ddci_device_t *d);
 #endif
 
@@ -1965,6 +1966,10 @@ static int ddci_open_enigma(adapter *ad, ddci_device_t *d) {
     // slot_for declines and init fails loud instead of sharing.
     if (!ddci_slot_live_held(d->ci_slot))
         d->slot_claimed.store(d->ci_slot >= 0);
+    // Route here, not at CA time: the claim above is ours, and a
+    // declined retake must not steal the live tuner's route.
+    if (d->slot_claimed.load())
+        ddci_enigma_route_pvr(d);
     ad->enabled = 1;
     LOG("opened enigma loopback %d push dvr%d fd:%d read fd:%d source:%d",
         ad->id, push_dvr, ad->fe, ad->dvr, ad->dmx_source);
@@ -2275,14 +2280,6 @@ static std::string ddci_read_file(const char *path) {
     return s;
 }
 
-// CI slot feeding this loopback, published by DVBCA at open.
-static int ddci_enigma_slot(ddci_device_t *d) {
-    if (d && d->id >= 0 && d->id < MAX_ADAPTERS && ca_devices[d->id] &&
-        ca_devices[d->id]->fd >= 0)
-        return ca_devices[d->id]->ci_slot;
-    return -1;
-}
-
 // Whole-word match in a choices file; mirrors enigma2 CI detection.
 static bool ddci_choices_has(const std::string &choices, const char *word) {
     size_t len = strlen(word);
@@ -2308,11 +2305,9 @@ std::string ddci_tsclk_pick(const std::string &choices) {
 // Raises the slot clock to high, saving the prior value;
 // silent no-op when already high or the knob is missing.
 static void ddci_enigma_set_tsclk(ddci_device_t *d) {
-    if (!opts.enigma || !d || d->tsclk_saved[0])
+    if (!opts.enigma || !d || d->tsclk_saved[0] || d->ci_slot < 0)
         return;
-    int slot = ddci_enigma_slot(d);
-    if (slot < 0)
-        return;
+    int slot = d->ci_slot;
     char path[64], cur[64];
     snprintf(path, sizeof(path), "/proc/stb/tsmux/ci%d_tsclk_choices", slot);
     std::string choices = ddci_read_file(path);
@@ -2339,14 +2334,10 @@ static void ddci_enigma_set_tsclk(ddci_device_t *d) {
     d->tsclk_saved[0] = 0;
 }
 
-void ddci_enigma_route_pvr(ddci_device_t *d) {
-    if (!opts.enigma || !d)
+static void ddci_enigma_route_pvr(ddci_device_t *d) {
+    if (!opts.enigma || !d || d->ci_slot < 0)
         return;
-    int slot = ddci_enigma_slot(d);
-    if (slot < 0) {
-        LOG("DDCI %d: no CI slot bound, skipping PVR route", d->id);
-        return;
-    }
+    int slot = d->ci_slot;
     // Write-acceptance beats choices files: drivers take values
     // they do not list, and flow works even unrouted.
     const char *input = "PVR";
