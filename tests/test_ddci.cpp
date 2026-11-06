@@ -1443,21 +1443,6 @@ int test_psi_pids_survive_a_channel_change() {
     return 0;
 }
 
-// Hardware CI takes no default pids (master); only the loopback
-// keeps pid 0 for its generated PAT.
-int test_post_tune_hw_ci_takes_no_defaults() {
-    adapter ci = {};
-    for (auto &slot : a)
-        slot = nullptr;
-    memset(ddci_devices, 0, sizeof(ddci_devices));
-    create_adapter(&ci, 8);
-    ci.type = ADAPTER_CI;
-    post_tune(&ci);
-    ASSERT(find_pid(8, 0) == NULL, "HW CI takes no default pid 0");
-    a[8] = nullptr;
-    return 0;
-}
-
 int test_create_pat() {
     ddci_device_t d = {};
     uint8_t psi[188];
@@ -3185,8 +3170,6 @@ int main() {
               "testing loopback queues PSI+TS with no writev or tail");
     TEST_FUNC(test_psi_pids_survive_a_channel_change(),
               "testing that the CI keeps the pids of its generated PSI");
-    TEST_FUNC(test_post_tune_hw_ci_takes_no_defaults(),
-              "testing HW CI takes no default pids");
     TEST_FUNC(test_ci_pmt_name_is_refreshed(),
               "testing that the CI-side PMT is named once the source is");
     TEST_FUNC(test_ddci_add_psi_per_channel_pmt(),

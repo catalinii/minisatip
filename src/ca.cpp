@@ -4260,10 +4260,6 @@ static SMutex &ca_dev_lock(int id) {
     return ca_dev_mutex[id];
 }
 
-#ifndef DISABLE_DDCI
-extern ddci_device_t *ddci_devices[MAX_ADAPTERS];
-#endif
-
 int dvbca_init_dev(adapter *ad) {
     ca_device_t *c;
     int fd, result = 0;
@@ -4366,13 +4362,6 @@ int dvbca_init_dev(adapter *ad) {
         memset(c->iv[0], 0, sizeof(c->iv[0]));
         memset(c->iv[1], 0, sizeof(c->iv[1]));
     }
-    // Claim-time route: the slot is published above, so PVR
-    // programs the right input without waiting for a kick.
-#if !defined(DISABLE_DDCI) && !defined(DISABLE_LINUXDVB)
-    if (mode == ca_mode::ENIGMA_DDCI)
-        ddci_enigma_route_pvr(ddci_devices[ad->id]);
-#endif
-
     if (!c->force_ci) {
         if (access("/etc/ssl/certs/root.pem", F_OK) != 0) {
             c->force_ci = 1;

@@ -145,8 +145,6 @@ int ddci_loopback_owns_slot(int slot);
 // CI slot claimed by loopback id; -1 when it claims none.
 int ddci_loopback_slot_for(int id);
 #ifndef DISABLE_LINUXDVB
-// Routes the slot input to PVR/DVR and raises tsclk.
-void ddci_enigma_route_pvr(ddci_device_t *d);
 // Highest tsclk in a choices file; empty when none qualifies.
 std::string ddci_tsclk_pick(const std::string &choices);
 #endif
