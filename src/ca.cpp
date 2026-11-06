@@ -41,9 +41,6 @@ alternative source
 #include <charconv>
 #include <deque>
 #include <memory>
-#include <string>
-#include <string_view>
-#include <vector>
 #include <openssl/aes.h>
 #include <openssl/crypto.h>
 #include <openssl/err.h>
@@ -54,6 +51,8 @@ alternative source
 #include <openssl/sha.h>
 #include <openssl/x509.h>
 #include <string>
+#include <string_view>
+#include <vector>
 #if OPENSSL_VERSION_NUMBER >= 0x30000000L
 #include <openssl/core_names.h>
 #include <openssl/param_build.h>
@@ -910,12 +909,7 @@ int CAPMT_add_PMT(uint8_t *capmt, int len, SPMT *pmt, uint8_t cmd_id,
                  pmt->id, pmt->adapter, stream_pid.pid);
             continue;
         }
-        // Encrypted non-AV streams need selection too, or the
-        // CAM only decrypts them opportunistically (Rai 4K audio).
-        bool has_ca = std::any_of(
-            stream_pid.descriptors.cbegin(), stream_pid.descriptors.cend(),
-            [](const descriptor_t &x) { return x.is_ca_descriptor(); });
-        if (!stream_pid.is_audio && !stream_pid.is_video && !has_ca)
+        if (!stream_pid.is_audio && !stream_pid.is_video)
             continue;
         if (pos + 6 > len) {
             LOG("%s: truncating PMT %d stream list at %d bytes", __FUNCTION__,
@@ -3026,8 +3020,9 @@ void ca_clear_mmi_messages() {
 // Remove a disconnected slot's messages; bumps last_seq so pollers refetch.
 static void ca_clear_mmi_for_device(int ca_id) {
     std::lock_guard<SMutex> lock(mmi_mutex);
-    size_t removed = std::erase_if(
-        mmi_messages, [ca_id](const MmiMessage &m) { return m.ca_id == ca_id; });
+    size_t removed = std::erase_if(mmi_messages, [ca_id](const MmiMessage &m) {
+        return m.ca_id == ca_id;
+    });
     if (removed > 0) {
         ++mmi_last_seq;
         mmi_last_changed = time(nullptr);
@@ -3090,7 +3085,8 @@ static std::string mmi_sanitize_utf8(std::string_view sv) {
             out.append(sv.substr(i, seq_len));
             i += seq_len;
         } else if (b < 0xA0) {
-            // EN 300 468 control codes 0x80-0x9F: 0x8A is CR/LF, others dropped.
+            // EN 300 468 control codes 0x80-0x9F: 0x8A is CR/LF, others
+            // dropped.
             if (b == 0x8A) {
                 if (out.size() + 1 > MAX_MMI_TEXT_LEN)
                     break;
@@ -3162,11 +3158,11 @@ std::string get_json_mmi() {
         const MmiMessage &m = snapshot[idx];
         out.append(idx == 0 ? "\n{" : ",\n{");
         char meta[160];
-        snprintf(
-            meta, sizeof(meta),
-            "\"seq\":%llu,\"ca\":%d,\"session\":%d,\"timestamp\":%lld,\"type\":",
-            static_cast<unsigned long long>(m.seq), m.ca_id, m.session_number,
-            static_cast<long long>(m.timestamp));
+        snprintf(meta, sizeof(meta),
+                 "\"seq\":%llu,\"ca\":%d,\"session\":%d,\"timestamp\":%lld,"
+                 "\"type\":",
+                 static_cast<unsigned long long>(m.seq), m.ca_id,
+                 m.session_number, static_cast<long long>(m.timestamp));
         out.append(meta);
         append_json_escaped(out, m.type);
         if (m.type == "enquiry") {
@@ -4225,6 +4221,19 @@ static int ca_slot_present(int fd) {
     return ca_slot_has_module(&info);
 }
 
+// True when /dev/ciN holds a module; fail-open on errors,
+// an unproven slot keeps the old claim behavior (surfcu-8).
+int ca_ci_module_present(int ci_slot) {
+    char path[32];
+    snprintf(path, sizeof(path), "/dev/ci%d", ci_slot);
+    int fd = open(path, O_RDWR | O_NONBLOCK | O_CLOEXEC);
+    if (fd < 0)
+        return 1;
+    int present = ca_slot_present(fd);
+    close(fd);
+    return present;
+}
+
 // Record a failed init: drop the handle, stay enabled for the
 // reconnect poller. Always returns RETRY; NULL-safe for tests.
 int ca_init_failed(ca_device_t *d) {
@@ -4363,7 +4372,7 @@ int dvbca_init_dev(adapter *ad) {
     }
     // Claim-time route: the slot is published above, so PVR
     // programs the right input without waiting for a kick.
-#ifndef DISABLE_DDCI
+#if !defined(DISABLE_DDCI) && !defined(DISABLE_LINUXDVB)
     if (mode == ca_mode::ENIGMA_DDCI)
         ddci_enigma_route_pvr(ddci_devices[ad->id]);
 #endif
@@ -4479,7 +4488,6 @@ void set_ca_pin(int i, std::string_view pin) {
         ca_devices[i] = alloc_ca_device();
     if (!ca_devices[i])
         return;
-    ca_devices[i]->id = i;
     size_t copy_len = std::min(pin.size(), sizeof(ca_devices[i]->pin_str) - 1);
     memcpy(ca_devices[i]->pin_str, pin.data(), copy_len);
     ca_devices[i]->pin_str[copy_len] = '\0';
@@ -4490,7 +4498,6 @@ void force_ci_adapter(int i) {
         ca_devices[i] = alloc_ca_device();
     if (!ca_devices[i])
         return;
-    ca_devices[i]->id = i;
     ca_devices[i]->force_ci = 1;
 }
 

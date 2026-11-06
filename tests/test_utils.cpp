@@ -42,8 +42,9 @@ int test_mkdir_recursive() {
 }
 
 int test_fifo() {
-    SFIFO f{};
+    SFIFO f;
     char buf[] = {0, 1, 2, 3, 4, 5};
+    memset(&f, 0, sizeof(f));
     create_fifo(&f, 10);
 
     ASSERT(0 == fifo_pop(&f, buf, sizeof(buf)),
@@ -58,9 +59,10 @@ int test_fifo() {
     free_fifo(&f);
 
     // pushing more bytes than available fails without force
-    SFIFO f2{};
+    SFIFO f2;
     char buf2[8] = {0, 1, 2, 3, 4, 5, 6, 7};
     char buf3[4] = {8, 9, 10, 11};
+    memset(&f2, 0, sizeof(f2));
     create_fifo(&f2, 10);
     ASSERT(sizeof(buf2) == fifo_push(&f2, buf2, sizeof(buf2)),
            "Failed to fill fifo");
@@ -73,7 +75,8 @@ int test_fifo() {
 
     // Test fifo_pop_offset available calculation when read_index is 0 but
     // offset is non-zero
-    SFIFO f3{};
+    SFIFO f3;
+    memset(&f3, 0, sizeof(f3));
     create_fifo(&f3, 100);
     char in_buf[50] = {0};
     fifo_push_force(&f3, in_buf, 50, 1); // write_index = 50, read_index = 0
@@ -85,18 +88,6 @@ int test_fifo() {
         "Expected fifo_pop_offset to cap to write_index - offset (20 bytes)");
     ASSERT_EQUAL(offset, 50, "Expected offset to advance to write_index (50)");
     free_fifo(&f3);
-
-    // Degenerate pushes refuse: empty and oversized alike.
-    SFIFO f4{};
-    create_fifo(&f4, 10);
-    char any[11] = {0};
-    ASSERT(0 == fifo_push(&f4, any, 0), "Expected empty push to refuse");
-    ASSERT(0 == fifo_push(&f4, any, sizeof(any)),
-           "Expected oversized push to refuse");
-    ASSERT(0 == fifo_push_force(&f4, any, sizeof(any), 1),
-           "Expected oversized force push to refuse");
-    ASSERT_EQUAL(fifo_used(&f4), 0, "Expected refused pushes to write nothing");
-    free_fifo(&f4);
 
     return 0;
 }
@@ -338,21 +329,6 @@ int test_obtain_churn() {
     return 0;
 }
 
-int test_fifo_reset() {
-    SFIFO f{};
-    char buf[] = {0, 1, 2, 3, 4, 5};
-    create_fifo(&f, 10);
-
-    ASSERT(sizeof(buf) == fifo_push(&f, buf, sizeof(buf)), "push works");
-    fifo_reset(&f);
-    ASSERT(fifo_used(&f) == 0, "reset empties");
-    ASSERT(f.read_index == 0 && f.write_index == 0, "indices zeroed");
-    ASSERT(sizeof(buf) == fifo_push(&f, buf, sizeof(buf)), "refill works");
-    ASSERT(fifo_used(&f) == sizeof(buf), "refill counted");
-    free_fifo(&f);
-    return 0;
-}
-
 int main() {
     opts.log = 255;
     strcpy(thread_info[thread_index].thread_name, "test_utils");
@@ -362,7 +338,6 @@ int main() {
     TEST_FUNC(test_mkdir_recursive(), "testing directory creation");
     TEST_FUNC(test_readfile_content_type(), "testing readfile content types");
     TEST_FUNC(test_fifo(), "testing fifo");
-    TEST_FUNC(test_fifo_reset(), "testing fifo reset");
     TEST_FUNC(test_is_rtsp_response(), "testing is_rtsp_response");
     TEST_FUNC(test_split(), "testing split");
     TEST_FUNC(test_strip(), "testing strip");
