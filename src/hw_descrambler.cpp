@@ -94,15 +94,15 @@ class HwSlotManager {
             return -1;
 
         if (ca->ca_fd < 0) {
+            std::string used_path = device_path;
             ca->ca_fd = open(device_path, O_RDWR | O_CLOEXEC);
             if (ca->ca_fd < 0 && errno == ENOENT) {
-                const std::string alt_path =
-                    "/dev/ci" + std::to_string(physical_adapter_id);
-                ca->ca_fd = open(alt_path.c_str(), O_RDWR | O_CLOEXEC);
+                used_path = "/dev/ci" + std::to_string(physical_adapter_id);
+                ca->ca_fd = open(used_path.c_str(), O_RDWR | O_CLOEXEC);
                 if (ca->ca_fd >= 0) {
                     LOG("hw_descrambler: opened fallback %s (ca_fd = %d) for "
                         "adapter %d",
-                        alt_path.c_str(), ca->ca_fd, physical_adapter_id);
+                        used_path.c_str(), ca->ca_fd, physical_adapter_id);
                 }
             }
             if (ca->ca_fd >= 0) {
@@ -111,7 +111,7 @@ class HwSlotManager {
                     ca->num_descramblers = DEFAULT_MAX_DESCRAMBLERS;
                 LOG("hw_descrambler: successfully opened shared %s (ca_fd = "
                     "%d, max slots = %d) for physical adapter %d",
-                    device_path, ca->ca_fd, ca->num_descramblers,
+                    used_path.c_str(), ca->ca_fd, ca->num_descramblers,
                     physical_adapter_id);
             } else {
                 LOG("hw_descrambler: failed to open %s: %s (errno %d)",

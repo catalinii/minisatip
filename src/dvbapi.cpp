@@ -584,9 +584,8 @@ int dvbapi_close(sockets *s) {
     sock = -1;
     dvbapi_sock = -1;
     dvbapi_is_enabled = 0;
-    // keys_del() reaches update_pids() via del_filter(): hold the adapter.
-    // Not the key: keys_del() takes it, and may need pmt->mutex first.
-    // Index-driven: every slot is locked, including empty ones.
+    // Hold the adapter (keys_del reaches update_pids via del_filter),
+    // not the key: keys_del takes it, and may need pmt->mutex first.
     for (int i : std::views::iota(0, MAX_KEYS)) {
         std::unique_lock<SMutex> ad_lock, klock;
         lock_key_adapter(i, ad_lock, klock);

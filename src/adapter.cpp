@@ -1055,12 +1055,18 @@ void post_tune(adapter *ad) {
     LOGM("adapter post_tune: aid %d", aid);
 #endif
 #ifndef DISABLE_PMT
-    // If we're not requesting all PIDs, add default PIDs unless they've been
-    // explicitly added. CI adapters only need pid 0, for the generated PAT.
+    // Default PIDs unless explicitly added. Hardware CI takes none
+    // (master); the loopback keeps pid 0 for its generated PAT.
     SPid *p_all = find_pid(aid, 8192);
-    if (!p_all || p_all->flags == PID_STATE_DELETED) {
+#ifndef DISABLE_DDCI
+    bool loopback = ad->type == ADAPTER_CI && ddci_is_loopback(aid);
+#else
+    bool loopback = false;
+#endif
+    if ((!p_all || p_all->flags == PID_STATE_DELETED) &&
+        (ad->type != ADAPTER_CI || loopback)) {
         for (auto &pid : DEFAULT_PIDS) {
-            if (ad->type == ADAPTER_CI && pid != 0)
+            if (loopback && pid != 0)
                 continue;
             SPid *p = find_pid(aid, pid);
             if (!p || p->flags == PID_STATE_DELETED) {

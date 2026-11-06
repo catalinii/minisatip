@@ -552,62 +552,6 @@ static int get_ddci_channel_for_pmt(SPMT *pmt, Sddci_channel **channel) {
     return TABLES_RESULT_OK;
 }
 
-// DDCI-mapped PMTs skip the live CA path, so no CAPMT would
-// ever select the program: send the first one at map time.
-static int ddci_send_first_capmt(ddci_device_t *d, int aid, SPMT *pmt) {
-    int id = d->id;
-    ca_device_t *ca = (id >= 0 && id < MAX_ADAPTERS) ? ca_devices[id] : NULL;
-    if (!ca || !ca->enabled || ca->state != CA_STATE_INITIALIZED)
-        return TABLES_RESULT_ERROR_RETRY;
-    auto ddci_pid = [&](int pid) {
-        auto it = get_pid_mapping(d, aid, pid);
-        return it == d->mapping.end() ? pid : it->second.ddci_pid;
-    };
-    SPMT shadow{};
-    shadow.id = pmt->id;
-    shadow.adapter = id;
-    shadow.sid = pmt->sid;
-    shadow.version = pmt->version;
-    shadow.pcr_pid = ddci_pid(pmt->pcr_pid);
-    shadow.caids = pmt->caids;
-    SPMTCA ca_copy[MAX_CAID];
-    for (int i = 0; i < shadow.caids && i < MAX_CAID; i++) {
-        ca_copy[i] = *pmt->ca[i];
-        ca_copy[i].pid = ddci_pid(pmt->ca[i]->pid);
-        shadow.ca[i] = &ca_copy[i];
-    }
-    shadow.stream_pids = pmt->stream_pids;
-    for (auto &sp : shadow.stream_pids)
-        sp.pid = ddci_pid(sp.pid);
-    uint8_t es[8192];
-    int len = CAPMT_add_PMT(es, sizeof(es), &shadow,
-                            CA_PMT_CMD_ID_OK_DESCRAMBLING, 0, dvbca_id);
-    // ca[] borrows stack copies: detach before the destructor runs.
-    for (int i = 0; i < MAX_CAID; i++)
-        shadow.ca[i] = NULL;
-    if (len <= 0)
-        return TABLES_RESULT_ERROR_NORETRY;
-    uint8_t apdu[8200];
-    int ver = d->capmt_ver = (d->capmt_ver + 1) & 0xF;
-    int pos = 0;
-    apdu[pos++] = CLM_ONLY;
-    copy16(apdu, pos, shadow.sid);
-    pos += 2;
-    apdu[pos++] = static_cast<uint8_t>(((ver & 0xF) << 1) | 0x1);
-    apdu[pos++] = 0;
-    apdu[pos++] = 0;
-    memcpy(apdu + pos, es, static_cast<size_t>(len));
-    pos += len;
-    ca_session_t *session =
-        find_session_for_resource(ca, EN50221_APP_CA_RESOURCEID);
-    if (!session)
-        return TABLES_RESULT_ERROR_RETRY;
-    if (ca_write_apdu(session, TAG_CA_PMT, apdu, static_cast<size_t>(pos)))
-        return TABLES_RESULT_ERROR_RETRY;
-    LOG("DDCI %d: sent first CAPMT for pmt %d sid %d", id, pmt->id, pmt->sid);
-    return TABLES_RESULT_OK;
-}
-
 // determine if the pids from this PMT needs to be added to the virtual adapter,
 // also adds the PIDs to the translation table
 int ddci_process_pmt(adapter *ad, SPMT *pmt, int update) {
@@ -688,8 +632,6 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt, int update) {
     }
 
     d->pmt[pos].id = pmt->id;
-    if (!already_registered)
-        d->pmt[pos].capmt_sent = 0;
     // A (re-)registered channel emits on the next tick.
     d->pmt[pos].last_pmt = 0;
 
@@ -759,10 +701,8 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt, int update) {
         }
     }
 
-    // A re-send doubles as the update path: unmap pids the new PMT
-    // dropped, so removed streams and ECMs stop flowing to the CAM.
-    // Runs on first adds too: a no-op then, but it self-heals stale
-    // entries a reused PMT id could otherwise inherit.
+    // Unmap pids the new PMT dropped (also self-heals stale entries
+    // a reused PMT id could inherit), stopping flow to the CAM.
     size_t unmapped = unmap_removed_pids(d, ad->id, pmt);
 
     LOG("DDCI %d: PMT %d %s on slot %d (+%d -%zu pids), keeping ddci pids",
@@ -774,12 +714,6 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt, int update) {
     update_pids(ad->id);
     // Loopback TAPs live on the DDCI adapter; hardware DDCI needs none.
     update_pids(ddid);
-    // First CAPMT rides the same unlock: mapped PMTs skip live.
-    // Best-effort like live re-sends: a CAM that is not ready
-    // yet keeps the slot pending for the next re-process.
-    if (pos >= 0 && !d->pmt[pos].capmt_sent && ddci_is_loopback(ddid) &&
-        ddci_send_first_capmt(d, ad->id, pmt) == TABLES_RESULT_OK)
-        d->pmt[pos].capmt_sent = 1;
     rv = TABLES_RESULT_OK;
     lock.lock();
     dump_mapping_table();
@@ -917,9 +851,8 @@ int ddci_create_pat(ddci_device_t *d, uint8_t *b) {
     return len;
 }
 
-// Write a DVB string: UTF-8 bytes with the 0x15 code-table prefix (names
-// are stored UTF-8, see dvb_get_string), or an empty string. Returns the
-// bytes written.
+// Write a DVB string (UTF-8 + 0x15 prefix, see dvb_get_string);
+// returns the bytes written, 1 when empty.
 static size_t dvb_put_string(uint8_t *b, const char *s) {
     size_t len = strlen(s);
     if (!len) {
@@ -943,10 +876,8 @@ int ddci_create_sdt(ddci_device_t *d, uint8_t *sdt) {
     *b++ = 0xF0; // 11110000
     *b++ = 0x00; // 00000000
     uint8_t *section_start = b;
-    // transport_stream_id, original_network_id from the first service with
-    // real SDT data. A section carries a single tsid/onid, so on a
-    // multi-transponder DDCI the other services keep their own entry data
-    // but share these ids.
+    // tsid/onid come from the first service with real SDT data; on
+    // multi-transponder DDCI the others share these ids.
     int i, tsid = 1, onid = 0, data_mask = 0, have_ids = 0;
     SPMT *pmt;
     for (i = 0; i < d->max_channels; i++)
@@ -958,9 +889,8 @@ int ddci_create_sdt(ddci_device_t *d, uint8_t *sdt) {
                 have_ids = 1;
             }
         }
-    // SDT data normally arrives after the PMT is registered, so bump the
-    // version when new services gain data, otherwise the CAM keeps the
-    // minimal section it cached at tune time.
+    // SDT data arrives after registration: bump the version when new
+    // services gain data, or the CAM keeps its cached minimal section.
     if (data_mask != d->sdt_data_mask) {
         d->sdt_data_mask = data_mask;
         d->sdt_ver = (d->sdt_ver + 1) & 0xF;
@@ -1793,9 +1723,9 @@ int ddci_set_pid(adapter *ad, int pid) {
         // Serialized check->shed->arm: concurrent first adds
         // must not double-shed (recursive, callers may hold A).
         std::lock_guard<SMutex> lock(ad->mutex);
-        // Idle -> active: shed stale output so the fresh tune
-        // starts clean; the push side keeps flowing.
-        if (ad->active_pids <= 0) {
+        // Idle -> active on the demux counter (A-held, unlike
+        // active_pids): shed stale output so the tune starts clean.
+        if (ad->active_demux_pids <= 0) {
             if (ddci_device_t *dd = get_ddci(ad->id))
                 ddci_output_shed(ad, dd);
         }
@@ -1893,7 +1823,6 @@ ddci_device_t *ddci_alloc(int id) {
     create_fifo(&d->push_backlog, DDCI_PUSH_BACKLOG_MAX);
     d->id = id;
     d->ci_slot = -1;
-    d->capmt_ver = 0;
     return d;
 }
 
@@ -2117,6 +2046,10 @@ int ddci_process_cat(int filter, unsigned char *b, int, void *opaque) {
     add_cat = 1;
 
     for (const auto &emm_pid : emm_pids) {
+        // Fixed table pids always collide: a CAT claiming EMMs on
+        // them is broken SI, not a reason to skip the whole CAT.
+        if (emm_pid == 0 || emm_pid == 1 || emm_pid == 16 || emm_pid == 20)
+            continue;
         if (get_ddci_pid(d, emm_pid)) {
             add_cat = 0;
             LOG("CAT pid %d already in use, skipping CAT", emm_pid);
@@ -2264,9 +2197,8 @@ void ddci_free(adapter *ad) {
 }
 
 #ifndef DISABLE_LINUXDVB
-// First slot without an adapter that -e did not disable; -1 if none.
-// Slurps a small proc file; empty when missing. One getline
-// beats the iterator range GCC flags for null-dereference.
+// Slurps a small proc file; empty when missing. One getline beats
+// the iterator range GCC flags for null-dereference.
 static std::string ddci_read_file(const char *path) {
     std::ifstream f(path);
     std::string s;
@@ -2362,6 +2294,7 @@ void ddci_enigma_route_pvr(ddci_device_t *d) {
     LOG("DDCI %d: CI slot %d input routed to %s", d->id, slot, input);
 }
 
+// First slot without an adapter that -e did not disable; -1 if none.
 int ddci_pick_free_slot() {
     for (int i = 0; i < MAX_ADAPTERS; i++)
         if ((!a[static_cast<size_t>(i)] ||
