@@ -2499,9 +2499,9 @@ void find_ddci_adapter() {
 #ifndef DISABLE_LINUXDVB
     // Last: the sweep above must not see the loopback as a stale
     // entry. Single gate with tables_init (surfcu-8).
-    if (opts.enigma && opts.enigma_loopback)
+    if (opts.enigma && opts.enigma_ddci)
         ddci_add_enigma_loopback();
     else if (opts.enigma)
-        LOG("enigma loopback disabled, pass --enigma-loopback to enable");
+        LOG("enigma loopback disabled, pass --enigma-ddci to enable");
 #endif
 }
