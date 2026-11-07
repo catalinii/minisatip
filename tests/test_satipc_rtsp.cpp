@@ -22,6 +22,8 @@
 #include <sys/socket.h>
 
 extern int satipc_tune(int aid, transponder *tp);
+extern int satipc_tcp_read(int socket, void *buf, int len, sockets *ss,
+                           int *rb);
 extern int satipc_commit(adapter *ad);
 extern int satipc_set_pid(adapter *ad, int pid);
 extern int satip_standby_device(adapter *ad);
@@ -750,6 +752,37 @@ int test_satipc_drop_raced_socket() {
     return 0;
 }
 
+// #1557: an RTSP reply arriving over a TCP satipc connection must be
+// processed without crashing. satipc_tcp_read hands the reply to
+// satipc_reply through a stack `sockets` temporary; since the pool
+// refactor gave `sockets` a destructor that frees its buffers, that
+// temporary must be value-initialized — otherwise scope exit frees
+// stack garbage (free(): invalid pointer, seen on 32-bit ARM).
+int test_satipc_tcp_rtsp_reply_no_crash() {
+    RtspFixture fx;
+    if (fx.setup())
+        return 1;
+    fx.sip.transport_type = SIP_TRANSPORT_TCP;
+    fx.ad.dvr = -1;
+
+    static const char reply[] =
+        "RTSP/1.0 200 OK\r\nCSeq: 1\r\nSession: AB12\r\n\r\n";
+    ASSERT(write(fx.pipefd[1], reply, sizeof(reply) - 1) ==
+               (ssize_t)(sizeof(reply) - 1),
+           "reply must queue");
+
+    char buf[2048];
+    int rb = -1;
+    int rc = satipc_tcp_read(fx.pipefd[0], buf, sizeof(buf), &fx.rsock, &rb);
+    ASSERT(rc == 1 && rb == 0, "RTSP reply carries no stream bytes");
+    ASSERT(fx.sip.tcp_pos == 0 && fx.sip.tcp_len == 0,
+           "reply must be fully consumed");
+    free(fx.sip.tcp_data);
+    fx.sip.tcp_data = NULL;
+    fx.teardown();
+    return 0;
+}
+
 #ifndef DISABLE_SRT
 // Abort releases exactly the raced publish: matching state is torn
 // down, anything else (or nobody) is left untouched.
@@ -925,6 +958,8 @@ int main() {
 #endif
     TEST_FUNC(test_satipc_drop_raced_socket(),
               "test raced drop only releases its own socket");
+    TEST_FUNC(test_satipc_tcp_rtsp_reply_no_crash(),
+              "test TCP RTSP reply survives tmp socket");
     TEST_FUNC(test_rtsp_timeout_reopen_keeps_live_adapter(),
               "test live reopen stays published");
     // Last: fills the whole socket table (restores it afterwards).
