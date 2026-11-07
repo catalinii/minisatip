@@ -1344,7 +1344,9 @@ int satipc_tcp_read(int socket, void *buf, int len, sockets *ss, int *rb) {
                      sip->tcp_pos);
                 break;
             }
-            sockets tmp_sock;
+            // Value-init: ~sockets frees buf/fifo/prio_data, so unset
+            // members must start null, not as stack garbage (#1557).
+            sockets tmp_sock{};
             bytes = static_cast<int>(nlnl - rtsp);
             sip->tcp_pos += bytes + 4;
             tmp_sock.buf = rtsp;
