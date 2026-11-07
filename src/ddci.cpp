@@ -1887,17 +1887,10 @@ static int ddci_open_enigma(adapter *ad, ddci_device_t *d) {
         d->slot_claimed.store(false);
         LOG_AND_RETURN(1, "could not open %s: %s", buf, strerror(errno));
     }
-    // Filters and TS share this fd: dvb_demux_set_pid programs
+    // Filters and TS share the demux fd: dvb_demux_set_pid programs
     // ad->dvr, and the TAP output reads back from it (surfcu-6).
-    int use_demux = opts.use_demux_device == USE_DEMUX ||
-                    opts.use_demux_device == USE_PES_FILTERS_AND_DEMUX;
-    if (use_demux)
-        snprintf(buf, sizeof(buf), "/dev/dvb/adapter%d/demux%d", ad->pa,
-                 ad->fn);
-    else
-        snprintf(buf, sizeof(buf), "/dev/dvb/adapter%d/dvr%d", ad->pa, ad->fn);
-    int read_fd =
-        open(buf, use_demux ? O_RDWR | O_NONBLOCK : O_RDONLY | O_NONBLOCK);
+    snprintf(buf, sizeof(buf), "/dev/dvb/adapter%d/demux%d", ad->pa, ad->fn);
+    int read_fd = open(buf, O_RDWR | O_NONBLOCK);
     if (read_fd < 0) {
         close(write_fd);
         d->slot_claimed.store(false);
