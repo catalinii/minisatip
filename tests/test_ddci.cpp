@@ -1212,35 +1212,6 @@ int test_ddci_process_ts_drops_tuner_pat() {
     ASSERT(!saw_tuner_pat, "tuner PAT dropped at the push");
     return 0;
 }
-#ifndef DISABLE_LINUXDVB
-// Closing a loopback unroutes its CI slot and consumes the saved
-// clock: the claim releases and no push thread survives (surfcu-8).
-int test_ddci_close_adapter_unroutes() {
-    ddci_device_t d = {};
-    adapter ad = {};
-    for (auto &slot : a)
-        slot = nullptr;
-    memset(ddci_devices, 0, sizeof(ddci_devices));
-    create_adapter(&ad, 2);
-    d.id = 2;
-    d.enabled = 1;
-    d.loopback = 1;
-    d.ci_slot = 7; // no /dev/ci7 or /proc/stb here: writes fail shut
-    snprintf(d.tsclk_saved, sizeof(d.tsclk_saved), "normal");
-    d.slot_claimed.store(true);
-    ddci_devices[2] = &d;
-    auto saved_enigma = opts.enigma;
-    opts.enigma = 1;
-    ASSERT(ddci_close_adapter(&ad) == 0, "loopback close succeeds");
-    opts.enigma = saved_enigma;
-    ddci_devices[2] = nullptr;
-    a[2] = nullptr;
-    ASSERT(!d.slot_claimed.load(), "close releases the slot claim");
-    ASSERT(d.tsclk_saved[0] == 0, "close consumes the saved clock");
-    ASSERT(!d.push_thread.joinable(), "no push thread survives close");
-    return 0;
-}
-#endif
 // The dump locks each device itself: calling it with d->mutex held
 // must return (a hang here fails via the ctest timeout).
 int test_dump_mapping_table_nested() {
@@ -1924,6 +1895,8 @@ int test_process_cat_fixed_pid_emm_ignored() {
     ASSERT(get_pid_mapping_allddci(0, 193) != NULL,
            "normal EMM still mapped past a fixed-pid claim");
     ASSERT(d.emm_pids.count(MAKE_KEY(0, 193)) > 0, "EMM PID 193 tracked");
+    ASSERT(d.emm_pids.count(MAKE_KEY(0, 16)) == 0,
+           "fixed table pid not EMM-tracked");
 
     delete filters[0];
     filters.slot(0) = nullptr;
@@ -3160,10 +3133,6 @@ int main() {
               "testing push stop joins before close");
     TEST_FUNC(test_dump_mapping_table_nested(),
               "testing dump under held device mutex");
-#ifndef DISABLE_LINUXDVB
-    TEST_FUNC(test_ddci_close_adapter_unroutes(),
-              "testing loopback close unroutes the CI slot");
-#endif
     TEST_FUNC(test_ddci_process_ts_null_tail(),
               "testing ddci_process_ts ends every write with a null packet");
     TEST_FUNC(test_ddci_process_ts_loopback_queue(),

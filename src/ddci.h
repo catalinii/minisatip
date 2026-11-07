@@ -92,7 +92,7 @@ typedef struct ddci_device {
     uint64_t push_dropped{0}; // refused while full: CAM backpressure only
     std::atomic<uint64_t> shed_bytes{0}; // voluntary sheds: tune + stop
     int64_t push_last_drop_log{0}; // last ring-full report, push_mutex only
-    // Push thread, loopback only: writevs peeked ring segments;
+    // Push thread, loopback only: writes peeked ring spans;
     // EAGAIN retries until stop or room.
     std::thread push_thread;
     std::mutex push_mutex;
@@ -129,7 +129,7 @@ int ddci_pick_free_slot();
 void ddci_push_start(ddci_device_t *d);
 // Stops the push thread, shedding the backlog; safe to call twice.
 void ddci_push_stop(ddci_device_t *d);
-// Loopback close: stops the push, unroutes the CI, frees the claim.
+// Loopback close: stops the push and frees the claim.
 int ddci_close_adapter(adapter *ad);
 // Tune shed, output side: drain the demux, drop queued output.
 void ddci_output_shed(adapter *ad, ddci_device_t *d);

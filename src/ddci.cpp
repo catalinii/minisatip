@@ -48,6 +48,7 @@
 #include "tables.h"
 #include "utils.h"
 #include <algorithm>
+#include <array>
 #include <string>
 
 #include "utils/fifo.h"
@@ -85,6 +86,14 @@ ddci_mapping_table_t *get_ddci_pid(ddci_device_t *d, int dpid) {
 #define get_pid_mapping(d, ad, pid) d->mapping.find(MAKE_KEY(ad, pid))
 #define has_pid_mapping(d, ad, pid) (d->mapping.count(MAKE_KEY(ad, pid)) > 0)
 
+// Fixed SI table pids: PAT (0, dropped at push for the generated
+// table), CAT (1), NIT (16), TDT/TOT (20).
+constexpr std::array<int, 4> DDCI_TABLE_PIDS = {0, 1, 16, 20};
+
+[[nodiscard]] static constexpr bool ddci_is_table_pid(int pid) {
+    return std::ranges::find(DDCI_TABLE_PIDS, pid) != DDCI_TABLE_PIDS.end();
+}
+
 int find_ddci_pid(ddci_device_t *d, int pid) {
     int ddci_pid;
     if (pid < 0 || pid > 8191)
@@ -104,9 +113,7 @@ int add_pid_mapping_table(int ad, int pid, int pmt, ddci_device_t *d,
     if (!has_pid_mapping(d, ad, pid)) {
         // Table pids stay fixed: CAT/NIT/TDT forward on their pid even
         // when several tuners map them; PAT maps to 0 (dropped, generated).
-        ddci_pid = (pid == 0 || pid == 1 || pid == 16 || pid == 20)
-                       ? pid
-                       : find_ddci_pid(d, pid);
+        ddci_pid = ddci_is_table_pid(pid) ? pid : find_ddci_pid(d, pid);
         m = &d->mapping[MAKE_KEY(ad, pid)];
         m->ad = ad;
         m->pid = pid;
@@ -371,7 +378,7 @@ int del_pmt_mapping_table(ddci_device_t *d, int ad, int pmt) {
 // until their last user is gone. Call with d->mutex held.
 static size_t unmap_removed_pids(ddci_device_t *d, int ad, SPMT *pmt) {
     auto still_needed = [d, pmt, ad](int pid) {
-        if (pid == pmt->pid || pid == 0 || pid == 1 || pid == 16 || pid == 20)
+        if (pid == pmt->pid || ddci_is_table_pid(pid))
             return true;
         if (d->emm_pids.count(MAKE_KEY(ad, pid)) > 0)
             return true;
@@ -412,7 +419,6 @@ int ddci_close_dev(adapter *ad) {
 SCA_op ddci;
 #ifndef DISABLE_LINUXDVB
 static void ddci_enigma_route_pvr(ddci_device_t *d);
-static void ddci_enigma_route_none(ddci_device_t *d);
 #endif
 
 // Shared close stub: joining here runs under ad->mutex, so a
@@ -423,12 +429,6 @@ int ddci_close_adapter(adapter *ad) {
     ddci_device_t *d = ddci_devices[ad->id];
     if (d && d->loopback) {
         ddci_push_stop(d);
-#ifndef DISABLE_LINUXDVB
-        // Unroute only a held claim, before releasing it: a retake
-        // declined for a live tuner must not kill its route.
-        if (d->slot_claimed.load())
-            ddci_enigma_route_none(d);
-#endif
         d->slot_claimed.store(false);
     }
     return 0;
@@ -682,7 +682,7 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt, int update) {
 
     // Map mandatory PIDs: CAT/TDT forward on fixed pids; PAT maps
     // to ddci 0 where the push drops it for the generated table.
-    for (const int pid : {0, 1, 16, 20}) {
+    for (const int pid : DDCI_TABLE_PIDS) {
         // NIT has no decrypt role: map it only when the source
         // already flows it, unlike CAT/TDT (catalinii 11-06).
         if (pid == 16 && !has_pid_mapping(d, pmt->adapter, pid) &&
@@ -1338,8 +1338,8 @@ int push_ts_to_adapter(ddci_device_t *d, adapter *ad, uint16_t *mapping) {
     return 0;
 }
 
-// Push loop: writevs peeked ring segments like flush_socket_all,
-// no copy buffer. Loopback only; hardware writevs inline.
+// Push loop: writes one peeked ring span per pass (up to DDCI_PUSH_CHUNK
+// or the ring wrap), no copy buffer. Loopback only; hardware writevs inline.
 static void ddci_push_loop(int id, int fe) {
     ddci_device_t *d =
         (id >= 0 && id < MAX_ADAPTERS) ? ddci_devices[id] : nullptr;
@@ -1348,8 +1348,7 @@ static void ddci_push_loop(int id, int fe) {
     // fe arrives loaded: every replacement joins first, and the
     // loop must never take ad->mutex (join runs under it).
     for (;;) {
-        struct iovec iov[2];
-        int iocnt = 0, first = 0;
+        void *base = nullptr;
         size_t n = 0;
         {
             std::unique_lock<std::mutex> lock(d->push_mutex);
@@ -1358,46 +1357,23 @@ static void ddci_push_loop(int id, int fe) {
             });
             if (d->push_stop.load())
                 break;
-            // Peek trusts the length; verify, the waiter promised used > 0.
-            size_t have = fifo_used(&d->push_backlog);
+            size_t have =
+                std::min<size_t>(fifo_used(&d->push_backlog), DDCI_PUSH_CHUNK);
             if (have == 0)
                 continue;
-            n = have;
-            if (n > DDCI_PUSH_CHUNK)
-                n = DDCI_PUSH_CHUNK;
-            iov[0].iov_len =
-                fifo_peek(&d->push_backlog, &iov[0].iov_base, n, 0);
-            iocnt = 1;
-            // The entire chunk reads through at most 2 pointers.
-            if (iov[0].iov_len < n) {
-                iov[1].iov_len = fifo_peek(&d->push_backlog, &iov[1].iov_base,
-                                           n - iov[0].iov_len, iov[0].iov_len);
-                n = iov[0].iov_len + iov[1].iov_len;
-                iocnt = 2;
-            }
+            n = fifo_peek(&d->push_backlog, &base, have, 0);
         }
         if (fe < 0)
             break;
+        auto *buf = static_cast<char *>(base);
         size_t off = 0;
         bool fatal = false;
         // The peeked span is stable unlocked: pushes never
         // overwrite unread bytes, only this thread consumes.
         while (off < n && !d->push_stop.load()) {
-            ssize_t w = writev(fe, iov + first, iocnt - first);
+            ssize_t w = write(fe, buf + off, n - off);
             if (w > 0) {
                 off += static_cast<size_t>(w);
-                size_t left = static_cast<size_t>(w);
-                while (first < iocnt && left >= iov[first].iov_len) {
-                    left -= iov[first].iov_len;
-                    first++;
-                }
-                // A fully written span leaves first == iocnt;
-                // off == n then, so nothing left to advance.
-                if (first < iocnt) {
-                    auto *base = static_cast<char *>(iov[first].iov_base);
-                    iov[first].iov_base = base + left;
-                    iov[first].iov_len -= left;
-                }
             } else if (w < 0 && errno == EINTR)
                 continue;
             else if (w < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
@@ -1902,12 +1878,7 @@ static int ddci_open_enigma(adapter *ad, ddci_device_t *d) {
     // drain a single playpump, so dual-CI is untested (surfcu-7).
     int dvr_offset = ddci_dvr_source_offset(ad);
     ad->dmx_source = dvr_offset;
-    int push_dvr = ad->fn;
-    // Some drivers drain only one playpump; override the push
-    // dvr without moving the TAP pair (dm8000: dvr0).
-    if (const char *push_env = getenv("DDCI_PUSH_DVR"))
-        push_dvr = atoi(push_env);
-    snprintf(buf, sizeof(buf), "/dev/dvb/adapter%d/dvr%d", ad->pa, push_dvr);
+    snprintf(buf, sizeof(buf), "/dev/dvb/adapter%d/dvr%d", ad->pa, ad->fn);
     // Nonblocking: a full playpump returns EAGAIN, retried in
     // the push loop below, so the join-first stop always lands.
     int write_fd = open(buf, O_WRONLY | O_NONBLOCK | O_CLOEXEC);
@@ -1972,7 +1943,7 @@ static int ddci_open_enigma(adapter *ad, ddci_device_t *d) {
         ddci_enigma_route_pvr(d);
     ad->enabled = 1;
     LOG("opened enigma loopback %d push dvr%d fd:%d read fd:%d source:%d",
-        ad->id, push_dvr, ad->fe, ad->dvr, ad->dmx_source);
+        ad->id, ad->fn, ad->fe, ad->dvr, ad->dmx_source);
     ddci_push_start(d);
     return 0;
 }
@@ -2112,6 +2083,10 @@ int ddci_process_cat(int filter, unsigned char *b, int, void *opaque) {
         caid = b[i + 2] * 256 + b[i + 3];
         capid = (b[i + 4] & 0x1F) * 256 + b[i + 5];
         LOG("CAT pos %d caid %04X, pid %d", k, caid, capid);
+        // Fixed table pids always collide: a CAT claiming EMMs on
+        // them is broken SI, not a reason to skip or EMM-map them.
+        if (ddci_is_table_pid(capid))
+            continue;
 
         emm_pids.push_back(capid);
     }
@@ -2119,10 +2094,6 @@ int ddci_process_cat(int filter, unsigned char *b, int, void *opaque) {
     add_cat = 1;
 
     for (const auto &emm_pid : emm_pids) {
-        // Fixed table pids always collide: a CAT claiming EMMs on
-        // them is broken SI, not a reason to skip the whole CAT.
-        if (emm_pid == 0 || emm_pid == 1 || emm_pid == 16 || emm_pid == 20)
-            continue;
         if (get_ddci_pid(d, emm_pid)) {
             add_cat = 0;
             LOG("CAT pid %d already in use, skipping CAT", emm_pid);
@@ -2351,23 +2322,6 @@ static void ddci_enigma_route_pvr(ddci_device_t *d) {
     }
     ddci_enigma_set_tsclk(d);
     LOG("DDCI %d: CI slot %d input routed to %s", d->id, slot, input);
-}
-
-// CI slot back to bypass: NONE unroutes the input, and the saved
-// clock restores the rate the loopback raised (surfcu-8).
-static void ddci_enigma_route_none(ddci_device_t *d) {
-    if (!opts.enigma || !d || d->ci_slot < 0)
-        return;
-    set_ci_input_str(d->ci_slot, "NONE");
-    if (!d->tsclk_saved[0])
-        return;
-    char path[64];
-    snprintf(path, sizeof(path), "/proc/stb/tsmux/ci%d_tsclk", d->ci_slot);
-    std::ofstream out(path);
-    if (out << d->tsclk_saved)
-        LOG("DDCI %d: CI slot %d tsclk restored to %s", d->id, d->ci_slot,
-            d->tsclk_saved);
-    d->tsclk_saved[0] = 0;
 }
 
 // First slot without an adapter that -e did not disable; -1 if none.
