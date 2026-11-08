@@ -114,9 +114,9 @@ int add_pid_mapping_table(int ad, int pid, int pmt, ddci_device_t *d,
     int ddci_pid = -1;
     ddci_mapping_table_t *m;
     if (!has_pid_mapping(d, ad, pid)) {
-        // Table pids stay fixed: CAT/NIT/TDT forward on their pid even
-        // when several tuners map them; PAT maps to 0 (dropped, generated).
-        ddci_pid = ddci_is_table_pid(pid) ? pid : find_ddci_pid(d, pid);
+        // PAT maps to 0 (dropped at push for the generated table);
+        // other pids collide-remap via find_ddci_pid across tuners.
+        ddci_pid = pid == 0 ? 0 : find_ddci_pid(d, pid);
         m = &d->mapping[MAKE_KEY(ad, pid)];
         m->ad = ad;
         m->pid = pid;
@@ -750,7 +750,7 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt, int update) {
     // TAPs live on the DDCI adapter).
     update_pids(ddid);
 #ifndef DISABLE_LINUXDVB
-    if (d->loopback)
+    if (d->loopback && !already_registered && d->channels == 1)
         ddci_enigma_unpause_playpump(get_adapter_nw(ddid));
 #endif
     rv = TABLES_RESULT_OK;
@@ -1618,7 +1618,8 @@ int ddci_process_ts(adapter *ad, ddci_device_t *d) {
     for (const auto &[key, m] : d->mapping)
         if (m.ad == ad->id && m.rewrite) {
             ad_dd_pids[m.pid] = static_cast<uint16_t>(m.ddci_pid);
-            dd_ad_pids[m.ddci_pid] = static_cast<uint16_t>(m.pid);
+            if (m.ddci_pid != 0)
+                dd_ad_pids[m.ddci_pid] = static_cast<uint16_t>(m.pid);
             ec++;
             DEBUGM("Using pid %d in adapter %d as pid %d in DDCI %d", m.pid,
                    ad->id, m.ddci_pid, d->id);
