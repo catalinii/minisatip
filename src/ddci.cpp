@@ -749,6 +749,10 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt, int update) {
     // Settle this device's own pid adds/deletes too (loopback
     // TAPs live on the DDCI adapter).
     update_pids(ddid);
+#ifndef DISABLE_LINUXDVB
+    if (d->loopback)
+        ddci_enigma_unpause_playpump(get_adapter_nw(ddid));
+#endif
     rv = TABLES_RESULT_OK;
     // Dump unlocked: it locks each device itself, and holding D
     // across it would nest D->D against a concurrent dump.
@@ -2316,19 +2320,41 @@ static void ddci_enigma_route_pvr(ddci_device_t *d) {
     LOG("DDCI %d: CI slot %d input routed to %s", d->id, slot, input);
 }
 
-// Unpause ci_playpump after a VIDEO_FREEZE->VIDEO_PLAY race and
-// flush/suspend pacing on the dvr playpump via ioctl(dvr, 0, 0).
+// Unpause ci_playpump and suspend pacing on video0 without
+// flushing in-flight TS packets of concurrent channels.
 static void ddci_enigma_unpause_playpump(adapter *ad) {
-    char vpath[64];
-    snprintf(vpath, sizeof(vpath), "/dev/dvb/adapter%d/video0", ad->pa);
-    int vfd = open(vpath, O_RDONLY | O_NONBLOCK | O_CLOEXEC);
-    if (vfd >= 0) {
-        ioctl(vfd, VIDEO_FREEZE, 0);
-        ioctl(vfd, VIDEO_CONTINUE, 0);
-        close(vfd);
-    }
-    if (ad->fe >= 0)
-        ioctl(ad->fe, 0, 0);
+    if (!opts.enigma || !ad || ad->fe < 0)
+        return;
+    static std::atomic<bool> busy{false};
+    if (busy.exchange(true))
+        return;
+    int pa = ad->pa;
+    std::thread([pa]() {
+        char vpath[64];
+        snprintf(vpath, sizeof(vpath), "/dev/dvb/adapter%d/video0", pa);
+        auto resume = [&]() {
+            int fd = open(vpath, O_RDONLY | O_NONBLOCK | O_CLOEXEC);
+            if (fd < 0)
+                return;
+            ioctl(fd, VIDEO_FAST_FORWARD, 1);
+            ioctl(fd, VIDEO_CONTINUE, 0);
+            ioctl(fd, VIDEO_CONTINUE, 0);
+            close(fd);
+        };
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        int vfd = open(vpath, O_RDONLY | O_NONBLOCK | O_CLOEXEC);
+        if (vfd >= 0) {
+            std::thread freezer([vfd, resume]() {
+                ioctl(vfd, VIDEO_FREEZE, 0);
+                close(vfd);
+                resume();
+            });
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+            resume();
+            freezer.join();
+        }
+        busy.store(false);
+    }).detach();
 }
 
 // Latch dvr_playpump->consumer_started = 1 before PVR routing
@@ -2344,6 +2370,8 @@ static void ddci_enigma_prime_playpump(adapter *ad, ddci_device_t *d) {
     pes.flags = DMX_IMMEDIATE_START;
     if (ioctl(ad->dvr, DMX_SET_PES_FILTER, &pes) == 0)
         ioctl(ad->dvr, DMX_STOP, 0);
+    if (ad->fe >= 0)
+        ioctl(ad->fe, 0, 0);
 }
 
 // First slot without an adapter that -e did not disable; -1 if none.
