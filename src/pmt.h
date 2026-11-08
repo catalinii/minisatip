@@ -157,6 +157,9 @@ typedef struct struct_pmt {
     // For CA watchdogs: last batch decrypted with a verified CW and last
     // scrambled packet. Owned by the adapter thread.
     int64_t last_decrypt_ok, last_scrambled_pkt;
+    // Start and size of the current run of batches dropped for lack of a CW.
+    int64_t undecrypted_since;
+    size_t undecrypted_pkts;
     // Active key: stored on the adapter thread, loaded from dvbapi/ca threads.
     std::atomic<SCW *> cw{nullptr};
     SPid *p;

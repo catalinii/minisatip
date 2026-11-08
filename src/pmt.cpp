@@ -928,10 +928,31 @@ int decrypt_batch(SPMT *pmt) {
 
     update_cw(pmt);
 
+    int64_t now = getTick();
     SCW *cw = pmt->cw.load();
     if (!cw) {
+        if (pmt->undecrypted_since == 0)
+            pmt->undecrypted_since = now;
+        pmt->undecrypted_pkts += pmt->blen;
         pmt->blen = 0;
         return 1;
+    }
+
+    if (pmt->undecrypted_since != 0) {
+        int64_t delay = now - pmt->undecrypted_since;
+        if (pmt->last_decrypt_ok == 0) {
+            LOG("PMT %d (%s): first CW for parity %d after %jd ms, %zu packets "
+                "not decrypted",
+                pmt->id, pmt->name, pmt->parity.load(), delay,
+                pmt->undecrypted_pkts);
+        } else {
+            LOG("PMT %d (%s): CW for parity %d late by %jd ms, %zu packets not "
+                "decrypted",
+                pmt->id, pmt->name, pmt->parity.load(), delay,
+                pmt->undecrypted_pkts);
+        }
+        pmt->undecrypted_since = 0;
+        pmt->undecrypted_pkts = 0;
     }
 
     int pid = PID_FROM_TS(pmt->batch[0].data);
@@ -943,10 +964,35 @@ int decrypt_batch(SPMT *pmt) {
     for (i = 0; i < pmt->blen; i++)
         pmt->batch[i].data[3] &= 0x3F; // clear the encrypted flags
     if (!pmt->update_cw) // the CW was verified, not just the newest one
-        pmt->last_decrypt_ok = getTick();
+        pmt->last_decrypt_ok = now;
     pmt->blen = 0;
 
     return 0;
+}
+
+// Log how early the incoming parity's CW arrived before the stream switched.
+static void log_cw_margin(SPMT *pmt, int8_t cp, int64_t now) {
+    int cw_id = -1;
+    int64_t cw_time = 0;
+    {
+        std::lock_guard<SMutex> lock(cws_mutex);
+        SCW *best = nullptr;
+        for (int i = 0; i < ncws; i++) {
+            SCW *c = cws[i];
+            if (c && c->enabled && c->pmt == pmt->id && c->parity == cp &&
+                c->set_time == 0 && now <= c->expiry &&
+                (!best || best->time < c->time))
+                best = c;
+        }
+        if (best) {
+            cw_id = best->id;
+            cw_time = best->time;
+        }
+    }
+    if (cw_id >= 0) {
+        LOGM("PMT %d (%s): CW %d for parity %d ready %jd ms before switch",
+             pmt->id, pmt->name, cw_id, cp, now - cw_time);
+    }
 }
 
 int pmt_decrypt_stream(adapter *ad) {
@@ -991,6 +1037,7 @@ int pmt_decrypt_stream(adapter *ad) {
                     pmt->name, pmt->id, cp, pid, b[0], b[1], b[2], b[3], b[4],
                     b[5], b[6]);
 
+                log_cw_margin(pmt, cp, now);
                 pmt->parity = cp;
                 disable_cw(pmt->id);
             }
@@ -1588,6 +1635,8 @@ int pmt_add(int aid, int sid, int pmt_pid) {
     pmt->blen = 0;
     pmt->last_update_cw = 0;
     pmt->last_decrypt_ok = pmt->last_scrambled_pkt = 0;
+    pmt->undecrypted_since = 0;
+    pmt->undecrypted_pkts = 0;
     pmt->filter = -1;
     pmt->version = -1;
     pmt->state = PMT_STOPPED;
@@ -2345,6 +2394,8 @@ void start_pmt(SPMT *pmt) {
     pmt->state = PMT_STARTING;
     pmt->start_time = getTick();
     pmt->last_decrypt_ok = pmt->last_scrambled_pkt = 0;
+    pmt->undecrypted_since = 0;
+    pmt->undecrypted_pkts = 0;
 
     // No ADD_REMOVE: the client subscription holds the pid in the demux,
     // so the last unsubscribe deletes it; the CA send follows on the pass.

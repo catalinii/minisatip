@@ -63,6 +63,7 @@ void cache_pmt_for_adapter(adapter *ad, SPMT *pmt);
 void pmt_add_active_pmt(adapter *ad, int pmt_id);
 void start_active_pmts(adapter *ad);
 SPMT *get_pmt_for_sid_pid(int aid, int sid, int pid);
+int decrypt_batch(SPMT *pmt);
 
 // pmts[id] for an id from pmt_add(); unlike get_pmt(), also when disabled
 static SPMT *pmt_slot(int id) { return pmts[static_cast<size_t>(id)]; }
@@ -3840,6 +3841,94 @@ int test_filter_add_del_mt() {
     return 0;
 }
 
+// Dropped-batch counters accumulate until a CW arrives and reset on start_pmt.
+int test_late_cw_counters() {
+    pmts.clear();
+    for (int i = 0; i < MAX_CW; i++)
+        if (cws[i])
+            cws[i]->enabled = 0;
+
+    while (getTick() == 0)
+        usleep(1000);
+
+    adapter ad = {};
+    a[0] = &ad;
+    ad.enabled = 1;
+    ad.id = 0;
+    init_algo();
+
+    int id = pmt_add(0, 100, 48);
+    ASSERT(id >= 0, "could not create the PMT");
+    SPMT *pmt = get_pmt(id);
+    ASSERT(pmt != nullptr, "PMT should be enabled");
+    ASSERT_EQUAL(pmt->undecrypted_since, 0, "initial since should be 0");
+    ASSERT_EQUAL(pmt->undecrypted_pkts, static_cast<size_t>(0),
+                 "initial pkts should be 0");
+
+    constexpr size_t kBatch1 = 3;
+    constexpr size_t kBatch2 = 2;
+    std::vector<uint8_t> buf(kBatch1 * DVB_FRAME + 64, 0);
+    std::array<SPMT_batch, kBatch1> batch{};
+    auto fill_batch = [&](size_t count) {
+        for (size_t k = 0; k < count; k++) {
+            std::copy_n(packet, sizeof(packet), buf.data() + k * DVB_FRAME);
+            batch[k] = {.data = buf.data() + k * DVB_FRAME, .len = DVB_FRAME};
+        }
+        pmt->batch = batch.data();
+        pmt->blen = count;
+    };
+
+    pmt->parity = 0;
+    fill_batch(kBatch1);
+    ASSERT_EQUAL(decrypt_batch(pmt), 1, "decrypt_batch without CW should fail");
+    int64_t since = pmt->undecrypted_since;
+    ASSERT(since != 0, "undecrypted_since should be set");
+    ASSERT_EQUAL(pmt->undecrypted_pkts, kBatch1,
+                 "undecrypted_pkts should match first batch");
+
+    usleep(2000);
+    fill_batch(kBatch2);
+    ASSERT_EQUAL(decrypt_batch(pmt), 1,
+                 "second decrypt_batch without CW should fail");
+    ASSERT_EQUAL(pmt->undecrypted_since, since,
+                 "undecrypted_since should stay at first drop");
+    ASSERT_EQUAL(pmt->undecrypted_pkts, kBatch1 + kBatch2,
+                 "undecrypted_pkts should accumulate");
+
+    ASSERT_EQUAL(send_cw(id, CA_ALGO_DVBCSA, 0, cw0, nullptr, 25, nullptr), 0,
+                 "send_cw should store the CW");
+    fill_batch(kBatch2);
+    ASSERT_EQUAL(decrypt_batch(pmt), 0, "decrypt_batch with CW should succeed");
+    SCW *active = pmt->cw.load();
+    ASSERT(active && active->set_time != 0,
+           "used CW should have set_time stamped");
+    ASSERT_EQUAL(pmt->undecrypted_since, 0,
+                 "undecrypted_since should reset on CW arrival");
+    ASSERT_EQUAL(pmt->undecrypted_pkts, static_cast<size_t>(0),
+                 "undecrypted_pkts should reset on CW arrival");
+
+    pmt->parity = 1;
+    disable_cw(id);
+    fill_batch(1);
+    ASSERT_EQUAL(decrypt_batch(pmt), 1,
+                 "decrypt_batch on unkeyed parity should fail");
+    ASSERT(pmt->undecrypted_since != 0 && pmt->undecrypted_pkts == 1,
+           "counters should be non-zero before start_pmt");
+    start_pmt(pmt);
+    ASSERT_EQUAL(pmt->undecrypted_since, 0,
+                 "start_pmt should reset undecrypted_since");
+    ASSERT_EQUAL(pmt->undecrypted_pkts, static_cast<size_t>(0),
+                 "start_pmt should reset undecrypted_pkts");
+
+    pmt->batch = nullptr;
+    for (int i = 0; i < MAX_CW; i++)
+        if (cws[i])
+            cws[i]->enabled = 0;
+    pmts.destroy_all();
+    a[0] = nullptr;
+    return 0;
+}
+
 int main() {
     opts.log = 255;
     opts.debug = 255;
@@ -3952,6 +4041,8 @@ int main() {
               "testing a short CA descriptor is skipped")
     TEST_FUNC(test_filter_add_del_mt(),
               "testing concurrent filter add and delete")
+    TEST_FUNC(test_late_cw_counters(),
+              "testing late CW undecrypted packet counters")
     fflush(stdout);
     pmts.destroy_all();
     filters.destroy_all();
