@@ -54,6 +54,9 @@
 #include "utils/fifo.h"
 #include "utils/ticks.h"
 #include <linux/dvb/ca.h>
+#ifndef DISABLE_LINUXDVB
+#include <linux/dvb/video.h>
+#endif
 
 #define DEFAULT_LOG LOG_DDCI
 #define CONFIG_FILE_NAME "ddci.conf"
@@ -419,6 +422,8 @@ int ddci_close_dev(adapter *ad) {
 SCA_op ddci;
 #ifndef DISABLE_LINUXDVB
 static void ddci_enigma_route_pvr(ddci_device_t *d);
+static void ddci_enigma_unpause_playpump(adapter *ad);
+static void ddci_enigma_prime_playpump(adapter *ad, ddci_device_t *d);
 #endif
 
 // Shared close stub: joining here runs under ad->mutex, so a
@@ -1459,7 +1464,7 @@ static void ddci_push_join(ddci_device_t *d, adapter *ad) {
     }
 }
 
-// Micro-kick: close/open re-primes a dead CAM pull, backlog kept.
+// Micro-kick: unpause/flush the playpump in place, backlog kept.
 void ddci_push_kick(adapter *ad, ddci_device_t *d) {
     if (!ad || !d || !ddci_is_loopback(d->id))
         return;
@@ -1468,22 +1473,12 @@ void ddci_push_kick(adapter *ad, ddci_device_t *d) {
     std::unique_lock<SMutex> lock(ad->mutex, std::try_to_lock);
     if (!lock.owns_lock() || !ad->enabled)
         return;
-    ddci_push_join(d, ad);
-    char buf[100];
-    snprintf(buf, sizeof(buf), "/dev/dvb/adapter%d/dvr%d", ad->pa, ad->fn);
-    // Nonblocking: join-first needs a writer that always returns;
-    // the loop already backs off EAGAIN like filepush.
-    int fd = open(buf, O_WRONLY | O_NONBLOCK | O_CLOEXEC);
-    if (fd < 0) {
-        LOG("could not reopen %s: %s", buf, strerror(errno));
-        return;
-    }
-    ad->fe = fd;
 #ifndef DISABLE_LINUXDVB
     ddci_enigma_route_pvr(d);
+    ddci_enigma_unpause_playpump(ad);
 #endif
     ddci_push_start(d);
-    LOG("kicked push dvr %s fd:%d", buf, fd);
+    LOG("kicked push dvr%d fd:%d", ad->fn, ad->fe);
 }
 
 // Stops the push thread, shedding the backlog; safe to call twice.
@@ -1933,8 +1928,11 @@ static int ddci_open_enigma(adapter *ad, ddci_device_t *d) {
         d->slot_claimed.store(d->ci_slot >= 0);
     // Route here, not at CA time: the claim above is ours, and a
     // declined retake must not steal the live tuner's route.
-    if (d->slot_claimed.load())
+    if (d->slot_claimed.load()) {
+        ddci_enigma_prime_playpump(ad, d);
         ddci_enigma_route_pvr(d);
+        ddci_enigma_unpause_playpump(ad);
+    }
     ad->enabled = 1;
     LOG("opened enigma loopback %d push dvr%d fd:%d read fd:%d source:%d",
         ad->id, ad->fn, ad->fe, ad->dvr, ad->dmx_source);
@@ -2316,6 +2314,36 @@ static void ddci_enigma_route_pvr(ddci_device_t *d) {
     }
     ddci_enigma_set_tsclk(d);
     LOG("DDCI %d: CI slot %d input routed to %s", d->id, slot, input);
+}
+
+// Unpause ci_playpump after a VIDEO_FREEZE->VIDEO_PLAY race and
+// flush/suspend pacing on the dvr playpump via ioctl(dvr, 0, 0).
+static void ddci_enigma_unpause_playpump(adapter *ad) {
+    char vpath[64];
+    snprintf(vpath, sizeof(vpath), "/dev/dvb/adapter%d/video0", ad->pa);
+    int vfd = open(vpath, O_RDONLY | O_NONBLOCK | O_CLOEXEC);
+    if (vfd >= 0) {
+        ioctl(vfd, VIDEO_FREEZE, 0);
+        ioctl(vfd, VIDEO_CONTINUE, 0);
+        close(vfd);
+    }
+    if (ad->fe >= 0)
+        ioctl(ad->fe, 0, 0);
+}
+
+// Latch dvr_playpump->consumer_started = 1 before PVR routing
+// diverts demux pid opens to the CI parser band.
+static void ddci_enigma_prime_playpump(adapter *ad, ddci_device_t *d) {
+    if (d->ci_slot >= 0)
+        set_ci_input_str(d->ci_slot, "PVR_NONE");
+    dmx_pes_filter_params pes{};
+    pes.pid = 0x1ffe;
+    pes.input = DMX_IN_FRONTEND;
+    pes.output = DMX_OUT_TSDEMUX_TAP;
+    pes.pes_type = DMX_PES_OTHER;
+    pes.flags = DMX_IMMEDIATE_START;
+    if (ioctl(ad->dvr, DMX_SET_PES_FILTER, &pes) == 0)
+        ioctl(ad->dvr, DMX_STOP, 0);
 }
 
 // First slot without an adapter that -e did not disable; -1 if none.
