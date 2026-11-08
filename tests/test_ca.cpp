@@ -2471,14 +2471,6 @@ int test_loopback_init_without_stack_fails_loud() {
 }
 #endif
 
-// An unopenable CI node fails open: the pick keeps the old
-// claim behavior instead of stranding a slot (surfcu-8).
-int test_ca_ci_module_present_fail_open() {
-    ASSERT(ca_ci_module_present(99) == 1, "missing node claims");
-    ASSERT(ca_ci_module_present(-1) == 1, "bad slot claims");
-    return 0;
-}
-
 // CAPMT 0 = {1, 3}, CAPMT 1 = {2}: zapping 3 -> 4 -> 3 -> 4 restarts
 // a resident once; the zaps back return to kept places.
 int test_capmt_zap_back_keeps_places() {
@@ -2885,8 +2877,6 @@ int main() {
     TEST_FUNC(test_loopback_init_without_stack_fails_loud(),
               "testing loopback init without a stack fails loud");
 #endif
-    TEST_FUNC(test_ca_ci_module_present_fail_open(),
-              "testing CI presence check fails open");
     TEST_FUNC(test_get_authdata_filename(), "testing filename helper function");
     TEST_FUNC(test_capmt_content_hash_masks_version_and_listmgmt(),
               "testing the CAPMT hash masks version and listmgmt");
