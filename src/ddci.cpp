@@ -1374,6 +1374,7 @@ static void ddci_push_loop(int id, int fe) {
             ssize_t w = write(fe, buf + off, n - off);
             if (w > 0) {
                 off += static_cast<size_t>(w);
+                d->last_push_write.store(getTick(), std::memory_order_relaxed);
             } else if (w < 0 && errno == EINTR)
                 continue;
             else if (w < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
@@ -1392,8 +1393,6 @@ static void ddci_push_loop(int id, int fe) {
                 break;
             }
         }
-        if (off > 0)
-            d->last_push_write.store(getTick(), std::memory_order_relaxed);
         // Resets run only with the thread joined or never
         // started, so the written span skips as-is.
         {
@@ -1550,6 +1549,8 @@ size_t ddci_push_queue(ddci_device_t *d, uint8_t *psi, size_t psi_len,
     {
         std::lock_guard<std::mutex> lock(d->push_mutex);
         SFIFO *f = &d->push_backlog;
+        if (fifo_used(f) == 0)
+            d->last_push_write.store(getTick(), std::memory_order_relaxed);
         // fifo_push is all-or-nothing without force: short
         // returns are full-ring drops, counted, never partial.
         if (psi && psi_len > 0) {
