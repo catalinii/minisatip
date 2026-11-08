@@ -411,27 +411,42 @@ static int decode_transport_srt([[maybe_unused]] streams *sid,
         LOG_AND_RETURN(-1, "SRT listener not initialized");
     // Parse streamid from Transport header: RTP/AVP/SRT;srt_streamid=<id>
     std::string transport_str(arg);
-    sid->srt_streamid.clear();
+    std::string streamid;
     auto pos = transport_str.find("srt_streamid=");
     if (pos != std::string::npos) {
-        auto val_start = pos + 13; // strlen("str_streamid=")
+        auto val_start = pos + 13; // strlen("srt_streamid=")
         auto val_end = transport_str.find(';', val_start);
-        sid->srt_streamid = transport_str.substr(
-            val_start, val_end == std::string::npos ? std::string::npos
-                                                    : val_end - val_start);
+        streamid = transport_str.substr(val_start, val_end == std::string::npos
+                                                       ? std::string::npos
+                                                       : val_end - val_start);
     }
-    if (sid->srt_streamid.empty())
+    if (streamid.empty())
         LOG_AND_RETURN(-1, "SRT transport missing srt_streamid= parameter");
 
     sid->type = STREAM_RTSP_SRT;
 
+    // Re-PLAY with the same transport: the pending entry was consumed by
+    // the first PLAY, so reuse the attached socket while it is connected.
+    if (sid->srt_streamid == streamid &&
+        srt_socket_is_connected(sid->srt_sock)) {
+        LOG("SRT stream setup for sid %d, srt_streamid='%s', srt_sock=%d "
+            "(reused)",
+            sid->sid, streamid.c_str(), sid->srt_sock);
+        return 0;
+    }
+
     // Try to take SRT socket from pending map (may have been queued by accept)
-    SRTSOCKET srt_sock = srt_pending_take(sid->srt_streamid);
+    SRTSOCKET srt_sock = srt_pending_take(streamid);
     if (srt_sock == SRT_INVALID_SOCK)
         LOG_AND_RETURN(
             -1, "Failed finding pending SRT socket for sid %d, srt_streamid %s",
-            sid->sid, sid->srt_streamid.c_str());
+            sid->sid, streamid.c_str());
 
+    // Replacing the transport: hand the previous socket back to the pool
+    // (closes it when no longer connected) instead of leaking it.
+    if (sid->srt_sock > 0 && sid->srt_sock != srt_sock)
+        srt_pending_return(sid->srt_sock, sid->srt_streamid);
+    sid->srt_streamid = streamid;
     sid->srt_sock = srt_sock;
     LOG("SRT stream setup for sid %d, srt_streamid='%s', srt_sock=%d "
         "(from pending)",
