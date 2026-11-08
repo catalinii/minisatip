@@ -2330,9 +2330,9 @@ static void ddci_enigma_unpause_playpump(adapter *ad) {
         return;
     int pa = ad->pa;
     std::thread([pa]() {
-        char vpath[64];
-        snprintf(vpath, sizeof(vpath), "/dev/dvb/adapter%d/video0", pa);
-        auto resume = [&]() {
+        auto resume = [pa]() {
+            char vpath[64];
+            snprintf(vpath, sizeof(vpath), "/dev/dvb/adapter%d/video0", pa);
             int fd = open(vpath, O_RDONLY | O_NONBLOCK | O_CLOEXEC);
             if (fd < 0)
                 return;
@@ -2342,16 +2342,17 @@ static void ddci_enigma_unpause_playpump(adapter *ad) {
             close(fd);
         };
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        char vpath[64];
+        snprintf(vpath, sizeof(vpath), "/dev/dvb/adapter%d/video0", pa);
         int vfd = open(vpath, O_RDONLY | O_NONBLOCK | O_CLOEXEC);
         if (vfd >= 0) {
-            std::thread freezer([vfd, resume]() {
+            std::thread([vfd, resume]() {
                 ioctl(vfd, VIDEO_FREEZE, 0);
                 close(vfd);
                 resume();
-            });
+            }).detach();
             std::this_thread::sleep_for(std::chrono::milliseconds(5));
             resume();
-            freezer.join();
         }
         busy.store(false);
     }).detach();
@@ -2360,6 +2361,9 @@ static void ddci_enigma_unpause_playpump(adapter *ad) {
 // Latch dvr_playpump->consumer_started = 1 before PVR routing
 // diverts demux pid opens to the CI parser band.
 static void ddci_enigma_prime_playpump(adapter *ad, ddci_device_t *d) {
+    bool restore_ci0 = d->ci_slot > 0 && ddci_loopback_owns_slot(0);
+    if (restore_ci0)
+        set_ci_input_str(0, "PVR_NONE");
     if (d->ci_slot >= 0)
         set_ci_input_str(d->ci_slot, "PVR_NONE");
     dmx_pes_filter_params pes{};
@@ -2372,6 +2376,8 @@ static void ddci_enigma_prime_playpump(adapter *ad, ddci_device_t *d) {
         ioctl(ad->dvr, DMX_STOP, 0);
     if (ad->fe >= 0)
         ioctl(ad->fe, 0, 0);
+    if (restore_ci0)
+        set_ci_input_str(0, "PVR");
 }
 
 // First slot without an adapter that -e did not disable; -1 if none.
