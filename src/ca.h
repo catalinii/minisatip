@@ -266,7 +266,6 @@ struct ca_device {
 extern ca_device_t *ca_devices[];
 
 bool set_ci_input_str(int ci, const char *val);
-int ca_ci_module_present(int ci_slot);
 ca_device_t *alloc_ca_device();
 int ca_init(ca_device_t *d);
 void dvbca_init();

@@ -2363,8 +2363,8 @@ static bool ddci_add_one_enigma_loopback(int slot) {
         LOG("no free demux/dvr pair for the enigma loopback");
         return false;
     }
-    // Claim the first free CI slot holding a module; an empty
-    // slot must not cost an adapter and a demux pair (surfcu-8).
+    // Claim the first free CI slot; routing is best-effort,
+    // the loopback flows even when the CI stays bypassed.
     int ci_slot = -1;
     for (int k = 0; k < MAX_ENIGMA_CI_SLOTS && ci_slot < 0; k++) {
         int c = (slot + k) % MAX_ENIGMA_CI_SLOTS;
@@ -2372,8 +2372,6 @@ static bool ddci_add_one_enigma_loopback(int slot) {
             continue;
         snprintf(buf, sizeof(buf), "/dev/ci%d", c);
         if (access(buf, R_OK | W_OK))
-            continue;
-        if (!ca_ci_module_present(c))
             continue;
         ci_slot = c;
     }

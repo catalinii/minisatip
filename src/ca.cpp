@@ -4217,19 +4217,6 @@ static int ca_slot_present(int fd) {
     return ca_slot_has_module(&info);
 }
 
-// True when /dev/ciN holds a module; fail-open on errors,
-// an unproven slot keeps the old claim behavior (surfcu-8).
-int ca_ci_module_present(int ci_slot) {
-    char path[32];
-    snprintf(path, sizeof(path), "/dev/ci%d", ci_slot);
-    int fd = open(path, O_RDWR | O_NONBLOCK | O_CLOEXEC);
-    if (fd < 0)
-        return 1;
-    int present = ca_slot_present(fd);
-    close(fd);
-    return present;
-}
-
 // Record a failed init: drop the handle, stay enabled for the
 // reconnect poller. Always returns RETRY; NULL-safe for tests.
 int ca_init_failed(ca_device_t *d) {
