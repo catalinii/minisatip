@@ -2261,6 +2261,7 @@ static void ddci_enigma_route_pvr(ddci_device_t *d) {
     if (!opts.enigma || !d || d->ci_slot < 0)
         return;
     int slot = d->ci_slot;
+    ddci_enigma_set_tsclk(d);
     // Write-acceptance beats choices files: drivers take values
     // they do not list, and flow works even unrouted.
     const char *input = "PVR";
@@ -2272,7 +2273,6 @@ static void ddci_enigma_route_pvr(ddci_device_t *d) {
             return;
         }
     }
-    ddci_enigma_set_tsclk(d);
     LOG("DDCI %d: CI slot %d input routed to %s", d->id, slot, input);
 }
 
