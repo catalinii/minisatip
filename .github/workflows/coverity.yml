@@ -16,14 +16,15 @@ jobs:
     - name: cmake
       run: |
         cmake -B build .
-    # The scan token is unavailable on PRs from forks, so upload there is skipped
+    # Fork PRs cannot access the scan token: only same-repo runs
+    # upload, while forks still validate compilation below.
     - uses: vapier/coverity-scan-action@v1
-      if: ${{ secrets.COVERITY_SCAN_TOKEN != '' }}
+      if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
       with:
         project: minisatip2
         token: ${{ secrets.COVERITY_SCAN_TOKEN }}
         email: reply+AB6SAEPNLEJSCE2WJ37GDNF6TC2NXEVBNHHDIEHQTY@reply.github.com
         command: make -C build
-    - name: Build without Coverity upload (no scan token available)
-      if: ${{ secrets.COVERITY_SCAN_TOKEN == '' }}
+    - name: Build without Coverity upload (no scan token on fork PRs)
+      if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
       run: make -C build
