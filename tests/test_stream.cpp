@@ -346,10 +346,8 @@ int test_flush_stream_srt_accounts_bw() {
     return 0;
 }
 
-// Re-PLAY with the same SRT transport must reuse the attached socket: the
-// pending entry is consumed by the first PLAY, so requiring a fresh pending
-// socket on every PLAY answers 400 to all retries (483x "Failed finding
-// pending SRT socket" for one sid in production).
+// Re-PLAY with the same SRT transport must reuse the attached socket
+// once the first PLAY has consumed the pending entry.
 static int srt_test_free_udp_port() {
     int s = socket(AF_INET, SOCK_DGRAM, 0);
     if (s < 0)
@@ -375,9 +373,8 @@ int test_decode_transport_srt_replay_reuses_socket() {
     opts.use_ipv4_only = 1;
     opts.rtsp_port = srt_test_free_udp_port();
 
-    // Teardown must run even when a check fails: an early return would
-    // strand the listener, its drain thread and open SRT sockets, which
-    // wedges libsrt's exit-time cleanup and hangs the test binary.
+    // Teardown must run even on failure: early return strands the
+    // listener and open SRT sockets, hanging libsrt exit cleanup.
     int rv = 0;
     SRTSOCKET c = SRT_INVALID_SOCK;
     SRTSOCKET srv = SRT_INVALID_SOCK;

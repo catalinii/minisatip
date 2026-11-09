@@ -1234,8 +1234,7 @@ int test_dump_mapping_table_nested() {
     return 0;
 }
 // Stop joins the push thread before closing its fd (surfcu-4):
-// the stop lands promptly, the fd closes, and a second stop
-// is a safe no-op.
+// the stop lands promptly, closes the fd, and is idempotent.
 int test_ddci_push_stop_joins_first() {
     ddci_device_t d = {};
     adapter ad2 = {};

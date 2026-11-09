@@ -266,9 +266,7 @@ static bool ddci_slot_live_held(int slot) {
     }
     return false;
 }
-#endif
 
-#ifndef DISABLE_LINUXDVB
 // DVR DMX_SET_SOURCE base; enigma honors the same override file.
 static int ddci_dvr_source_offset(adapter *ad) {
     if (const char *env = getenv("DDCI_DVR_SOURCE"))
@@ -665,8 +663,8 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt, int update) {
             mapped++;
     };
 
-    // Map mandatory PIDs: CAT/TDT forward on fixed pids; PAT maps
-    // to ddci 0 where the push drops it for the generated table.
+    // Map mandatory PIDs: PAT maps to ddci 0 (dropped at push for
+    // the generated table); CAT/NIT/TDT collide-remap across tuners.
     for (const int pid : DDCI_TABLE_PIDS) {
         // NIT has no decrypt role: map it only when the source
         // already flows it, unlike CAT/TDT (catalinii 11-06).
@@ -1755,7 +1753,7 @@ int ddci_read_sec_data(sockets *s) {
         return 0;
     }
     int rlen = ad->rlen;
-    if (rlen <= 0)
+    if (!d || rlen <= 0)
         return 0;
 
     // Same mutex as the pop side: plain fifo indices
