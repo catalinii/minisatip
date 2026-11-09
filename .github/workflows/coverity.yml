@@ -3,7 +3,8 @@ name: Coverity Scan
 on:
   push:
     branches: [ master ]
-  # We can't run on pull request because the secret token is not available there
+  pull_request:
+    branches: [ master ]
 
 jobs:
   build:
@@ -15,9 +16,14 @@ jobs:
     - name: cmake
       run: |
         cmake -B build .
+    # The scan token is unavailable on PRs from forks, so upload there is skipped
     - uses: vapier/coverity-scan-action@v1
+      if: ${{ secrets.COVERITY_SCAN_TOKEN != '' }}
       with:
         project: minisatip2
         token: ${{ secrets.COVERITY_SCAN_TOKEN }}
         email: reply+AB6SAEPNLEJSCE2WJ37GDNF6TC2NXEVBNHHDIEHQTY@reply.github.com
         command: make -C build
+    - name: Build without Coverity upload (no scan token available)
+      if: ${{ secrets.COVERITY_SCAN_TOKEN == '' }}
+      run: make -C build
