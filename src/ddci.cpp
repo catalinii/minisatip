@@ -1338,63 +1338,34 @@ static void ddci_push_loop(int id, int fe) {
         (id >= 0 && id < MAX_ADAPTERS) ? ddci_devices[id] : nullptr;
     if (!d)
         return;
-    // fe arrives loaded: every replacement joins first, and the
-    // loop must never take ad->mutex (join runs under it).
-    for (;;) {
+    SFIFO *f = &d->push_backlog;
+    while (!d->push_stop.load() && fe >= 0) {
         void *base = nullptr;
-        size_t n = 0;
+        size_t len = 0;
         {
             std::unique_lock<std::mutex> lock(d->push_mutex);
-            d->push_cv.wait(lock, [&] {
-                return d->push_stop.load() || fifo_used(&d->push_backlog) > 0;
-            });
+            d->push_cv.wait(
+                lock, [&] { return d->push_stop.load() || fifo_used(f) > 0; });
             if (d->push_stop.load())
                 break;
-            size_t have =
-                std::min<size_t>(fifo_used(&d->push_backlog), DDCI_PUSH_CHUNK);
-            if (have == 0)
-                continue;
-            n = fifo_peek(&d->push_backlog, &base, have, 0);
+            len = fifo_peek(
+                f, &base, std::min<size_t>(fifo_used(f), DDCI_PUSH_CHUNK), 0);
         }
-        if (fe < 0)
-            break;
-        auto *buf = static_cast<char *>(base);
-        size_t off = 0;
-        bool fatal = false;
-        // The peeked span is stable unlocked: pushes never
-        // overwrite unread bytes, only this thread consumes.
-        while (off < n && !d->push_stop.load()) {
-            ssize_t w = write(fe, buf + off, n - off);
-            if (w > 0) {
-                off += static_cast<size_t>(w);
-                d->last_push_write.store(getTick(), std::memory_order_relaxed);
-            } else if (w < 0 && errno == EINTR)
-                continue;
-            else if (w < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-                // Playpump full: back off 100us like filepush.
-                std::this_thread::sleep_for(std::chrono::microseconds(100));
-                continue;
-            } else {
-                // Teardown beat free (stop joins first now):
-                // written bytes stay queued; EBADF stays quiet.
-                bool stopped = d->push_stop.load();
-                fatal = !stopped;
-                if (!stopped && !(w < 0 && errno == EBADF))
-                    LOG("DDCI %d: push write %s, wrote %jd of %jd", d->id,
-                        w == 0 ? "zero" : strerror(errno), (intmax_t)off,
-                        (intmax_t)n);
-                break;
-            }
-        }
-        // Resets run only with the thread joined or never
-        // started, so the written span skips as-is.
-        {
+        ssize_t w = write(fe, base, len);
+        if (w > 0) {
+            d->last_push_write.store(getTick(), std::memory_order_relaxed);
             std::lock_guard<std::mutex> lock(d->push_mutex);
-            fifo_skip_bytes(&d->push_backlog, off);
-        }
-        // Fatal error: exit for the kick to restart us.
-        if (fatal)
+            fifo_skip_bytes(f, static_cast<size_t>(w));
+        } else if (w < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+            std::this_thread::sleep_for(std::chrono::microseconds(100));
+        } else if (w < 0 && errno == EINTR) {
+            continue;
+        } else {
+            if (!d->push_stop.load() && !(w < 0 && errno == EBADF))
+                LOG("DDCI %d: push write %s (%zu queued)", d->id,
+                    w == 0 ? "zero" : strerror(errno), len);
             break;
+        }
     }
     d->push_running.store(false);
     DEBUGM("DDCI %d: push loop exited", d->id);
