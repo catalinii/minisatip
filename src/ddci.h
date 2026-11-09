@@ -118,10 +118,6 @@ typedef struct ddci_channel {
 
 void find_ddci_adapter();
 void ddci_init();
-// Last demux/dvr pair with no frontend and no owner; -1 when none.
-int ddci_pick_free_pair(const int *demux, int ndemux, const int *dvr, int ndvr,
-                        const int *fe, int nfe, const int *used, int nused);
-
 #ifndef DISABLE_LINUXDVB
 int ddci_pick_free_slot();
 #endif

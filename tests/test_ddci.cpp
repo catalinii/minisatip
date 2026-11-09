@@ -2501,32 +2501,6 @@ int test_emm_pids_stay_while_their_adapter_has_a_pmt() {
     return 0;
 }
 
-int test_ddci_pick_free_pair() {
-    std::array demux = {0, 1, 2, 10, 11, 12};
-    std::array dvr = {0, 1, 2, 10, 11, 12};
-    std::array fe = {0, 1, 2};
-    auto pick = [&](const auto &dm, const auto &dv, const auto &fe_,
-                    const auto &us) {
-        return ddci_pick_free_pair(dm.data(), static_cast<int>(dm.size()),
-                                   dv.data(), static_cast<int>(dv.size()),
-                                   fe_.data(), static_cast<int>(fe_.size()),
-                                   us.data(), static_cast<int>(us.size()));
-    };
-    std::array<int, 0> none = {};
-    ASSERT(pick(demux, dvr, fe, none) == 12, "last pair without frontend wins");
-    std::array used = {12};
-    ASSERT(pick(demux, dvr, fe, used) == 11, "owned pair skipped for the next");
-    std::array fewith11 = {0, 1, 2, 11};
-    ASSERT(pick(demux, dvr, fewith11, used) == 10,
-           "pair with frontend never picked");
-    std::array nodvr = {0, 1, 2, 10, 11};
-    ASSERT(pick(demux, nodvr, fe, none) == 11, "demux without dvr skipped");
-    std::array all = {10, 11, 12};
-    ASSERT(pick(demux, dvr, fe, all) == -1, "all pairs taken gives -1");
-    ASSERT(pick(none, dvr, fe, none) == -1, "no demux gives -1");
-    return 0;
-}
-
 // CAPMT lists the PMT's own pids verbatim: shadows already carry
 // ddci pids, so mappings must not rewrite them a second time.
 int test_capmt_lists_pmt_pids() {
@@ -3160,8 +3134,6 @@ int main() {
               "testing EMM pids leave with their adapter");
     TEST_FUNC(test_emm_pids_stay_while_their_adapter_has_a_pmt(),
               "testing EMM pids stay while their adapter has a PMT");
-    TEST_FUNC(test_ddci_pick_free_pair(),
-              "testing last frontend-less demux/dvr pair pick");
     TEST_FUNC(test_ddci_enigma_local_loops_back(),
               "testing enigma loops back local PMTs without slot gate");
     TEST_FUNC(test_ddci_two_loopbacks_own_distinct_slots(),

@@ -268,27 +268,6 @@ static bool ddci_slot_live_held(int slot) {
 }
 #endif
 
-// Last N with demuxN+dvrN present, frontendN absent, and N owned by
-// no adapter; -1 when none fits. Arrays list existing indices ascending.
-static bool ddci_list_has(const int *list, int n, int v) {
-    for (int i = 0; i < n; i++)
-        if (list[i] == v)
-            return true;
-    return false;
-}
-
-int ddci_pick_free_pair(const int *demux, int ndemux, const int *dvr, int ndvr,
-                        const int *fe, int nfe, const int *used, int nused) {
-    for (int i = ndemux - 1; i >= 0; i--) {
-        int fn = demux[i];
-        if (!ddci_list_has(dvr, ndvr, fn) || ddci_list_has(fe, nfe, fn) ||
-            ddci_list_has(used, nused, fn))
-            continue;
-        return fn;
-    }
-    return -1;
-}
-
 #ifndef DISABLE_LINUXDVB
 // DVR DMX_SET_SOURCE base; enigma honors the same override file.
 static int ddci_dvr_source_offset(adapter *ad) {
@@ -2346,100 +2325,84 @@ int ddci_pick_free_slot() {
     return -1;
 }
 
-// One loopback on the highest free demux, in the first free enabled slot.
-// False when no slot or demux is left for another loopback.
-static bool ddci_add_one_enigma_loopback(int slot) {
-    int id = ddci_pick_free_slot();
-    if (id < 0) {
-        LOG("no free enabled adapter slot for the enigma loopback, extend -e");
-        return false;
-    }
-    int used[MAX_ADAPTERS], nused = 0;
-    for (int i = 0; i < MAX_ADAPTERS && nused < MAX_ADAPTERS; i++) {
+static bool ddci_fn_used(int fn) {
+    for (int i = 0; i < MAX_ADAPTERS; i++) {
         adapter *o = a[static_cast<size_t>(i)];
-        if (i != id && o && !is_adapter_disabled(i) && o->pa == 0 && o->fn >= 0)
-            used[nused++] = o->fn;
+        if (o && o->type && !is_adapter_disabled(i) && o->pa == 0 &&
+            o->fn == fn)
+            return true;
     }
-    int demux[64], ndemux = 0, dvr[64], ndvr = 0, fe[64], nfe = 0;
-    char buf[100];
-    for (int fn = 0; fn < 64; fn++) {
-        snprintf(buf, sizeof(buf), "/dev/dvb/adapter0/demux%d", fn);
-        if (!access(buf, R_OK))
-            demux[ndemux++] = fn;
-        snprintf(buf, sizeof(buf), "/dev/dvb/adapter0/dvr%d", fn);
-        if (!access(buf, R_OK | W_OK))
-            dvr[ndvr++] = fn;
-        snprintf(buf, sizeof(buf), "/dev/dvb/adapter0/frontend%d", fn);
-        if (!access(buf, R_OK))
-            fe[nfe++] = fn;
-    }
-    // Last pair with no frontend behind it; as loopbacks claim
-    // pairs, later devices fall to the previous eligible one.
-    int fn =
-        ddci_pick_free_pair(demux, ndemux, dvr, ndvr, fe, nfe, used, nused);
-    if (fn < 0) {
-        LOG("no free demux/dvr pair for the enigma loopback");
-        return false;
-    }
-    // Claim the first free CI slot; routing is best-effort,
-    // the loopback flows even when the CI stays bypassed.
-    int ci_slot = -1;
-    for (int k = 0; k < MAX_ENIGMA_CI_SLOTS && ci_slot < 0; k++) {
-        int c = (slot + k) % MAX_ENIGMA_CI_SLOTS;
-        if (ddci_loopback_owns_slot(c))
-            continue;
-        snprintf(buf, sizeof(buf), "/dev/ci%d", c);
-        if (access(buf, R_OK | W_OK))
-            continue;
-        ci_slot = c;
-    }
-    if (ci_slot < 0) {
-        LOG("no free CI slot for the enigma loopback");
-        return false;
-    }
-    if (!a[static_cast<size_t>(id)])
-        a[static_cast<size_t>(id)] = adapter_alloc();
+    return false;
+}
+#endif
 
-    adapter *ad = a[static_cast<size_t>(id)];
-    ad->pa = 0;
+static void ddci_register_adapter(int id, int pa, int fn) {
+    adapter *ad = get_or_alloc_adapter(id);
+    ad->pa = pa;
     ad->fn = fn;
     ad->open = ddci_open_device;
-    ad->commit = NULL;
-    ad->tune = NULL;
+    ad->commit = nullptr;
+    ad->tune = nullptr;
     ad->delsys = ddci_delsys;
     ad->name = ddci_name;
     ad->post_init = ddci_post_init;
     ad->close = ddci_close_adapter;
-    ad->get_signal = NULL;
+    ad->get_signal = nullptr;
     ad->set_pid = ddci_set_pid;
     ad->del_filters = ddci_del_filters;
     ad->type = ADAPTER_CI;
     ad->drop_encrypted = 0;
     ad->free = ddci_free;
-    ddci_device_t *dd = ddci_devices[id];
-    if (!dd)
-        dd = ddci_alloc(id);
-    if (dd) {
-        dd->loopback = 1;
-        // Stored once here; later readers (open, claim, route) use it.
-        dd->ci_slot = ci_slot;
-        // Hold from boot so a tuner never grabs it first; close
-        // releases, open retakes.
-        dd->slot_claimed.store(dd->ci_slot >= 0);
-    }
     load_channels();
-    LOG("enigma loopback adapter %d on demux %d", id, fn);
-
     if (id + 1 > a_count)
         a_count = id + 1;
+}
+
+#ifndef DISABLE_LINUXDVB
+// One loopback for ci_slot on the highest free frontend-less demux/dvr pair.
+static bool ddci_add_one_enigma_loopback(int ci_slot) {
+    char buf[100];
+    snprintf(buf, sizeof(buf), "/dev/ci%d", ci_slot);
+    if (ddci_loopback_owns_slot(ci_slot) || access(buf, R_OK | W_OK))
+        return false;
+
+    int id = ddci_pick_free_slot();
+    if (id < 0) {
+        LOG("no free enabled adapter slot for the enigma loopback, extend -e");
+        return false;
+    }
+
+    int fn = -1;
+    for (int n = 63; n >= 0; n--) {
+        char dmx[64], dvr[64], fe[64];
+        snprintf(dmx, sizeof(dmx), "/dev/dvb/adapter0/demux%d", n);
+        snprintf(dvr, sizeof(dvr), "/dev/dvb/adapter0/dvr%d", n);
+        snprintf(fe, sizeof(fe), "/dev/dvb/adapter0/frontend%d", n);
+        if (!ddci_fn_used(n) && !access(dmx, R_OK) &&
+            !access(dvr, R_OK | W_OK) && access(fe, R_OK)) {
+            fn = n;
+            break;
+        }
+    }
+    if (fn < 0) {
+        LOG("no free demux/dvr pair for the enigma loopback");
+        return false;
+    }
+
+    ddci_register_adapter(id, 0, fn);
+    ddci_device_t *dd = ddci_devices[id] ? ddci_devices[id] : ddci_alloc(id);
+    if (dd) {
+        dd->loopback = 1;
+        dd->ci_slot = ci_slot;
+        dd->slot_claimed.store(true);
+    }
+    LOG("enigma loopback adapter %d on demux %d", id, fn);
     return true;
 }
 
-// Up to one loopback per CI slot; stops at the first shortage.
 static void ddci_add_enigma_loopback() {
-    for (int n = 0; n < MAX_ENIGMA_CI_SLOTS; n++)
-        if (!ddci_add_one_enigma_loopback(n))
-            break;
+    for (int slot = 0; slot < MAX_ENIGMA_CI_SLOTS; slot++)
+        ddci_add_one_enigma_loopback(slot);
 }
 #endif
 
@@ -2482,27 +2445,8 @@ void find_ddci_adapter() {
             if (cnt == 2) {
                 LOGM("%s: adding %d %d to the list of devices", __FUNCTION__, i,
                      j);
-                ad = get_or_alloc_adapter(na);
-                ad->pa = i;
-                ad->fn = j;
-
-                ad->open = ddci_open_device;
-                ad->commit = NULL;
-                ad->tune = NULL;
-                ad->delsys = ddci_delsys;
-                ad->name = ddci_name;
-                ad->post_init = ddci_post_init;
-                ad->close = ddci_close_adapter;
-                ad->get_signal = NULL;
-                ad->set_pid = ddci_set_pid;
-                ad->del_filters = ddci_del_filters;
-                ad->type = ADAPTER_CI;
-                ad->drop_encrypted = 0;
-                ad->free = ddci_free;
-                load_channels();
-
+                ddci_register_adapter(na, i, j);
                 na++;
-                a_count = na; // update adapter counter
                 if (na == MAX_ADAPTERS)
                     return;
 #ifdef DDCI_TEST
