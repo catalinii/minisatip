@@ -1504,7 +1504,7 @@ static int element_set_hostid_from_certificate(struct cc_ctrl_data *cc_data,
     const X509_NAME *subject;
     int nid_cn = OBJ_txt2nid("CN");
     int idx;
-    int len;
+    size_t len;
     char hostid[20] = {};
     uint8_t bin_hostid[8];
 
@@ -1517,13 +1517,17 @@ static int element_set_hostid_from_certificate(struct cc_ctrl_data *cc_data,
     idx = X509_NAME_get_index_by_NID(subject, nid_cn, -1);
     if (idx >= 0) {
         data = X509_NAME_ENTRY_get_data(X509_NAME_get_entry(subject, idx));
-        len = ASN1_STRING_length(data);
-        if (len > (int)sizeof(hostid) - 1)
+#if OPENSSL_VERSION_NUMBER >= 0x40100000L
+        len = ASN1_STRING_get_length(data);
+#else
+        len = static_cast<size_t>(ASN1_STRING_length(data));
+#endif
+        if (len > sizeof(hostid) - 1)
             len = sizeof(hostid) - 1;
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
         memcpy(hostid, ASN1_STRING_data(data), len);
 #else
-        memcpy(hostid, ASN1_STRING_get0_data(data), static_cast<size_t>(len));
+        memcpy(hostid, ASN1_STRING_get0_data(data), len);
 #endif
     }
 
