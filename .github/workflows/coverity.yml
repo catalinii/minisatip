@@ -3,13 +3,37 @@ name: Coverity Scan
 on:
   push:
     branches: [ master ]
-  # We can't run on pull request because the secret token is not available there
+  pull_request:
+    branches: [ master ]
+  pull_request_target:
+    branches: [ master ]
+
+# Least privilege: fork-PR runs must not get a writable token.
+permissions:
+  contents: read
+  actions: write
 
 jobs:
   build:
+    # Each diff scans exactly once: pushes and same-repo PRs in
+    # their own event, fork PRs via pull_request_target (token available).
+    if: >-
+      github.event_name == 'push' ||
+      (github.event_name == 'pull_request' &&
+        github.event.pull_request.head.repo.full_name == github.repository) ||
+      (github.event_name == 'pull_request_target' &&
+        github.event.pull_request.head.repo.full_name != github.repository)
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
+      if: github.event_name != 'pull_request_target'
+    # pull_request_target checks out the base by default, so pin the
+    # exact PR head SHA; drop credentials before building untrusted code.
+    - uses: actions/checkout@v4
+      if: github.event_name == 'pull_request_target'
+      with:
+        ref: github.event.pull_request.head.sha
+        persist-credentials: false
     - name: Install build tools and dependencies
       run: DEBIAN_FRONTEND=noninteractive sudo apt-get -y install build-essential libdvbcsa-dev libssl-dev zlib1g-dev libxml2-dev cmake
     - name: cmake
@@ -21,3 +45,4 @@ jobs:
         token: ${{ secrets.COVERITY_SCAN_TOKEN }}
         email: reply+AB6SAEPNLEJSCE2WJ37GDNF6TC2NXEVBNHHDIEHQTY@reply.github.com
         command: make -C build
+        version: ${{ github.event.pull_request.head.sha || github.sha }}
