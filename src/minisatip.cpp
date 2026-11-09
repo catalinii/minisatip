@@ -139,6 +139,7 @@ int rtsp, http, si, si1, ssdp1;
 #define CLIENT_SEND_BUFFER_OPT (LONG_OPT_ONLY_START + 4)
 #define HW_DESCRAMBLER_OPT (LONG_OPT_ONLY_START + 5)
 #define SDT_CHARSET_OPT (LONG_OPT_ONLY_START + 6)
+#define ENIGMA_DDCI_OPT (LONG_OPT_ONLY_START + 7)
 
 static const struct option long_options[] = {
     {"adapters", required_argument, NULL, ADAPTERS_OPT},
@@ -210,6 +211,7 @@ static const struct option long_options[] = {
     {"ca-channels", required_argument, NULL, CA_CHANNELS_OPT},
 #endif
     {"hw-descrambler", no_argument, NULL, HW_DESCRAMBLER_OPT},
+    {"enigma-ddci", no_argument, NULL, ENIGMA_DDCI_OPT},
 
     {0, 0, 0, 0}};
 
@@ -560,6 +562,8 @@ Help\n\
 \t* Provides more reliable decrypting for channels included in multiple providers\n\
 \n\
 * --hw-descrambler: Enable hardware descrambler (Enigma2 CA ioctl). Disabled by default\n\
+\n\
+* --enigma-ddci: Enable the enigma DVR loopback on any model. Disabled by default\n\
 \n"
 #ifndef DISABLE_DVBCA
         "\
@@ -1100,6 +1104,10 @@ void set_options(int argc, char *argv[]) {
 #endif
         case HW_DESCRAMBLER_OPT:
             opts.hw_descrambler = 1;
+            break;
+
+        case ENIGMA_DDCI_OPT:
+            opts.enigma_ddci = 1;
             break;
 
         case SDT_CHARSET_OPT: {

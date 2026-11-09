@@ -365,7 +365,6 @@ if(BUILD_TESTING)
         ${CMAKE_BINARY_DIR}
     )
     target_compile_definitions(test_main_lib PRIVATE
-        ENIGMA
         TESTING
         DDCI_TEST
         DISABLE_STACKTRACE
@@ -391,7 +390,6 @@ if(BUILD_TESTING)
             ${CMAKE_BINARY_DIR}
         )
         target_compile_definitions(${TEST_NAME} PRIVATE
-            ENIGMA
             TESTING
             DDCI_TEST
             DISABLE_STACKTRACE

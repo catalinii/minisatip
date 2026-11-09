@@ -19,6 +19,7 @@
  */
 #include "adapter.h"
 #include "ca.h"
+#include "ddci.h"
 #include "dvb.h"
 #include "minisatip.h"
 #include "socketworks.h"
@@ -61,7 +62,9 @@ SCAPMT *add_pmt_to_capmt(ca_device_t *d, SPMT *pmt, int multiple,
                          int *rejoined = NULL);
 int dvbca_del_pmt(adapter *ad, SPMT *spmt);
 extern ca_device_t *ca_devices[MAX_ADAPTERS];
+extern ddci_device_t *ddci_devices[MAX_ADAPTERS];
 extern int dvbca_id;
+extern int has_ci;
 extern SCA ca[];
 extern std::atomic<int> nca;
 int get_active_capmts(ca_device_t *d);
@@ -1742,9 +1745,11 @@ int test_ca_timeout_branches() {
     dev.fd = -1;
     dev.state = CA_STATE_ACTIVE;
     dev.poll_fails = 0;
+    dev.mode = ca_mode::ENIGMA;
     ASSERT_EQUAL(ca_timeout(&ss), 0, "enigma skips keepalive");
     ASSERT_EQUAL(dev.poll_fails, 0, "enigma counts nothing");
     opts.enigma = saved_enigma;
+    dev.mode = ca_mode::DVB;
 
     dev.state = CA_STATE_INITIALIZED;
     dev.datetime_response_interval = 30000;
@@ -1836,6 +1841,7 @@ int test_ca_open_session_table_full() {
     auto saved_enigma = opts.enigma;
     auto saved_debug = opts.debug;
     opts.enigma = 1; // SPDUs go to the fd unwrapped
+    dev.mode = ca_mode::ENIGMA;
     opts.debug |= LOG_DVBCA;
 
     unsigned char open_ai[6] = {0x91, 0x04, 0x00, 0x02, 0x00, 0x41};
@@ -1870,6 +1876,7 @@ int test_ca_open_session_unknown_resource() {
     ca_devices[73] = &dev;
     auto saved_enigma = opts.enigma;
     opts.enigma = 1; // SPDUs go to the fd unwrapped
+    dev.mode = ca_mode::ENIGMA;
 
     // ST_OPEN_SESSION_REQUEST for TS 103 205 MMI, which has no handler
     unsigned char open_mmi[6] = {0x91, 0x04, 0x00, 0x40, 0x00, 0x81};
@@ -2362,6 +2369,108 @@ int test_capmt_write_failure_retries() {
     return 0;
 }
 
+// Loopback CAPMT sends at once; holding it starves the TAPs
+// and deadlocks the retry, so the CAM never starts.
+int test_loopback_capmt_sends_at_once() {
+    packing_cam_open();
+    ddci_device_t loop = {};
+    loop.id = 3;
+    loop.enabled = 1;
+    loop.loopback = 1;
+    ddci_devices[3] = &loop;
+    auto saved_enigma = opts.enigma;
+    opts.enigma = 1;
+    pcam->dev.mode = ca_mode::ENIGMA_DDCI;
+    SPMT *p1 = packing_program(0x2c01);
+    ASSERT_EQUAL(dvbca_process_pmt(&pcam->ad, p1, 0), 0, "loopback join sends");
+    ASSERT_EQUAL(read_capmts(), 1, "CAPMT written at once");
+    opts.enigma = saved_enigma;
+    ddci_devices[3] = nullptr;
+    packing_cam_close();
+    return 0;
+}
+
+#ifndef DISABLE_DDCI
+// Loopback owns its stored CI slot; the enigma tuner on that slot
+// stands down so /dev/ciX is driven only by the DDCI adapter.
+int test_loopback_owns_ci_slot() {
+    auto saved_enigma = opts.enigma;
+    int saved_has_ci = has_ci;
+    ddci_device_t *saved_ddci[MAX_ADAPTERS];
+    memcpy(saved_ddci, ddci_devices, sizeof(saved_ddci));
+    memset(ddci_devices, 0, sizeof(ddci_devices));
+    opts.enigma = 1;
+    has_ci = 1;
+    ASSERT_EQUAL(ddci_loopback_owns_slot(1), 0, "no loopback claims nothing");
+
+    ddci_device_t loop = {};
+    loop.id = 71;
+    loop.loopback = 1;
+    loop.slot_claimed.store(true);
+    loop.ci_slot = 1;
+    ddci_devices[71] = &loop;
+    ASSERT_EQUAL(ddci_loopback_owns_slot(1), 1, "stored claim is read");
+    loop.slot_claimed.store(false);
+    ASSERT_EQUAL(ddci_loopback_owns_slot(1), 0, "close releases the claim");
+    loop.slot_claimed.store(true);
+
+    adapter tuner = {};
+    tuner.id = 1;
+    tuner.type = ADAPTER_DVB;
+    ca_device_t *saved_ca1 = ca_devices[1];
+    ca_devices[1] = nullptr;
+    ASSERT_EQUAL(dvbca_init_dev(&tuner), TABLES_RESULT_ERROR_NORETRY,
+                 "owned slot stands down");
+    ASSERT(ca_devices[1] == nullptr, "no CA device opened for it");
+
+    adapter other = {};
+    other.id = 72;
+    other.type = ADAPTER_DVB;
+    ca_device_t *saved_ca72 = ca_devices[72];
+    ca_devices[72] = nullptr;
+    ASSERT_EQUAL(dvbca_init_dev(&other), TABLES_RESULT_OK,
+                 "other slots still probe");
+    ca_devices[72] = saved_ca72;
+
+    ca_devices[1] = saved_ca1;
+
+    memcpy(ddci_devices, saved_ddci, sizeof(saved_ddci));
+    opts.enigma = saved_enigma;
+    has_ci = saved_has_ci;
+    return 0;
+}
+
+int test_loopback_init_without_stack_fails_loud() {
+    auto saved_enigma = opts.enigma;
+    int saved_has_ci = has_ci;
+    ddci_device_t *saved_ddci[MAX_ADAPTERS];
+    memcpy(saved_ddci, ddci_devices, sizeof(saved_ddci));
+    memset(ddci_devices, 0, sizeof(ddci_devices));
+    opts.enigma = 1;
+    has_ci = 1;
+    ddci_device_t loop = {};
+    loop.id = 73;
+    loop.enabled = 1;
+    loop.loopback = 1;
+    loop.slot_claimed.store(true);
+    loop.ci_slot = 7; // no /dev/ci7 in test envs
+    ddci_devices[73] = &loop;
+    ca_device_t *saved_ca73 = ca_devices[73];
+    ca_devices[73] = nullptr;
+    adapter ad = {};
+    ad.id = 73;
+    ad.type = ADAPTER_DVB;
+    ASSERT_EQUAL(dvbca_init_dev(&ad), TABLES_RESULT_ERROR_NORETRY,
+                 "missing stack fails loud");
+    ASSERT(ca_devices[73] == nullptr, "no CA device opened for it");
+    ca_devices[73] = saved_ca73;
+    memcpy(ddci_devices, saved_ddci, sizeof(saved_ddci));
+    opts.enigma = saved_enigma;
+    has_ci = saved_has_ci;
+    return 0;
+}
+#endif
+
 // CAPMT 0 = {1, 3}, CAPMT 1 = {2}: zapping 3 -> 4 -> 3 -> 4 restarts
 // a resident once; the zaps back return to kept places.
 int test_capmt_zap_back_keeps_places() {
@@ -2463,9 +2572,8 @@ int test_mmi_short_apdus_and_choice_bounds() {
     ASSERT_EQUAL(ca_read(&cs), 0, "open MMI session parsed");
     while (read(pcam->fds[0], drain, sizeof(drain)) > 0) {
     }
-    std::vector<uint8_t> bad_apdu = {0x90, 0x02, 0x00, 0x01, 0x9F, 0x88,
-                                     0x07, 0x81, 0xC8, 0x00, 0x04, 'P',
-                                     'I',  'N'};
+    std::vector<uint8_t> bad_apdu = {0x90, 0x02, 0x00, 0x01, 0x9F, 0x88, 0x07,
+                                     0x81, 0xC8, 0x00, 0x04, 'P',  'I',  'N'};
     cs.buf = bad_apdu.data();
     cs.rlen = static_cast<int>(bad_apdu.size());
     ASSERT_EQUAL(ca_read(&cs), 0, "inflated outer APDU handled");
@@ -2528,17 +2636,15 @@ int test_mmi_enquiry_auto_answered_and_manual() {
     // Empty pin_str with answer_length == 0 must not send TAG_ANSWER.
     pcam->dev.pin_str[0] = '\0';
     std::vector<uint8_t> enq0 = {0x00, 0, 'I', 'n', 'f', 'o'};
-    APP_MMI_handler(s, TAG_ENQUIRY, enq0.data(),
-                    static_cast<int>(enq0.size()));
+    APP_MMI_handler(s, TAG_ENQUIRY, enq0.data(), static_cast<int>(enq0.size()));
     std::vector<uint8_t> r0 = drain_cam_pipe(pcam->fds[0]);
     ASSERT(!has_apdu_tag(r0, TAG_ANSWER) && has_apdu_tag(r0, TAG_CLOSE_MMI),
            "0-length manual enquiry must send CLOSE without ANSWER");
 
     // Empty pin_str with answer_length == 4 must not send TAG_ANSWER.
-    std::vector<uint8_t> enq1 = {0x01, 4, 'E', 'n', 't', 'e', 'r', ' ',
+    std::vector<uint8_t> enq1 = {0x01, 4,   'E', 'n', 't', 'e', 'r', ' ',
                                  'P',  'I', 'N', ':', ' ', '"', '1', '"'};
-    APP_MMI_handler(s, TAG_ENQUIRY, enq1.data(),
-                    static_cast<int>(enq1.size()));
+    APP_MMI_handler(s, TAG_ENQUIRY, enq1.data(), static_cast<int>(enq1.size()));
     std::vector<uint8_t> r1 = drain_cam_pipe(pcam->fds[0]);
     ASSERT(!has_apdu_tag(r1, TAG_ANSWER) && has_apdu_tag(r1, TAG_CLOSE_MMI),
            "manual enquiry must send CLOSE without ANSWER");
@@ -2554,8 +2660,7 @@ int test_mmi_enquiry_auto_answered_and_manual() {
 
     // Configured pin_str matching answer_length == 4 -> sends TAG_ANSWER.
     std::vector<uint8_t> enq2 = {0x00, 4, 'P', 'I', 'N'};
-    APP_MMI_handler(s, TAG_ENQUIRY, enq2.data(),
-                    static_cast<int>(enq2.size()));
+    APP_MMI_handler(s, TAG_ENQUIRY, enq2.data(), static_cast<int>(enq2.size()));
     std::vector<uint8_t> r3 = drain_cam_pipe(pcam->fds[0]);
     ASSERT(has_apdu_tag(r3, TAG_ANSWER) && has_apdu_tag(r3, TAG_CLOSE_MMI),
            "matching PIN length must send both ANSWER and CLOSE");
@@ -2603,9 +2708,10 @@ int test_mmi_menu_and_list_charset_and_0xff() {
     append_mmi_line(menu, {'S', 'u', 'b'});
     append_mmi_line(menu, {'O', 'K'});
     append_mmi_line(menu, {'T', 'e', 's', 't', ' ', 0xE4, 0xF6, 0xFC});
-    append_mmi_line(menu,
-                    {0x01, 0x86, 'L', 'i', 'n', 'e', '1', 0x87, 0x8A, 'L', '2'});
-    // Overlong item: 200 'X' via 0x81 length in TEXT_MORE + 100 'X' in TEXT_LAST.
+    append_mmi_line(
+        menu, {0x01, 0x86, 'L', 'i', 'n', 'e', '1', 0x87, 0x8A, 'L', '2'});
+    // Overlong item: 200 'X' via 0x81 length in TEXT_MORE + 100 'X' in
+    // TEXT_LAST.
     menu.insert(menu.end(), {0x9F, 0x88, 0x04, 0x81, 200});
     menu.insert(menu.end(), 200, 'X');
     menu.insert(menu.end(), {0x9F, 0x88, 0x03, 100});
@@ -2763,6 +2869,14 @@ int main() {
               "testing that a changed rejoin is not suppressed");
     TEST_FUNC(test_capmt_write_failure_retries(),
               "testing that a failed CAPMT write is retried");
+    TEST_FUNC(test_loopback_capmt_sends_at_once(),
+              "testing that loopback CAPMT is not held");
+#ifndef DISABLE_DDCI
+    TEST_FUNC(test_loopback_owns_ci_slot(),
+              "testing that the tuner yields its CI slot to the loopback");
+    TEST_FUNC(test_loopback_init_without_stack_fails_loud(),
+              "testing loopback init without a stack fails loud");
+#endif
     TEST_FUNC(test_get_authdata_filename(), "testing filename helper function");
     TEST_FUNC(test_capmt_content_hash_masks_version_and_listmgmt(),
               "testing the CAPMT hash masks version and listmgmt");

@@ -3585,12 +3585,17 @@ int test_pmt_update_e2e_single_capmt_update() {
     ASSERT_EQUAL(apdus[0].npids, 4, "only AV streams go in the CAPMT");
     ASSERT(e2e_apdu_has_pid(&apdus[0], 3127), "3127 in first CAPMT");
 
+    auto mapped_ddci_pid = [](int ad_id, int pid) {
+        int dpid = -1;
+        get_pid_mapping_allddci(ad_id, pid, &dpid);
+        return dpid;
+    };
     ASSERT(d0.pmt[0].id == id, "DDCI should hold the PMT on slot 0");
-    ASSERT(get_pid_mapping_allddci(8, 3127) != NULL, "3127 should map");
-    int ddci_314 = get_pid_mapping_allddci(8, 314)->ddci_pid;
-    int ddci_870 = get_pid_mapping_allddci(8, 870)->ddci_pid;
-    int ddci_873 = get_pid_mapping_allddci(8, 873)->ddci_pid;
-    int ddci_3128 = get_pid_mapping_allddci(8, 3128)->ddci_pid;
+    ASSERT(get_pid_mapping_allddci(8, 3127) != -1, "3127 should map");
+    int ddci_314 = mapped_ddci_pid(8, 314);
+    int ddci_870 = mapped_ddci_pid(8, 870);
+    int ddci_873 = mapped_ddci_pid(8, 873);
+    int ddci_3128 = mapped_ddci_pid(8, 3128);
     ASSERT(ddci_create_pmt(&d0, pmt_slot(id), psi, sizeof(psi), &d0.pmt[0]) > 0,
            "DDCI PMT expected");
     int ver1 = d0.pmt[0].ver;
@@ -3617,15 +3622,12 @@ int test_pmt_update_e2e_single_capmt_update() {
     ASSERT(e2e_apdu_has_pid(&apdus[0], 3151), "3151 must be present");
 
     ASSERT(d0.pmt[0].id == id, "DDCI should keep the slot");
-    ASSERT(get_pid_mapping_allddci(8, 3127) == NULL, "3127 must unmap");
-    ASSERT(get_pid_mapping_allddci(8, 3151) != NULL, "3151 must map");
-    ASSERT_EQUAL(get_pid_mapping_allddci(8, 314)->ddci_pid, ddci_314,
-                 "kept pids keep ddci pids");
-    ASSERT_EQUAL(get_pid_mapping_allddci(8, 870)->ddci_pid, ddci_870,
-                 "kept pids keep ddci pids");
-    ASSERT_EQUAL(get_pid_mapping_allddci(8, 873)->ddci_pid, ddci_873,
-                 "kept pids keep ddci pids");
-    ASSERT_EQUAL(get_pid_mapping_allddci(8, 3128)->ddci_pid, ddci_3128,
+    ASSERT(get_pid_mapping_allddci(8, 3127) == -1, "3127 must unmap");
+    ASSERT(get_pid_mapping_allddci(8, 3151) != -1, "3151 must map");
+    ASSERT_EQUAL(mapped_ddci_pid(8, 314), ddci_314, "kept pids keep ddci pids");
+    ASSERT_EQUAL(mapped_ddci_pid(8, 870), ddci_870, "kept pids keep ddci pids");
+    ASSERT_EQUAL(mapped_ddci_pid(8, 873), ddci_873, "kept pids keep ddci pids");
+    ASSERT_EQUAL(mapped_ddci_pid(8, 3128), ddci_3128,
                  "kept pids keep ddci pids");
     ASSERT(ddci_create_pmt(&d0, pmt_slot(id), psi, sizeof(psi), &d0.pmt[0]) > 0,
            "DDCI PMT expected");
