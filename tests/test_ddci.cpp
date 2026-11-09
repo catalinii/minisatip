@@ -534,11 +534,16 @@ int test_update_resend_keeps_slot() {
     int dvbca_id = add_ca(&dvbca);
     add_caid_mask(dvbca_id, 0, 0x100, 0xFFFF);
 
+    auto mapped_ddci_pid = [](int ad_id, int pid) {
+        int dpid = -1;
+        get_pid_mapping_allddci(ad_id, pid, &dpid);
+        return dpid;
+    };
     ASSERT(ddci_process_pmt(&ad, pmt0, 0) == TABLES_RESULT_OK, "slot expected");
     ASSERT(d0.channels == 1, "expected 1 running channel");
-    ASSERT(get_pid_mapping_allddci(8, 601) != NULL, "601 should be mapped");
-    ASSERT(get_pid_mapping_allddci(8, 602) != NULL, "602 should be mapped");
-    ASSERT(d0.pmt[0].pcr_pid == get_pid_mapping_allddci(8, 601)->ddci_pid,
+    ASSERT(get_pid_mapping_allddci(8, 601) != -1, "601 should be mapped");
+    ASSERT(get_pid_mapping_allddci(8, 602) != -1, "602 should be mapped");
+    ASSERT(d0.pmt[0].pcr_pid == mapped_ddci_pid(8, 601),
            "slot PCR should be the 601 mapping");
     ASSERT(section_pcr_pid(&d0, pmt0) == d0.pmt[0].pcr_pid,
            "section PCR should match the slot");
@@ -553,17 +558,17 @@ int test_update_resend_keeps_slot() {
         }
     ASSERT(ddci_process_pmt(&ad, pmt0, 1) == TABLES_RESULT_OK,
            "re-send on the full device expected to succeed");
-    ASSERT(get_pid_mapping_allddci(8, 602) == NULL, "602 should be unmapped");
-    ASSERT(get_pid_mapping_allddci(8, 601) != NULL, "601 should stay mapped");
-    ASSERT(get_pid_mapping_allddci(8, 1) != NULL, "CAT should stay mapped");
-    ASSERT(get_pid_mapping_allddci(8, 20) != NULL, "TDT should stay mapped");
-    ASSERT(get_pid_mapping_allddci(8, 256) != NULL, "ECM should stay mapped");
+    ASSERT(get_pid_mapping_allddci(8, 602) == -1, "602 should be unmapped");
+    ASSERT(get_pid_mapping_allddci(8, 601) != -1, "601 should stay mapped");
+    ASSERT(get_pid_mapping_allddci(8, 1) != -1, "CAT should stay mapped");
+    ASSERT(get_pid_mapping_allddci(8, 20) != -1, "TDT should stay mapped");
+    ASSERT(get_pid_mapping_allddci(8, 256) != -1, "ECM should stay mapped");
     if (pmt0->pid >= 0 && pmt0->pid < 8192)
-        ASSERT(get_pid_mapping_allddci(8, pmt0->pid) != NULL,
+        ASSERT(get_pid_mapping_allddci(8, pmt0->pid) != -1,
                "PMT pid should stay mapped");
     ASSERT(d0.pmt[0].id == pmt0->id, "slot should be kept");
     ASSERT(d0.channels == 1, "re-send must not count as new channel");
-    ASSERT(d0.pmt[0].pcr_pid == get_pid_mapping_allddci(8, 601)->ddci_pid,
+    ASSERT(d0.pmt[0].pcr_pid == mapped_ddci_pid(8, 601),
            "re-send must keep the slot PCR pid");
     ASSERT(section_pcr_pid(&d0, pmt0) == d0.pmt[0].pcr_pid,
            "section PCR should match the slot");
@@ -580,10 +585,10 @@ int test_update_resend_keeps_slot() {
     pmt0->pcr_pid = 603;
     ASSERT(ddci_process_pmt(&ad, pmt0, 1) == TABLES_RESULT_OK,
            "re-send after replacing the first pid expected to succeed");
-    ASSERT(get_pid_mapping_allddci(8, 603) != NULL, "603 should be mapped");
-    ASSERT(get_pid_mapping_allddci(8, 601) == NULL, "601 should be unmapped");
+    ASSERT(get_pid_mapping_allddci(8, 603) != -1, "603 should be mapped");
+    ASSERT(get_pid_mapping_allddci(8, 601) == -1, "601 should be unmapped");
     ASSERT(d0.pmt[0].id == pmt0->id, "slot should still be kept");
-    ASSERT(d0.pmt[0].pcr_pid == get_pid_mapping_allddci(8, 603)->ddci_pid,
+    ASSERT(d0.pmt[0].pcr_pid == mapped_ddci_pid(8, 603),
            "slot PCR should follow the new PCR pid");
     ASSERT(section_pcr_pid(&d0, pmt0) == d0.pmt[0].pcr_pid,
            "section PCR should match the slot");
@@ -599,10 +604,10 @@ int test_update_resend_keeps_slot() {
         }
     ASSERT(ddci_process_pmt(&ad, pmt0, 1) == TABLES_RESULT_OK,
            "re-send dropping the shared pid expected to succeed");
-    ASSERT(get_pid_mapping_allddci(8, 603) != NULL,
+    ASSERT(get_pid_mapping_allddci(8, 603) != -1,
            "shared 603 should stay mapped");
     del_pmt_mapping_table(&d0, 8, pmt1->id);
-    ASSERT(get_pid_mapping_allddci(8, 603) == NULL,
+    ASSERT(get_pid_mapping_allddci(8, 603) == -1,
            "603 should be unmapped after its last user");
 
     // CAT-listed EMM pids are never swept, even though no PMT lists them;
@@ -612,9 +617,9 @@ int test_update_resend_keeps_slot() {
     add_pid_mapping_table(8, 701, pmt0->id, &d0, 1);
     ASSERT(ddci_process_pmt(&ad, pmt0, 1) == TABLES_RESULT_OK,
            "re-send with EMM expected to succeed");
-    ASSERT(get_pid_mapping_allddci(8, 700) != NULL,
+    ASSERT(get_pid_mapping_allddci(8, 700) != -1,
            "EMM pid should stay mapped");
-    ASSERT(get_pid_mapping_allddci(8, 701) == NULL,
+    ASSERT(get_pid_mapping_allddci(8, 701) == -1,
            "untracked pid should be swept");
 
     ddci_del_pmt(&ad, pmt0);
@@ -659,18 +664,18 @@ int test_mandatory_pat_stays_mapped() {
     add_caid_mask(dvbca_id, 0, 0x100, 0xFFFF);
 
     ASSERT(ddci_process_pmt(&ad, pmt0, 0) == TABLES_RESULT_OK, "slot expected");
-    ASSERT(get_pid_mapping_allddci(8, 0) != nullptr, "PAT should be mapped");
-    ASSERT(get_pid_mapping_allddci(8, 0)->ddci_pid == 0,
-           "PAT keeps the fixed ddci pid 0");
+    int pat_ddci_pid = -1;
+    ASSERT(get_pid_mapping_allddci(8, 0, &pat_ddci_pid) != -1,
+           "PAT should be mapped");
+    ASSERT(pat_ddci_pid == 0, "PAT keeps the fixed ddci pid 0");
 
     // the update drops 602: PAT stays, the stream pid goes
     std::erase_if(pmt0->stream_pids,
                   [](const SStreamPid &s) { return s.pid == 602; });
     ASSERT(ddci_process_pmt(&ad, pmt0, 1) == TABLES_RESULT_OK,
            "re-send expected to succeed");
-    ASSERT(get_pid_mapping_allddci(8, 0) != nullptr, "PAT should stay mapped");
-    ASSERT(get_pid_mapping_allddci(8, 602) == nullptr,
-           "602 should be unmapped");
+    ASSERT(get_pid_mapping_allddci(8, 0) != -1, "PAT should stay mapped");
+    ASSERT(get_pid_mapping_allddci(8, 602) == -1, "602 should be unmapped");
 
     // Second tuner shares PAT: first delete keeps it, last drops it.
     d0.max_channels = 2;
@@ -680,10 +685,10 @@ int test_mandatory_pat_stays_mapped() {
     ASSERT(ddci_process_pmt(&ad9, pmt1, 0) == TABLES_RESULT_OK,
            "second slot expected");
     ddci_del_pmt(&ad, pmt0);
-    ASSERT(get_pid_mapping_allddci(9, 0) != nullptr,
+    ASSERT(get_pid_mapping_allddci(9, 0) != -1,
            "PAT kept for the second tuner");
     ddci_del_pmt(&ad9, pmt1);
-    ASSERT(get_pid_mapping_allddci(9, 0) == nullptr,
+    ASSERT(get_pid_mapping_allddci(9, 0) == -1,
            "PAT dropped with the last user");
 
     channels.clear();
@@ -892,7 +897,6 @@ int test_add_del_pmt() {
 
     // make sure we still have pids enabled from the first PMT
     int ec = 0, k;
-    ddci_mapping_table_t *m;
     int pmt_pids[MAX_ADAPTERS];
     memset(pmt_pids, 0, sizeof(pmt_pids));
     for (k = 0; k < 2; k++) {
@@ -907,10 +911,10 @@ int test_add_del_pmt() {
     ASSERT(pmt_pids[1] > 0, "PMT 1 expected to have pids");
     ASSERT(pmt_pids[2] > 0, "PMT 2 expected to have pids");
 
-    m = get_pid_mapping_allddci(ad.id, 0xFF);
-    ASSERT(m != NULL, "Newly added pid not found in mapping table");
-    m = get_pid_mapping_allddci(ad.id, 0xFE);
-    ASSERT(m != NULL, "Newly added capid not found in mapping table");
+    ASSERT(get_pid_mapping_allddci(ad.id, 0xFF) != -1,
+           "Newly added pid not found in mapping table");
+    ASSERT(get_pid_mapping_allddci(ad.id, 0xFE) != -1,
+           "Newly added capid not found in mapping table");
 
     LOG("Printing mapping table BEFORE deleting PMTs");
     dump_mapping_table();
@@ -928,7 +932,6 @@ int test_add_del_pmt() {
 
 int test_copy_ts_from_ddci() {
     ddci_device_t d = {};
-    ddci_mapping_table_t *m;
     adapter ad = {}, ad0 = {};
     uint8_t buf[188 * 10], buf2[188 * 10];
     memset(buf, 0, sizeof(buf));
@@ -949,9 +952,9 @@ int test_copy_ts_from_ddci() {
     add_pid_mapping_table(2, pid, 9, &d,
                           0); // forcing mapping to a different pid
     add_pid_mapping_table(1, pid, 0, &d, 0);
-    m = get_pid_mapping_allddci(1, pid);
-    ASSERT(m != NULL, "Pid not found in mapping table");
-    int new_pid = m->ddci_pid;
+    int new_pid = -1;
+    ASSERT(get_pid_mapping_allddci(1, pid, &new_pid) != -1,
+           "Pid not found in mapping table");
     ASSERT(new_pid == 1001, "Unexpected pid found after conflict");
     ad.rlen = 188;
     set_pid_ts(buf, new_pid);
@@ -1844,15 +1847,10 @@ int test_process_cat() {
     ddci_process_cat(0, cat, sizeof(cat) / sizeof(uint8_t), &d);
 
     // Check that each PID was mapped to the adapter
-    ddci_mapping_table_t *m;
-    m = get_pid_mapping_allddci(0, 48);
-    ASSERT(m != NULL, "EMM PID 48 not mapped");
-    m = get_pid_mapping_allddci(0, 193);
-    ASSERT(m != NULL, "EMM PID 48 not mapped");
-    m = get_pid_mapping_allddci(0, 194);
-    ASSERT(m != NULL, "EMM PID 48 not mapped");
-    m = get_pid_mapping_allddci(0, 49);
-    ASSERT(m != NULL, "EMM PID 48 not mapped");
+    ASSERT(get_pid_mapping_allddci(0, 48) != -1, "EMM PID 48 not mapped");
+    ASSERT(get_pid_mapping_allddci(0, 193) != -1, "EMM PID 48 not mapped");
+    ASSERT(get_pid_mapping_allddci(0, 194) != -1, "EMM PID 48 not mapped");
+    ASSERT(get_pid_mapping_allddci(0, 49) != -1, "EMM PID 48 not mapped");
 
     // The CAT-listed EMMs are also tracked for the update sweep.
     ASSERT(d.emm_pids.count(MAKE_KEY(0, 48)) > 0, "EMM PID 48 not tracked");
@@ -1892,7 +1890,7 @@ int test_process_cat_fixed_pid_emm_ignored() {
 
     ddci_process_cat(0, cat, sizeof(cat) / sizeof(uint8_t), &d);
 
-    ASSERT(get_pid_mapping_allddci(0, 193) != NULL,
+    ASSERT(get_pid_mapping_allddci(0, 193) != -1,
            "normal EMM still mapped past a fixed-pid claim");
     ASSERT(d.emm_pids.count(MAKE_KEY(0, 193)) > 0, "EMM PID 193 tracked");
     ASSERT(d.emm_pids.count(MAKE_KEY(0, 16)) == 0,
@@ -2453,15 +2451,15 @@ int test_emm_pids_leave_with_their_adapter() {
     ASSERT(d.pmt[0].id == pa->id, "adapter 1's PMT holds slot 0");
     f->adapter = 2;
     ddci_process_cat(0, emm_cat, sizeof(emm_cat), &d);
-    ASSERT(get_pid_mapping_allddci(2, 48) != NULL, "EMM pid mapped for ad 2");
+    ASSERT(get_pid_mapping_allddci(2, 48) != -1, "EMM pid mapped for ad 2");
 
     ddci_del_pmt(&a2, pb);
-    ASSERT(get_pid_mapping_allddci(2, 48) == NULL,
+    ASSERT(get_pid_mapping_allddci(2, 48) == -1,
            "adapter 2 is gone, so are its EMM pids");
     ASSERT(d.emm_pids.empty(), "no EMM pid tracked");
     f->adapter = 1;
     ddci_process_cat(0, emm_cat, sizeof(emm_cat), &d);
-    ASSERT(get_pid_mapping_allddci(1, 48) != NULL,
+    ASSERT(get_pid_mapping_allddci(1, 48) != -1,
            "adapter 1's next CAT section takes the EMM pids");
     ddci_del_pmt(&a1, pa);
     ASSERT(d.mapping.empty(), "nothing left mapped");
@@ -2469,7 +2467,7 @@ int test_emm_pids_leave_with_their_adapter() {
     ASSERT(ddci_process_pmt(&a3, pc, 0) == TABLES_RESULT_OK, "PMT c on DDCI");
     f->adapter = 3;
     ddci_process_cat(0, emm_cat, sizeof(emm_cat), &d);
-    ASSERT(get_pid_mapping_allddci(3, 48) != NULL,
+    ASSERT(get_pid_mapping_allddci(3, 48) != -1,
            "the next CAT maps the EMM pids again");
     ddci_del_pmt(&a3, pc);
     emm_fixture_reset();
@@ -2493,7 +2491,7 @@ int test_emm_pids_stay_while_their_adapter_has_a_pmt() {
     f->adapter = 1;
     ddci_process_cat(0, emm_cat, sizeof(emm_cat), &d);
     ddci_del_pmt(&a1, pa);
-    ASSERT(get_pid_mapping_allddci(1, 48) != NULL,
+    ASSERT(get_pid_mapping_allddci(1, 48) != -1,
            "PMT b still runs on adapter 1");
     ASSERT(d.emm_pids.count(MAKE_KEY(1, 48)) > 0, "EMM pid 48 tracked");
     ddci_del_pmt(&a1, pb);

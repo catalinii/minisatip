@@ -160,15 +160,20 @@ int add_pid_mapping_table(int ad, int pid, int pmt, ddci_device_t *d,
 }
 
 // get mapping on all ddci devices for adapter and pid
-ddci_mapping_table_t *get_pid_mapping_allddci(int ad, int pid) {
-    int i;
-    for (i = 0; i < MAX_ADAPTERS; i++)
-        if (ddci_devices[i] && ddci_devices[i]->enabled) {
-            auto it = get_pid_mapping(ddci_devices[i], ad, pid);
-            if (it != ddci_devices[i]->mapping.end())
-                return &(it->second);
+int get_pid_mapping_allddci(int ad, int pid, int *ddci_pid) {
+    for (int i = 0; i < MAX_ADAPTERS; i++) {
+        ddci_device_t *d = get_ddci(i);
+        if (!d)
+            continue;
+        std::lock_guard<SMutex> lock(d->mutex);
+        auto it = get_pid_mapping(d, ad, pid);
+        if (it != d->mapping.end()) {
+            if (ddci_pid)
+                *ddci_pid = it->second.ddci_pid;
+            return it->second.ddci;
         }
-    return NULL;
+    }
+    return -1;
 }
 
 void dump_mapping_table() {
@@ -549,11 +554,7 @@ int find_ddci_for_pmt(Sddci_channel *c, SPMT *pmt) {
 int is_pmt_running(SPMT *pmt) {
     if (pmt->stream_pids.empty())
         return -1;
-    ddci_mapping_table_t *m =
-        get_pid_mapping_allddci(pmt->adapter, pmt->stream_pids[0].pid);
-    if (!m)
-        return -1;
-    return m->ddci;
+    return get_pid_mapping_allddci(pmt->adapter, pmt->stream_pids[0].pid);
 }
 
 // Find the DDCI channel for this sid, creating it on first use.
@@ -771,25 +772,9 @@ int ddci_del_pmt(adapter *ad, SPMT *spmt) {
         return 0;
     }
 
-    // Lock before lookup: the maps rehash under a concurrent
-    // add/delete, so an unlocked scan can dangle (surfcu-5).
-    ddci_device_t *d = nullptr;
-    int map_ddci = -1, map_ddci_pid = -1;
-    std::unique_lock<SMutex> lock;
-    for (i = 0; i < MAX_ADAPTERS; i++) {
-        ddci_device_t *rd = get_ddci(i);
-        if (!rd)
-            continue;
-        std::unique_lock<SMutex> probe(rd->mutex);
-        auto it = get_pid_mapping(rd, ad->id, spmt->pid);
-        if (it == rd->mapping.end())
-            continue;
-        d = rd;
-        map_ddci = it->second.ddci;
-        map_ddci_pid = it->second.ddci_pid;
-        lock = std::move(probe);
-        break;
-    }
+    int map_ddci_pid = -1;
+    int map_ddci = get_pid_mapping_allddci(ad->id, spmt->pid, &map_ddci_pid);
+    ddci_device_t *d = get_ddci(map_ddci);
     if (!d) {
         dump_mapping_table();
         LOG("%s: pid mapping for adapter %d, pmt %d and pid %d not found",
@@ -822,9 +807,8 @@ int ddci_del_pmt(adapter *ad, SPMT *spmt) {
         }
         return 0;
     }
-    // Found above with d->mutex held; the map snapshot covers
-    // update_pids, which runs unlocked past the erase.
     int did = d->id;
+    std::unique_lock<SMutex> lock(d->mutex);
     // A removed service changes both PAT and SDT content, so both bump.
     d->ver = (d->ver + 1) & 0xF;
     d->sdt_ver = (d->sdt_ver + 1) & 0xF;

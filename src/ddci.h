@@ -159,7 +159,7 @@ int ddci_add_psi(ddci_device_t *d, uint8_t *dst, int len, adapter *ad);
 int ddci_create_sdt(ddci_device_t *d, uint8_t *b);
 int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *new_pmt, int pmt_size,
                     ddci_pmt_t *dp);
-ddci_mapping_table_t *get_pid_mapping_allddci(int ad, int pid);
+int get_pid_mapping_allddci(int ad, int pid, int *ddci_pid = nullptr);
 void save_channels();
 void load_channels();
 int ddci_process_pmt(adapter *ad, SPMT *pmt, int update);
