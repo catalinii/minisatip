@@ -1325,8 +1325,8 @@ static void ddci_push_loop(int id, int fe) {
                 lock, [&] { return d->push_stop.load() || fifo_used(f) > 0; });
             if (d->push_stop.load())
                 break;
-            len = fifo_peek(
-                f, &base, std::min<size_t>(fifo_used(f), DDCI_PUSH_CHUNK), 0);
+            len = fifo_peek(f, &base,
+                            std::min<size_t>(fifo_used(f), DDCI_PUSH_CHUNK), 0);
         }
         ssize_t w = write(fe, base, len);
         if (w > 0) {
@@ -1835,7 +1835,8 @@ static int ddci_open_enigma(adapter *ad, ddci_device_t *d) {
         LOG("DVR buffer set to %d bytes", opts.dvr_buffer);
     dvb_set_demux_source(ad);
 
-    std::lock_guard<SMutex> lock(d->mutex);
+    // unique_lock: released before push_start below (CID 916032).
+    std::unique_lock<SMutex> lock(d->mutex);
     ad->fe = write_fd;
     ad->fe_sock = -1;
     ad->dvr = read_fd;
@@ -1873,6 +1874,9 @@ static int ddci_open_enigma(adapter *ad, ddci_device_t *d) {
     ad->enabled = 1;
     LOG("opened enigma loopback %d push dvr%d fd:%d read fd:%d source:%d",
         ad->id, ad->fn, ad->fe, ad->dvr, ad->dmx_source);
+    // CID 916032: shed nests A->D, so D must not be held while
+    // push_start takes A; the device is fully initialized above.
+    lock.unlock();
     ddci_push_start(d);
     return 0;
 }
@@ -2422,7 +2426,9 @@ void find_ddci_adapter() {
     na++;
     LOGM("Starting %s with index %d", __FUNCTION__, na);
 
-    for (i = 0; i < MAX_ADAPTERS; i++)
+    // na in the condition: a full top stops the sweep but still
+    // falls through to the loopback tail below (holes may remain).
+    for (i = 0; i < MAX_ADAPTERS && na < MAX_ADAPTERS; i++)
         for (j = 0; j < MAX_ADAPTERS; j++) {
             cnt = 0;
             sprintf(buf, "/dev/dvb/adapter%d/ca%d", i, j);
@@ -2441,12 +2447,14 @@ void find_ddci_adapter() {
             cnt = 2;
 #endif
             if (cnt == 2) {
+                // CID 915369: top full, stop the sweep; the outer
+                // condition exits and the loopback tail still runs.
+                if (na >= MAX_ADAPTERS)
+                    break;
                 LOGM("%s: adding %d %d to the list of devices", __FUNCTION__, i,
                      j);
                 ddci_register_adapter(na, i, j);
                 na++;
-                if (na == MAX_ADAPTERS)
-                    return;
 #ifdef DDCI_TEST
                 return;
 #endif
