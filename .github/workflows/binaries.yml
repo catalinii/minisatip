@@ -39,6 +39,7 @@ jobs:
         cmake -B build . -DDDCI=ON
         (cd build && make)
         cat build/minisatip > minisatip && file minisatip
+        strip minisatip
         zip -9 -r /minisatip_x64.zip minisatip html
 
     - name: Build ARM
@@ -47,6 +48,7 @@ jobs:
         cmake -B build . -DCMAKE_CXX_COMPILER=arm-linux-gnueabihf-g++ -DCMAKE_FIND_ROOT_PATH=/usr/arm-linux-gnueabihf -DNETCVCLIENT=0 -DSTATIC=ON
         (cd build && make)
         cat build/minisatip > minisatip && file minisatip
+        arm-linux-gnueabihf-strip minisatip
         zip -9 -r /minisatip_arm.zip minisatip html
 
     - name: Build MIPS
@@ -55,6 +57,7 @@ jobs:
         cmake -B build . -DCMAKE_CXX_COMPILER=mipsel-linux-gnu-g++ -DCMAKE_CXX_COMPILER_TARGET=mipsel-linux-gnu -DNETCVCLIENT=0 -DSTATIC=ON -DDVBCA=1
         (cd build && make)
         cat build/minisatip > minisatip && file minisatip
+        mipsel-linux-gnu-strip minisatip
         zip -9 -r /minisatip_mips.zip minisatip html
 
     - name: Archive built binaries
@@ -64,7 +67,6 @@ jobs:
         path: |
           /minisatip_x64.zip
           /minisatip_arm.zip
-          /minisatip_axe.zip
           /minisatip_mips.zip
 
     - name: Upload binary to release
