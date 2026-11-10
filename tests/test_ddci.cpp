@@ -59,6 +59,9 @@
 // DVB nodes never exist under CI: record the attempt,
 // fail it, and forward everything else to libc.
 static std::vector<std::string> g_dvb_opens;
+// While set, DVB nodes open as /dev/null so ddci_open_device
+// runs end to end (ioctls fail, tolerated like on hardware).
+static int g_open_dvb_null = 0;
 static int record_or_forward_open(const char *path, int flags, mode_t mode) {
     // memcpy, not a cast: -pedantic-errors rejects void* to
     // function-pointer casts.
@@ -71,6 +74,8 @@ static int record_or_forward_open(const char *path, int flags, mode_t mode) {
     std::string p = path ? path : "";
     if (p.compare(0, 9, "/dev/dvb/") == 0) {
         g_dvb_opens.push_back(p);
+        if (g_open_dvb_null)
+            return real_open("/dev/null", flags, mode);
         errno = ENOENT;
         return -1;
     }
@@ -96,6 +101,25 @@ extern "C" int open64(const char *path, int flags, ...) {
         va_end(ap);
     }
     return record_or_forward_open(path, flags, mode);
+}
+// find_ddci_adapter probes with access(), not open(): while the flag
+// is set, exactly one DDCI device (ca0+sec0 on adapter0) exists.
+static int g_access_hit_dvb = 0;
+extern "C" int access(const char *path, int mode) {
+    static auto real_access = [] {
+        int (*f)(const char *, int);
+        void *h = dlsym(RTLD_NEXT, "access");
+        memcpy(&f, &h, sizeof(h));
+        return f;
+    }();
+    std::string p = path ? path : "";
+    if (g_access_hit_dvb && p.compare(0, 9, "/dev/dvb/") == 0) {
+        if (p == "/dev/dvb/adapter0/ca0" || p == "/dev/dvb/adapter0/sec0")
+            return 0;
+        errno = ENOENT;
+        return -1;
+    }
+    return real_access(path, mode);
 }
 
 extern ddci_device_t *ddci_devices[MAX_ADAPTERS];
@@ -617,8 +641,7 @@ int test_update_resend_keeps_slot() {
     add_pid_mapping_table(8, 701, pmt0->id, &d0, 1);
     ASSERT(ddci_process_pmt(&ad, pmt0, 1) == TABLES_RESULT_OK,
            "re-send with EMM expected to succeed");
-    ASSERT(get_pid_mapping_allddci(8, 700) != -1,
-           "EMM pid should stay mapped");
+    ASSERT(get_pid_mapping_allddci(8, 700) != -1, "EMM pid should stay mapped");
     ASSERT(get_pid_mapping_allddci(8, 701) == -1,
            "untracked pid should be swept");
 
@@ -3064,6 +3087,79 @@ int test_ddci_push_kick_criteria() {
     return 0;
 }
 
+// CID 915369: with the top slot already used, find_ddci_adapter
+// must not register past MAX_ADAPTERS (pre-fix: a[100] OOB).
+int test_find_ddci_adapter_skips_full_table() {
+    adapter ad99 = {};
+    create_adapter(&ad99, MAX_ADAPTERS - 1);
+    int saved_disable_dvb = opts.disable_dvb;
+    int saved_enigma = opts.enigma;
+    opts.disable_dvb = 0;
+    opts.enigma = 0;
+    int count_before = a_count;
+    g_access_hit_dvb = 1;
+    find_ddci_adapter();
+    g_access_hit_dvb = 0;
+    a[MAX_ADAPTERS - 1] = nullptr;
+    opts.disable_dvb = saved_disable_dvb;
+    opts.enigma = saved_enigma;
+    ASSERT(a_count <= MAX_ADAPTERS, "adapter count stays in bounds");
+    ASSERT(a_count == count_before, "no register past a full table");
+    return 0;
+}
+
+// CID 916032: enigma open must release D before push_start
+// takes A (shed nests A->D; holding D across A would ABBA).
+int ddci_open_device(adapter *ad);
+int test_ddci_open_releases_d_before_push() {
+    ddci_device_t d = {};
+    adapter ad = {};
+    d.id = 2;
+    d.loopback = 1;
+    d.ci_slot = -1;
+    create_fifo(&d.fifo, DDCI_BUFFER);
+    create_fifo(&d.push_backlog, DDCI_PUSH_BACKLOG_MAX);
+    memset(ddci_devices, 0, sizeof(ddci_devices));
+    ddci_devices[2] = &d;
+    create_adapter(&ad, 2);
+    ad.pa = 0;
+    ad.fn = 0;
+    int saved_enigma = opts.enigma;
+    opts.enigma = 1;
+    g_open_dvb_null = 1;
+    int rv = -1;
+    // Main holds A: the opener blocks in push_start's A
+    // acquisition, where D must already be free.
+    std::unique_lock<SMutex> alock(ad.mutex);
+    std::thread worker([&] { rv = ddci_open_device(&ad); });
+    bool reached = false;
+    for (int i = 0; i < 500 && !reached; i++) {
+        if (d.push_running.load())
+            reached = true;
+        else
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    std::unique_lock<SMutex> dprobe(d.mutex, std::try_to_lock);
+    bool d_free = reached && dprobe.owns_lock();
+    if (dprobe.owns_lock())
+        dprobe.unlock();
+    alock.unlock();
+    worker.join();
+    g_open_dvb_null = 0;
+    ddci_push_stop(&d);
+    if (ad.dvr >= 0)
+        close(ad.dvr);
+    free_fifo(&d.fifo);
+    free_fifo(&d.push_backlog);
+    ddci_devices[2] = nullptr;
+    a[2] = nullptr;
+    opts.enigma = saved_enigma;
+    ASSERT(reached, "opener reached push_start");
+    ASSERT(d_free, "D released before push_start takes A");
+    ASSERT(rv == 0, "enigma open succeeds");
+    return 0;
+}
+
 int main() {
     opts.log = 65535 ^ LOG_LOCK ^ LOG_UTILS;
     opts.debug = 0;
@@ -3160,6 +3256,10 @@ int main() {
               "testing CAPMT lists PMT pids verbatim");
     TEST_FUNC(test_dvbca_ci_adapter_no_routing(),
               "testing CI adapters skip tsmux routing");
+    TEST_FUNC(test_find_ddci_adapter_skips_full_table(),
+              "testing ddci sweep skips a full table");
+    TEST_FUNC(test_ddci_open_releases_d_before_push(),
+              "testing enigma open drops D before push");
     pmts.destroy_all();
     filters.destroy_all();
     fflush(stdout);
