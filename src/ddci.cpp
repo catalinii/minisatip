@@ -2426,7 +2426,9 @@ void find_ddci_adapter() {
     na++;
     LOGM("Starting %s with index %d", __FUNCTION__, na);
 
-    for (i = 0; i < MAX_ADAPTERS; i++)
+    // na in the condition: a full top stops the sweep but still
+    // falls through to the loopback tail below (holes may remain).
+    for (i = 0; i < MAX_ADAPTERS && na < MAX_ADAPTERS; i++)
         for (j = 0; j < MAX_ADAPTERS; j++) {
             cnt = 0;
             sprintf(buf, "/dev/dvb/adapter%d/ca%d", i, j);
@@ -2445,14 +2447,14 @@ void find_ddci_adapter() {
             cnt = 2;
 #endif
             if (cnt == 2) {
-                if (na >= MAX_ADAPTERS) // CID 915369: full table, skip
-                    return;
+                // CID 915369: top full, stop the sweep; the outer
+                // condition exits and the loopback tail still runs.
+                if (na >= MAX_ADAPTERS)
+                    break;
                 LOGM("%s: adding %d %d to the list of devices", __FUNCTION__, i,
                      j);
                 ddci_register_adapter(na, i, j);
                 na++;
-                if (na == MAX_ADAPTERS)
-                    return;
 #ifdef DDCI_TEST
                 return;
 #endif

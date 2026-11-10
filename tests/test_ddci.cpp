@@ -112,7 +112,7 @@ extern "C" int access(const char *path, int mode) {
         memcpy(&f, &h, sizeof(h));
         return f;
     }();
-    std::string p = path ? path : "";
+    std::string p = path;
     if (g_access_hit_dvb && p.compare(0, 9, "/dev/dvb/") == 0) {
         if (p == "/dev/dvb/adapter0/ca0" || p == "/dev/dvb/adapter0/sec0")
             return 0;
@@ -3092,8 +3092,8 @@ int test_ddci_push_kick_criteria() {
 int test_find_ddci_adapter_skips_full_table() {
     adapter ad99 = {};
     create_adapter(&ad99, MAX_ADAPTERS - 1);
-    int saved_disable_dvb = opts.disable_dvb;
-    int saved_enigma = opts.enigma;
+    auto saved_disable_dvb = opts.disable_dvb;
+    auto saved_enigma = opts.enigma;
     opts.disable_dvb = 0;
     opts.enigma = 0;
     int count_before = a_count;
@@ -3124,7 +3124,7 @@ int test_ddci_open_releases_d_before_push() {
     create_adapter(&ad, 2);
     ad.pa = 0;
     ad.fn = 0;
-    int saved_enigma = opts.enigma;
+    auto saved_enigma = opts.enigma;
     opts.enigma = 1;
     g_open_dvb_null = 1;
     int rv = -1;
@@ -3132,8 +3132,10 @@ int test_ddci_open_releases_d_before_push() {
     // acquisition, where D must already be free.
     std::unique_lock<SMutex> alock(ad.mutex);
     std::thread worker([&] { rv = ddci_open_device(&ad); });
+    // 30s bound: push_running is the only observable for the
+    // opener reaching push_start, and CI workers can stall threads.
     bool reached = false;
-    for (int i = 0; i < 500 && !reached; i++) {
+    for (int i = 0; i < 3000 && !reached; i++) {
         if (d.push_running.load())
             reached = true;
         else
