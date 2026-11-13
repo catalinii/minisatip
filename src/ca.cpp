@@ -2874,22 +2874,21 @@ static int CIPLUS_APP_AI_handler(ca_session_t *session, int resource_id,
     return 0;
 }
 
-// The CAM dropped its CA session (and with it the CAPMTs):
-// when ca_info lands on the fresh session, send the active
-// ones again (first ONLY, the rest ADD, like fresh joins).
+// ca_info on a fresh session: the CAM forgot its CAPMTs,
+// re-send the active ones (first ONLY, the rest ADD).
 static void ca_resend_capmts(ca_device_t *d) {
     if (!get_active_capmts(d))
         return;
-    int sent = 0;
+    bool first = true;
     for (int j = 0; j < d->max_ca_pmt; j++) {
-        SCAPMT *c = d->capmt + j;
+        SCAPMT *c = &d->capmt[j];
         if (!capmt_pmt_count(c))
             continue;
-        LOG("CA %d: re-sending CAPMT for PMTs %s after CA session reset",
-            d->id, capmt_pmts_str(c).c_str());
-        send_capmt(d, c, sent ? CLM_ADD : CLM_ONLY,
+        LOG("CA %d: re-sending CAPMT for PMTs %s after CA session reset", d->id,
+            capmt_pmts_str(c).c_str());
+        send_capmt(d, c, first ? CLM_ONLY : CLM_ADD,
                    CA_PMT_CMD_ID_OK_DESCRAMBLING, 1);
-        sent++;
+        first = false;
     }
 }
 

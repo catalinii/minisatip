@@ -79,8 +79,7 @@ int ca_read_enigma(int socket, void *buf, int len, sockets *ss, int *rb);
 int get_enabled_pmts_for_ca(ca_device_t *d);
 int APP_MMI_handler(ca_session_t *session, int resource, uint8_t *buffer,
                     int len);
-int APP_CA_handler(ca_session_t *session, int resource, uint8_t *data,
-                   int len);
+int APP_CA_handler(ca_session_t *session, int resource, uint8_t *data, int len);
 
 ca_device_t d;
 
@@ -2392,8 +2391,7 @@ int test_loopback_capmt_sends_at_once() {
     return 0;
 }
 
-// A recycled CA session loses the CAPMTs: ca_info on the fresh
-// session re-sends the running CAPMT without a PMT change.
+// ca_info on a fresh CA session re-sends the running CAPMT.
 int test_capmt_resend_after_ca_session_reset() {
     packing_cam_open();
     ca_device_t &dev = pcam->dev;
