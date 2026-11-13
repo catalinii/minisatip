@@ -30,8 +30,14 @@
 // Push bytes per cycle, kept a multiple of the 188B TS frame;
 // enigma filepush default buffersize.
 #define DDCI_PUSH_CHUNK (188 * 1024)
+// Jitter-buffer reserve prebuffered before the drain starts, and
+// the token burst the paced drain may emit at once (both bytes).
+#define DDCI_PUSH_RESERVE (188 * 3000)
+#define DDCI_PUSH_BURST (188 * 512)
 static_assert(DDCI_PUSH_BACKLOG_MAX % 188 == 0, "ring stays frame-aligned");
 static_assert(DDCI_PUSH_CHUNK % 188 == 0, "chunk stays frame-aligned");
+static_assert(DDCI_PUSH_RESERVE % 188 == 0, "reserve stays frame-aligned");
+static_assert(DDCI_PUSH_RESERVE < DDCI_PUSH_BACKLOG_MAX, "reserve fits ring");
 // Micro-kick backstop: EAGAIN past this long means the playpump
 // congestion latch is stuck, re-prime it via close/open.
 #define DDCI_KICK_STALL_MS 1000
