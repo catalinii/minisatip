@@ -943,7 +943,7 @@ int create_capmt(SCAPMT *ca, uint8_t listmgmt, uint8_t *capmt, int capmt_len,
     int version = ca->version;
 
     if (!get_pmt(first))
-        LOG_AND_RETURN(1, "%s: PMT %d not found", __FUNCTION__, first);
+        LOG_AND_RETURN(-1, "%s: PMT %d not found", __FUNCTION__, first);
 
     capmt[pos++] = listmgmt;
     copy16(capmt, pos, ca->sid);
@@ -990,7 +990,7 @@ uint32_t capmt_content_hash(uint8_t *capmt, int len) {
 int send_capmt(ca_device_t *d, SCAPMT *ca, uint8_t listmgmt, uint8_t reason,
                int force) {
     uint8_t capmt[8192];
-    int spans[MAX_PMT_PER_CAPMT][2];
+    int spans[MAX_PMT_PER_CAPMT][2] = {};
     std::lock_guard<SMutex> lock(ca_dev_lock(d->id));
     memset(capmt, 0, sizeof(capmt));
 
@@ -1423,8 +1423,13 @@ int dvbca_del_pmt(adapter *ad, SPMT *spmt) {
     int listmgmt = -1;
 
     SCAPMT *capmt = get_capmt_for_pmt(spmt, &d);
-    if (!capmt)
+    if (!capmt) {
+        // Session down: the CAM cannot be told, but the PMT must
+        // still leave its slot or a later resend would revive it.
+        if (d && d->state != CA_STATE_INACTIVE)
+            remove_pmt_from_device(d, spmt);
         LOG_AND_RETURN(0, "CAPMT not found for pmt %d", spmt->id);
+    }
 
     // Hold the device across use; re-check the entry in case
     // teardown wiped the table between the lookup and now.
@@ -2874,6 +2879,17 @@ static int CIPLUS_APP_AI_handler(ca_session_t *session, int resource_id,
     return 0;
 }
 
+// Clear the tables CA masks from slot first on, so the
+// normal send path retries those PMTs after a failed resend.
+static void ca_retry_capmt_pmts(ca_device_t *d, int first) {
+    int mask = 1 << dvbca_id;
+    for (int i = first; i < d->max_ca_pmt; i++) {
+        tables_clear_pmt_ca_masks(get_pmt(d->capmt[i].pmt_id), mask, 1);
+        for (int id : d->capmt[i].other_id)
+            tables_clear_pmt_ca_masks(get_pmt(id), mask, 1);
+    }
+}
+
 // ca_info on a fresh session: the CAM forgot its CAPMTs,
 // re-send the active ones (first ONLY, the rest ADD).
 static void ca_resend_capmts(ca_device_t *d) {
@@ -2886,13 +2902,17 @@ static void ca_resend_capmts(ca_device_t *d) {
             continue;
         LOG("CA %d: re-sending CAPMT for PMTs %s after CA session reset", d->id,
             capmt_pmts_str(c).c_str());
-        send_capmt(d, c, first ? CLM_ONLY : CLM_ADD,
-                   CA_PMT_CMD_ID_OK_DESCRAMBLING, 1);
+        if (send_capmt(d, c, first ? CLM_ONLY : CLM_ADD,
+                       CA_PMT_CMD_ID_OK_DESCRAMBLING, 1)) {
+            ca_retry_capmt_pmts(d, j);
+            break;
+        }
         first = false;
     }
 }
 
 static int APP_CA_create(ca_session_t *session, int) {
+    session->ca->fresh_ca_session = 1;
     ca_write_apdu(session, TAG_CA_INFO_ENQUIRY, NULL, 0);
     return 0;
 }
@@ -2911,14 +2931,18 @@ int APP_CA_handler(ca_session_t *session, int resource, uint8_t *data,
     int caid_count = len / 2;
 
     switch (resource) {
-    case TAG_CA_INFO:
-        d->state = CA_STATE_INITIALIZED;
-        // The CAM lost its state: force pending updates to re-send.
-        for (int j = 0; j < d->max_ca_pmt; j++) {
-            d->capmt[j].capmt_hash = 0;
-            d->capmt[j].capmt_hash_valid = 0;
-            capmt_forget_sent(d->capmt + j);
-        }
+    case TAG_CA_INFO: {
+        std::lock_guard<SMutex> lock(ca_dev_lock(d->id));
+        bool fresh = d->fresh_ca_session;
+        d->fresh_ca_session = 0;
+
+        // A fresh session lost the CAPMTs: force updates to re-send.
+        if (fresh)
+            for (int j = 0; j < d->max_ca_pmt; j++) {
+                d->capmt[j].capmt_hash = 0;
+                d->capmt[j].capmt_hash_valid = 0;
+                capmt_forget_sent(d->capmt + j);
+            }
 
         // Ignore CAM reported values if user has forced specific CAIDs
         if (!d->has_forced_caids) {
@@ -2940,9 +2964,14 @@ int APP_CA_handler(ca_session_t *session, int resource, uint8_t *data,
             LOG("   Supported CA ID: %04X for CA%d", caid, d->id);
             add_caid_mask(dvbca_id, d->id, caid, 0xFFFF);
         }
-        ca_resend_capmts(d);
+        if (fresh)
+            ca_resend_capmts(d);
+        // Publish INITIALIZED last, under the lock, so a join on
+        // another thread cannot interleave with the resend above.
+        d->state = CA_STATE_INITIALIZED;
 
         break;
+    }
     default:
         LOG("%s: unexpected tag (0x%x)", __FUNCTION__, resource);
     }
