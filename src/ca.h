@@ -224,6 +224,7 @@ struct ca_device {
     int ci_slot;  // /dev/ciN and tsmux slot, may differ from id
     ca_mode mode; // zero-init DVB; set once at init publish
     int state;
+    int fresh_ca_session; // set at CA session create; ca_info consumes it
     uint16_t caid[MAX_CAID];
     uint32_t caids;
     int has_forced_caids;

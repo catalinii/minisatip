@@ -79,6 +79,7 @@ int ca_read_enigma(int socket, void *buf, int len, sockets *ss, int *rb);
 int get_enabled_pmts_for_ca(ca_device_t *d);
 int APP_MMI_handler(ca_session_t *session, int resource, uint8_t *buffer,
                     int len);
+int APP_CA_handler(ca_session_t *session, int resource, uint8_t *data, int len);
 
 ca_device_t d;
 
@@ -2148,6 +2149,30 @@ static int read_capmts(std::vector<uint8_t> *last = nullptr) {
     return count;
 }
 
+// List-management byte of every CAPMT written, in write order
+static std::vector<int> read_capmt_mgmts() {
+    std::vector<uint8_t> all;
+    uint8_t buf[4096];
+    ssize_t n;
+    while ((n = read(pcam->fds[0], buf, sizeof(buf))) > 0)
+        all.insert(all.end(), buf, buf + n);
+    std::vector<int> mgmts;
+    for (size_t i = 0; i + 4 < all.size(); i++) {
+        if (all[i] != 0x9F || all[i + 1] != 0x80 || all[i + 2] != 0x32)
+            continue;
+        size_t p = i + 3, len = all[p++];
+        if (len & 0x80) {
+            int bytes = len & 0x7F;
+            for (len = 0; bytes-- > 0;)
+                len = (len << 8) | all[p++];
+        }
+        if (p < all.size())
+            mgmts.push_back(all[p]);
+        i = p + len - 1;
+    }
+    return mgmts;
+}
+
 // True when the CAPMT lists this elementary stream
 static int capmt_lists_pid(const std::vector<uint8_t> &c, int pid) {
     for (size_t i = 6; i + 4 < c.size();) {
@@ -2386,6 +2411,145 @@ int test_loopback_capmt_sends_at_once() {
     ASSERT_EQUAL(read_capmts(), 1, "CAPMT written at once");
     opts.enigma = saved_enigma;
     ddci_devices[3] = nullptr;
+    packing_cam_close();
+    return 0;
+}
+
+// ca_info on a fresh CA session re-sends the running CAPMT.
+int test_capmt_resend_after_ca_session_reset() {
+    packing_cam_open();
+    ca_device_t &dev = pcam->dev;
+    SPMT *p1 = packing_program(0x2d01), *p2 = packing_program(0x2d02);
+    dvbca_process_pmt(&pcam->ad, p1, 0);
+    dvbca_process_pmt(&pcam->ad, p2, 0);
+    ASSERT_EQUAL(read_capmts(), 2, "setup sends two CAPMTs");
+
+    dev.fresh_ca_session = 1;
+    ca_session_t s = {};
+    s.ca = &dev;
+    s.session_number = 2;
+    uint8_t ca_info[2] = {0x0B, 0x00}; // one CAID: 0x0B00
+    APP_CA_handler(&s, TAG_CA_INFO, ca_info, sizeof(ca_info));
+
+    std::vector<uint8_t> last;
+    ASSERT_EQUAL(read_capmts(&last), 1, "the reset re-sends the CAPMT");
+    ASSERT(capmt_lists_pid(last, p1->stream_pids[0].pid) &&
+               capmt_lists_pid(last, p2->stream_pids[0].pid),
+           "both running programs are re-sent");
+
+    APP_CA_handler(&s, TAG_CA_INFO, ca_info, sizeof(ca_info));
+    ASSERT_EQUAL(read_capmts(), 0, "repeated ca_info does not resend");
+    packing_cam_close();
+    return 0;
+}
+
+// Two unpacked CAPMTs rebuild as ONLY for the first, ADD for the rest
+int test_capmt_resend_only_then_add() {
+    packing_cam_open();
+    ca_device_t &dev = pcam->dev;
+    dev.multiple_pmt = 0;
+    dev.max_ca_pmt = 2;
+    SPMT *p1 = packing_program(0x2d01), *p2 = packing_program(0x2d02);
+    dvbca_process_pmt(&pcam->ad, p1, 0);
+    dvbca_process_pmt(&pcam->ad, p2, 0);
+    ASSERT_EQUAL(read_capmts(), 2, "setup sends two CAPMTs");
+
+    dev.fresh_ca_session = 1;
+    ca_session_t s = {};
+    s.ca = &dev;
+    s.session_number = 2;
+    uint8_t ca_info[2] = {0x0B, 0x00}; // one CAID: 0x0B00
+    APP_CA_handler(&s, TAG_CA_INFO, ca_info, sizeof(ca_info));
+
+    std::vector<int> mgmts = read_capmt_mgmts();
+    ASSERT_EQUAL((int)mgmts.size(), 2, "both CAPMTs are re-sent");
+    ASSERT(mgmts[0] == CLM_ONLY && mgmts[1] == CLM_ADD,
+           "first re-send is ONLY, the rest ADD");
+    packing_cam_close();
+    return 0;
+}
+
+// A PMT stopped while the session is down must not come back
+int test_capmt_no_resend_for_stopped_pmt() {
+    packing_cam_open();
+    ca_device_t &dev = pcam->dev;
+    SPMT *p1 = packing_program(0x2d01);
+    dvbca_process_pmt(&pcam->ad, p1, 0);
+    ASSERT_EQUAL(read_capmts(), 1, "setup sends the CAPMT");
+
+    dev.state = CA_STATE_ACTIVE; // session down
+    dvbca_del_pmt(&pcam->ad, p1);
+    ASSERT_EQUAL(read_capmts(), 0, "no NOT_SELECTED while the session is down");
+
+    dev.fresh_ca_session = 1;
+    ca_session_t s = {};
+    s.ca = &dev;
+    s.session_number = 2;
+    uint8_t ca_info[2] = {0x0B, 0x00}; // one CAID: 0x0B00
+    APP_CA_handler(&s, TAG_CA_INFO, ca_info, sizeof(ca_info));
+    ASSERT_EQUAL(read_capmts(), 0, "stopped PMT is not re-sent");
+    packing_cam_close();
+    return 0;
+}
+
+// A PMT deleted while the session is down writes no CAPMT at all
+int test_capmt_no_resend_for_deleted_pmt() {
+    packing_cam_open();
+    ca_device_t &dev = pcam->dev;
+    SPMT *p1 = packing_program(0x2d01);
+    dvbca_process_pmt(&pcam->ad, p1, 0);
+    ASSERT_EQUAL(read_capmts(), 1, "setup sends the CAPMT");
+
+    dev.state = CA_STATE_ACTIVE; // session down
+    pmt_del(p1->id);
+
+    dev.fresh_ca_session = 1;
+    ca_session_t s = {};
+    s.ca = &dev;
+    s.session_number = 2;
+    uint8_t ca_info[2] = {0x0B, 0x00}; // one CAID: 0x0B00
+    APP_CA_handler(&s, TAG_CA_INFO, ca_info, sizeof(ca_info));
+    ASSERT_EQUAL(read_capmts(), 0, "deleted PMT writes no CAPMT");
+    packing_cam_close();
+    return 0;
+}
+
+// ca_info with nothing running sends nothing
+int test_capmt_ca_info_without_pmts_sends_nothing() {
+    packing_cam_open();
+    ca_device_t &dev = pcam->dev;
+    dev.fresh_ca_session = 1;
+    ca_session_t s = {};
+    s.ca = &dev;
+    s.session_number = 2;
+    uint8_t ca_info[2] = {0x0B, 0x00}; // one CAID: 0x0B00
+    APP_CA_handler(&s, TAG_CA_INFO, ca_info, sizeof(ca_info));
+    ASSERT_EQUAL(read_capmts(), 0, "nothing active, nothing sent");
+    packing_cam_close();
+    return 0;
+}
+
+// A failed resend clears the tables masks so the normal path retries
+int test_capmt_failed_resend_retries_via_tables() {
+    packing_cam_open();
+    ca_device_t &dev = pcam->dev;
+    SPMT *p1 = packing_program(0x2d01);
+    dvbca_process_pmt(&pcam->ad, p1, 0);
+    ASSERT_EQUAL(read_capmts(), 1, "setup sends the CAPMT");
+    int mask = 1 << dvbca_id;
+    p1->ca_mask |= mask;
+
+    dev.fresh_ca_session = 1;
+    dev.fd = -1; // the resend write fails
+    ca_session_t s = {};
+    s.ca = &dev;
+    s.session_number = 2;
+    uint8_t ca_info[2] = {0x0B, 0x00}; // one CAID: 0x0B00
+    APP_CA_handler(&s, TAG_CA_INFO, ca_info, sizeof(ca_info));
+    dev.fd = pcam->fds[1];
+
+    ASSERT_EQUAL(read_capmts(), 0, "failed resend writes nothing");
+    ASSERT(!(p1->ca_mask & mask), "tables mask cleared for the retry");
     packing_cam_close();
     return 0;
 }
@@ -2871,6 +3035,18 @@ int main() {
               "testing that a failed CAPMT write is retried");
     TEST_FUNC(test_loopback_capmt_sends_at_once(),
               "testing that loopback CAPMT is not held");
+    TEST_FUNC(test_capmt_resend_after_ca_session_reset(),
+              "testing that a CA session reset re-sends the CAPMT");
+    TEST_FUNC(test_capmt_resend_only_then_add(),
+              "testing that the resend rebuilds with ONLY then ADD");
+    TEST_FUNC(test_capmt_no_resend_for_stopped_pmt(),
+              "testing that a PMT stopped while down is not re-sent");
+    TEST_FUNC(test_capmt_no_resend_for_deleted_pmt(),
+              "testing that a PMT deleted while down writes no CAPMT");
+    TEST_FUNC(test_capmt_ca_info_without_pmts_sends_nothing(),
+              "testing that ca_info with nothing active sends nothing");
+    TEST_FUNC(test_capmt_failed_resend_retries_via_tables(),
+              "testing that a failed resend clears the tables masks");
 #ifndef DISABLE_DDCI
     TEST_FUNC(test_loopback_owns_ci_slot(),
               "testing that the tuner yields its CI slot to the loopback");
