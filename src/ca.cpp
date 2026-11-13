@@ -2874,6 +2874,25 @@ static int CIPLUS_APP_AI_handler(ca_session_t *session, int resource_id,
     return 0;
 }
 
+// The CAM dropped its CA session (and with it the CAPMTs):
+// when ca_info lands on the fresh session, send the active
+// ones again (first ONLY, the rest ADD, like fresh joins).
+static void ca_resend_capmts(ca_device_t *d) {
+    if (!get_active_capmts(d))
+        return;
+    int sent = 0;
+    for (int j = 0; j < d->max_ca_pmt; j++) {
+        SCAPMT *c = d->capmt + j;
+        if (!capmt_pmt_count(c))
+            continue;
+        LOG("CA %d: re-sending CAPMT for PMTs %s after CA session reset",
+            d->id, capmt_pmts_str(c).c_str());
+        send_capmt(d, c, sent ? CLM_ADD : CLM_ONLY,
+                   CA_PMT_CMD_ID_OK_DESCRAMBLING, 1);
+        sent++;
+    }
+}
+
 static int APP_CA_create(ca_session_t *session, int) {
     ca_write_apdu(session, TAG_CA_INFO_ENQUIRY, NULL, 0);
     return 0;
@@ -2922,6 +2941,7 @@ int APP_CA_handler(ca_session_t *session, int resource, uint8_t *data,
             LOG("   Supported CA ID: %04X for CA%d", caid, d->id);
             add_caid_mask(dvbca_id, d->id, caid, 0xFFFF);
         }
+        ca_resend_capmts(d);
 
         break;
     default:

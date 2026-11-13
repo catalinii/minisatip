@@ -79,6 +79,8 @@ int ca_read_enigma(int socket, void *buf, int len, sockets *ss, int *rb);
 int get_enabled_pmts_for_ca(ca_device_t *d);
 int APP_MMI_handler(ca_session_t *session, int resource, uint8_t *buffer,
                     int len);
+int APP_CA_handler(ca_session_t *session, int resource, uint8_t *data,
+                   int len);
 
 ca_device_t d;
 
@@ -2390,6 +2392,31 @@ int test_loopback_capmt_sends_at_once() {
     return 0;
 }
 
+// A recycled CA session loses the CAPMTs: ca_info on the fresh
+// session re-sends the running CAPMT without a PMT change.
+int test_capmt_resend_after_ca_session_reset() {
+    packing_cam_open();
+    ca_device_t &dev = pcam->dev;
+    SPMT *p1 = packing_program(0x2d01), *p2 = packing_program(0x2d02);
+    dvbca_process_pmt(&pcam->ad, p1, 0);
+    dvbca_process_pmt(&pcam->ad, p2, 0);
+    ASSERT_EQUAL(read_capmts(), 2, "setup sends two CAPMTs");
+
+    ca_session_t s = {};
+    s.ca = &dev;
+    s.session_number = 2;
+    uint8_t ca_info[2] = {0x0B, 0x00}; // one CAID: 0x0B00
+    APP_CA_handler(&s, TAG_CA_INFO, ca_info, sizeof(ca_info));
+
+    std::vector<uint8_t> last;
+    ASSERT_EQUAL(read_capmts(&last), 1, "the reset re-sends the CAPMT");
+    ASSERT(capmt_lists_pid(last, p1->stream_pids[0].pid) &&
+               capmt_lists_pid(last, p2->stream_pids[0].pid),
+           "both running programs are re-sent");
+    packing_cam_close();
+    return 0;
+}
+
 #ifndef DISABLE_DDCI
 // Loopback owns its stored CI slot; the enigma tuner on that slot
 // stands down so /dev/ciX is driven only by the DDCI adapter.
@@ -2871,6 +2898,8 @@ int main() {
               "testing that a failed CAPMT write is retried");
     TEST_FUNC(test_loopback_capmt_sends_at_once(),
               "testing that loopback CAPMT is not held");
+    TEST_FUNC(test_capmt_resend_after_ca_session_reset(),
+              "testing that a CA session reset re-sends the CAPMT");
 #ifndef DISABLE_DDCI
     TEST_FUNC(test_loopback_owns_ci_slot(),
               "testing that the tuner yields its CI slot to the loopback");
