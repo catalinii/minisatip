@@ -1310,29 +1310,121 @@ int push_ts_to_adapter(ddci_device_t *d, adapter *ad, uint16_t *mapping) {
 
 // Push loop: writes one peeked ring span per pass (up to DDCI_PUSH_CHUNK
 // or the ring wrap), no copy buffer. Loopback only; hardware writevs inline.
+// The CAM feed is jitter-buffered (see the pacing state below).
 static void ddci_push_loop(int id, int fe) {
     ddci_device_t *d =
         (id >= 0 && id < MAX_ADAPTERS) ? ddci_devices[id] : nullptr;
     if (!d)
         return;
     SFIFO *f = &d->push_backlog;
+    // Jitter buffer: prebuffer a reserve, then pace the drain with
+    // wall-clock tokens at the measured producer rate (level-aware).
+    bool armed = false;
+    int64_t tokens = 0, last_ms = getTick(), rate = 1250000;
+    uint64_t seen = 0;
+    int64_t rate_at = last_ms, queued_since = 0;
     while (!d->push_stop.load() && fe >= 0) {
+        int64_t now = getTick();
+        size_t level;
+        {
+            std::lock_guard<std::mutex> lock(d->push_mutex);
+            level = fifo_used(f);
+        }
+        if (level == 0)
+            queued_since = 0;
+        else if (!queued_since)
+            queued_since = now;
+        // Refill tokens by wall clock at a level-aware rate.
+        if (armed && now > last_ms) {
+            int64_t eff = rate;
+            if (level > DDCI_PUSH_RESERVE * 2)
+                eff = rate * 2;
+            else if (level > DDCI_PUSH_RESERVE)
+                eff = rate * 11 / 10;
+            else if (level < DDCI_PUSH_RESERVE / 2)
+                eff = rate * 9 / 10;
+            tokens += (now - last_ms) * eff / 1000;
+            if (tokens > DDCI_PUSH_BURST)
+                tokens = DDCI_PUSH_BURST;
+        }
+        last_ms = now;
+        // Retune the drain rate to the producer every 2 s.
+        if (armed && now - rate_at >= 2000) {
+            std::lock_guard<std::mutex> lock(d->push_mutex);
+            uint64_t produced = f->write_index - seen;
+            int64_t measured =
+                (int64_t)(produced * 1000 / (uint64_t)(now - rate_at));
+            seen = f->write_index;
+            rate_at = now;
+            if (measured > 100000)
+                rate = std::min<int64_t>(
+                    std::max<int64_t>(measured, 256000), 4000000);
+        }
+        // Keep the feed CBR like a live multiplex: null packets
+        // top the quantum up so the pump input never runs dry.
+        static const uint8_t *null_buf = [] {
+            static uint8_t b[DDCI_PUSH_CHUNK];
+            for (size_t i = 0; i < sizeof(b); i += 188) {
+                b[i] = 0x47;
+                b[i + 1] = 0x1F;
+                b[i + 2] = 0xFF;
+                b[i + 3] = static_cast<uint8_t>(0x10 | ((i / 188) & 0xF));
+                memset(b + i + 4, 0xFF, 184);
+            }
+            return b;
+        }();
         void *base = nullptr;
-        size_t len = 0;
+        size_t len = 0, real = 0;
         {
             std::unique_lock<std::mutex> lock(d->push_mutex);
-            d->push_cv.wait(
-                lock, [&] { return d->push_stop.load() || fifo_used(f) > 0; });
+            d->push_cv.wait_for(lock, std::chrono::milliseconds(2), [&] {
+                return d->push_stop.load() ||
+                       (armed && tokens >= 188) ||
+                       (!armed && fifo_used(f) >= DDCI_PUSH_RESERVE);
+            });
             if (d->push_stop.load())
                 break;
-            len = fifo_peek(f, &base,
-                            std::min<size_t>(fifo_used(f), DDCI_PUSH_CHUNK), 0);
+            if (!armed) {
+                // Arm on a full reserve, or after 250 ms of queued
+                // data so slow streams are not held back.
+                if (fifo_used(f) < DDCI_PUSH_RESERVE &&
+                    !(fifo_used(f) > 0 && queued_since &&
+                      now - queued_since > 250))
+                    continue;
+                armed = true;
+                tokens = DDCI_PUSH_BURST;
+                seen = f->write_index;
+                rate_at = last_ms = now;
+            }
+            len = std::min<size_t>(static_cast<size_t>(tokens),
+                                   DDCI_PUSH_CHUNK);
+            if (len < 188)
+                continue;
+            real = std::min(fifo_used(f), len);
+            if (real)
+                real = fifo_peek(f, &base, real, 0);
+            tokens -= static_cast<int64_t>(len);
         }
-        ssize_t w = write(fe, base, len);
+        struct iovec iov[2];
+        int iovcnt = 0;
+        if (real) {
+            iov[iovcnt].iov_base = base;
+            iov[iovcnt].iov_len = real;
+            iovcnt++;
+        }
+        if (len > real) {
+            iov[iovcnt].iov_base = const_cast<uint8_t *>(null_buf);
+            iov[iovcnt].iov_len = len - real;
+            iovcnt++;
+        }
+        ssize_t w = writev(fe, iov, iovcnt);
         if (w > 0) {
             d->last_push_write.store(getTick(), std::memory_order_relaxed);
-            std::lock_guard<std::mutex> lock(d->push_mutex);
-            fifo_skip_bytes(f, static_cast<size_t>(w));
+            size_t from_ring = std::min(static_cast<size_t>(w), real);
+            if (from_ring) {
+                std::lock_guard<std::mutex> lock(d->push_mutex);
+                fifo_skip_bytes(f, from_ring);
+            }
         } else if (w < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
             std::this_thread::sleep_for(std::chrono::microseconds(100));
         } else if (w < 0 && errno == EINTR) {

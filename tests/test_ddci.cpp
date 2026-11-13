@@ -2705,6 +2705,10 @@ int test_ddci_push_thread_roundtrip() {
     create_adapter(&ad2, 2);
     int fds[2];
     ASSERT(pipe(fds) == 0, "pipe as mock dvr");
+    // The loopback DVR fd is non-blocking; the mock must be too,
+    // or the CBR null top-up would wedge the thread on a full pipe.
+    int flags = fcntl(fds[1], F_GETFL, 0);
+    ASSERT(fcntl(fds[1], F_SETFL, flags | O_NONBLOCK) == 0, "nonblock push");
     ad2.fe = fds[1];
     ddci_push_start(&d);
     uint8_t msg[1024];
