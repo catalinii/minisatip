@@ -954,7 +954,9 @@ void set_options(int argc, char *argv[]) {
 #ifdef DISABLE_DVBAPI
             LOG("%s was not compiled with DVBAPI support, please install "
                 "libdvbcsa "
-                "(libdvbcsa-dev in Ubuntu) and change the Makefile",
+                "(libdvbcsa-dev in Ubuntu, or "
+                "https://github.com/oe-mirrors/libdvbcsa for ICAM support) "
+                "and change the Makefile",
                 app_name);
             exit(0);
 #else
