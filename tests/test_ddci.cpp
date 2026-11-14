@@ -998,6 +998,7 @@ int test_copy_ts_from_ddci() {
 }
 
 static size_t bl_have(ddci_device_t *d) {
+    std::lock_guard<std::mutex> lock(d->push_mutex);
     return (size_t)fifo_used(&d->push_backlog);
 }
 
@@ -1273,6 +1274,10 @@ int test_ddci_push_stop_joins_first() {
     create_adapter(&ad2, 2);
     int fds[2];
     ASSERT(pipe(fds) == 0, "pipe for push fd");
+    // Non-blocking like the loopback DVR: a blocking CBR quantum
+    // could wedge the join if the runner stalls past the arm cap.
+    int flags = fcntl(fds[1], F_GETFL, 0);
+    ASSERT(fcntl(fds[1], F_SETFL, flags | O_NONBLOCK) == 0, "nonblock push");
     ad2.fe = fds[1];
     ddci_push_start(&d);
     ddci_push_stop(&d);
@@ -2711,18 +2716,28 @@ int test_ddci_push_thread_roundtrip() {
     ASSERT(fcntl(fds[1], F_SETFL, flags | O_NONBLOCK) == 0, "nonblock push");
     ad2.fe = fds[1];
     ddci_push_start(&d);
-    uint8_t msg[1024];
+    // Frame-aligned like production PSI+TS; the pacer only emits
+    // whole packets, so a ragged tail would stay queued by design.
+    uint8_t msg[5 * 188];
     for (size_t i = 0; i < sizeof(msg); i++)
         msg[i] = (uint8_t)(i * 31 + 7);
     struct iovec io[1] = {{msg, sizeof(msg)}};
     size_t queued = ddci_push_queue(&d, nullptr, 0, io, 1);
     struct pollfd pfd = {fds[0], POLLIN, 0};
     int ready = poll(&pfd, 1, 5000);
+    // Capture the drain before the stop: the join sheds the backlog,
+    // so a post-stop backlog read would pass vacuously (skeptic-1).
+    int drained = 0;
+    for (int t = 0; t < 100 && !drained; t++) {
+        drained = (bl_have(&d) == 0);
+        if (!drained)
+            usleep(1000);
+    }
     // Join before asserting: a live thread must never see teardown.
     ddci_push_stop(&d);
     ASSERT(queued == sizeof(msg), "queued");
     ASSERT(ready > 0, "thread writes promptly");
-    ASSERT(bl_have(&d) == 0, "backlog drained");
+    ASSERT(drained, "backlog drained");
     uint8_t got[sizeof(msg)];
     ASSERT(bl_read_exact(fds[0], got, sizeof(got)) == sizeof(got),
            "pipe yields queued bytes");
@@ -2739,6 +2754,69 @@ int test_ddci_push_thread_roundtrip() {
     ddci_devices[2] = nullptr;
     a[2] = nullptr;
     return 0;
+}
+
+// Pacer test packet: sync byte, non-null pid, and a sequence number
+// the grid check uses to filter filler and verify order and loss.
+static void bl_make_seq(uint8_t *pkt, int seq) {
+    memset(pkt, 0xA5, 188);
+    pkt[0] = 0x47;
+    set_pid_ts(pkt, 0x100 + (seq % 0x100));
+    pkt[4] = (uint8_t)(seq >> 24);
+    pkt[5] = (uint8_t)(seq >> 16);
+    pkt[6] = (uint8_t)(seq >> 8);
+    pkt[7] = (uint8_t)seq;
+}
+
+// Verifies the TS grid over the complete packets and collects the
+// real sequence numbers in wire order; the tail holds stop raggedness.
+static int bl_check_grid(const uint8_t *out, size_t len, std::vector<int> &seqs,
+                         size_t &tail) {
+    tail = len % 188; // the join can land mid-packet: up to 187B
+    size_t body = len - tail;
+    // The tail starts packet-aligned too, so it must still sync.
+    if (tail > 0 && out[body] != 0x47)
+        return 1;
+    for (size_t off = 0; off < body; off += 188) {
+        if (out[off] != 0x47)
+            return 1;
+        if (PID_FROM_TS(out + off) != 0x1FFF)
+            seqs.push_back((out[off + 4] << 24) | (out[off + 5] << 16) |
+                           (out[off + 6] << 8) | out[off + 7]);
+    }
+    return 0;
+}
+
+// Reads whatever the push thread emits until the backlog drains or
+// the budget runs out; the caller stops the thread and checks the grid.
+static void bl_read_until_drained(ddci_device_t *d, int rfd,
+                                  std::vector<uint8_t> &out, int budget_ms) {
+    uint8_t tmp[16384];
+    struct pollfd pfd = {rfd, POLLIN, 0};
+    int waited = 0;
+    while (bl_have(d) > 0 && waited < budget_ms) {
+        if (poll(&pfd, 1, 10) > 0) {
+            ssize_t r = read(rfd, tmp, sizeof(tmp));
+            if (r > 0)
+                out.insert(out.end(), tmp, tmp + r);
+        }
+        waited += 10;
+    }
+}
+
+// Reads the pipe remainder after the stop; the ring tail and the last
+// filler sit unread in the kernel until this drain collects them.
+static void bl_read_remainder(int rfd, std::vector<uint8_t> &out) {
+    uint8_t tmp[16384];
+    struct pollfd pfd = {rfd, POLLIN, 0};
+    // Bounded: an undisarming pacer refills forever, so cap the
+    // sink at ~3MB and let the caller's assert fail instead of hang.
+    for (int n = 0; n < 200 && poll(&pfd, 1, 100) > 0; n++) {
+        ssize_t r = read(rfd, tmp, sizeof(tmp));
+        if (r <= 0)
+            break;
+        out.insert(out.end(), tmp, tmp + r);
+    }
 }
 
 // Fill a non-blocking pipe until the kernel refuses; returns bytes held.
@@ -2777,7 +2855,7 @@ int test_ddci_push_eagain_retries() {
     size_t held = bl_fill_pipe(fds[1]);
     ASSERT(held >= 4096, "pipe holds filler");
     ddci_push_start(&d);
-    uint8_t msg[1024];
+    uint8_t msg[5 * 188];
     for (size_t i = 0; i < sizeof(msg); i++)
         msg[i] = (uint8_t)(i * 31 + 7);
     struct iovec io[1] = {{msg, sizeof(msg)}};
@@ -2837,11 +2915,13 @@ int test_ddci_push_stop_sheds_stall() {
 #endif
     bl_fill_pipe(fds[1]);
     ddci_push_start(&d);
-    uint8_t msg[1024];
+    uint8_t msg[5 * 188];
     memset(msg, 0x5A, sizeof(msg));
     struct iovec io[1] = {{msg, sizeof(msg)}};
     size_t queued = ddci_push_queue(&d, nullptr, 0, io, 1);
-    usleep(200000);
+    // Past the arm cap: the thread must reach EAGAIN retries, so
+    // the stop below sheds a genuine stall instead of idle backlog.
+    usleep((DDCI_PUSH_ARM_MS + 150) * 1000);
     // No read ever comes: stop still joins instead of hanging.
     ddci_push_stop(&d);
     ASSERT(queued == sizeof(msg), "queued");
@@ -2849,6 +2929,240 @@ int test_ddci_push_stop_sheds_stall() {
     ASSERT(bl_have(&d) == 0, "stop sheds the stalled backlog");
     ASSERT(d.shed_bytes.load() == sizeof(msg), "stop shed counted");
     ASSERT(d.push_dropped == 0, "stop shed is not backpressure");
+    close(fds[0]);
+    close(fds[1]);
+    ad2.fe = -1;
+    free_fifo(&d.push_backlog);
+    ddci_devices[2] = nullptr;
+    a[2] = nullptr;
+    return 0;
+}
+
+int test_ddci_push_reserve_arm_burst() {
+    ddci_device_t d = {};
+    adapter ad2 = {};
+    d.id = 2;
+    d.enabled = 1;
+    d.loopback = 1;
+    create_fifo(&d.push_backlog, DDCI_PUSH_BACKLOG_MAX);
+    memset(ddci_devices, 0, sizeof(ddci_devices));
+    ddci_devices[2] = &d;
+    create_adapter(&ad2, 2);
+    int fds[2];
+    ASSERT(pipe(fds) == 0, "pipe as mock dvr");
+    int flags = fcntl(fds[1], F_GETFL, 0);
+    ASSERT(fcntl(fds[1], F_SETFL, flags | O_NONBLOCK) == 0, "nonblock push");
+    ad2.fe = fds[1];
+    ddci_push_start(&d);
+    // Past the reserve in sequenced packets; the drain must arm at
+    // once instead of waiting out the slow-stream cap (timed below).
+    static const int NPKT = DDCI_PUSH_RESERVE / 188 + 1;
+    std::vector<uint8_t> burst((size_t)NPKT * 188);
+    for (int i = 0; i < NPKT; i++)
+        bl_make_seq(&burst[(size_t)i * 188], i);
+    int64_t t0 = getTick();
+    size_t queued = 0;
+    int queued_pkts = 0;
+    for (int k = 0; k < 4; k++) {
+        int n = NPKT / 4 + (k < NPKT % 4 ? 1 : 0);
+        struct iovec io[1] = {
+            {&burst[(size_t)queued_pkts * 188], (size_t)n * 188}};
+        queued += ddci_push_queue(&d, nullptr, 0, io, 1);
+        queued_pkts += n;
+        usleep(10000);
+    }
+    ASSERT(queued == burst.size(), "burst queued whole");
+    struct pollfd pfd = {fds[0], POLLIN, 0};
+    ASSERT(poll(&pfd, 1, 5000) > 0, "reserve arms the drain");
+    ASSERT(getTick() - t0 < DDCI_PUSH_ARM_MS, "armed before the cap");
+    // Drain alongside the pacer: a stalled reader would wedge the
+    // CBR quanta on the full pipe instead of exercising the drain.
+    std::vector<uint8_t> out;
+    out.reserve(burst.size() * 2);
+    bl_read_until_drained(&d, fds[0], out, 10000);
+    ASSERT(bl_have(&d) == 0, "burst drained");
+    // Trickle phase: small chunks with filler gaps between them, so
+    // filler lands mid-stream; ragged filler shifts later chunks off.
+    static const int NTRICKLE = 4 * 25;
+    uint8_t gtmp[16384];
+    for (int c = 0; c < 4; c++) {
+        uint8_t chunk[25 * 188];
+        for (int i = 0; i < 25; i++)
+            bl_make_seq(&chunk[i * 188], NPKT + c * 25 + i);
+        struct iovec cio[1] = {{chunk, sizeof(chunk)}};
+        ASSERT(ddci_push_queue(&d, nullptr, 0, cio, 1) == sizeof(chunk),
+               "trickle chunk queued");
+        bl_read_until_drained(&d, fds[0], out, 5000);
+        ASSERT(bl_have(&d) == 0, "trickle chunk drained");
+        // Gap flow: keep sipping filler, short of the idle disarm.
+        for (int g = 0; g < 5; g++)
+            if (poll(&pfd, 1, 20) > 0) {
+                ssize_t r = read(fds[0], gtmp, sizeof(gtmp));
+                if (r > 0)
+                    out.insert(out.end(), gtmp, gtmp + r);
+            }
+    }
+    // Join before asserting: a live thread must never see teardown.
+    ddci_push_stop(&d);
+    bl_read_remainder(fds[0], out);
+    std::vector<int> seqs;
+    size_t tail = 0;
+    ASSERT(bl_check_grid(out.data(), out.size(), seqs, tail) == 0,
+           "output stays on the TS grid");
+    ASSERT(seqs.size() == (size_t)(NPKT + NTRICKLE),
+           "no packet lost or duplicated");
+    for (int i = 0; i < NPKT + NTRICKLE; i++)
+        ASSERT(seqs[(size_t)i] == i, "packets arrive in order");
+    ASSERT(d.shed_bytes.load() == 0, "clean drain sheds nothing");
+    ASSERT(d.push_dropped == 0, "clean drain drops nothing");
+    ASSERT(!d.push_running.load(), "loop exited");
+    ASSERT(!d.push_thread.joinable(), "thread joined");
+    ddci_push_stop(&d);
+    close(fds[0]);
+    close(fds[1]);
+    ad2.fe = -1;
+    free_fifo(&d.push_backlog);
+    ddci_devices[2] = nullptr;
+    a[2] = nullptr;
+    return 0;
+}
+
+int test_ddci_push_stays_frame_aligned() {
+    ddci_device_t d = {};
+    adapter ad2 = {};
+    d.id = 2;
+    d.enabled = 1;
+    d.loopback = 1;
+    // Small ring, head parked near the end: the queued packets
+    // straddle the wrap from the very first quantum on.
+    create_fifo(&d.push_backlog, 188 * 64);
+    uint8_t pad[188];
+    memset(pad, 0, sizeof(pad));
+    pad[0] = 0x47;
+    for (int i = 0; i < 60; i++)
+        ASSERT(fifo_push(&d.push_backlog, pad, sizeof(pad)) == sizeof(pad),
+               "park the head");
+    fifo_skip_bytes(&d.push_backlog, 60 * 188);
+    memset(ddci_devices, 0, sizeof(ddci_devices));
+    ddci_devices[2] = &d;
+    create_adapter(&ad2, 2);
+    int fds[2];
+    ASSERT(pipe(fds) == 0, "pipe as mock dvr");
+    int flags = fcntl(fds[1], F_GETFL, 0);
+    ASSERT(fcntl(fds[1], F_SETFL, flags | O_NONBLOCK) == 0, "nonblock push");
+    // One slot off the 188B grid: the first quantum short-writes
+    // mid-packet, and the slow reader keeps cutting after that.
+#ifdef F_SETPIPE_SZ
+    ASSERT(fcntl(fds[1], F_SETPIPE_SZ, 4096) >= 4096, "one-slot pipe");
+#endif
+    ad2.fe = fds[1];
+    ddci_push_start(&d);
+    static const int NPKT = 40;
+    uint8_t burst[NPKT * 188];
+    for (int i = 0; i < NPKT; i++)
+        bl_make_seq(&burst[i * 188], i);
+    struct iovec io[1] = {{burst, sizeof(burst)}};
+    ASSERT(ddci_push_queue(&d, nullptr, 0, io, 1) == sizeof(burst),
+           "burst queued whole");
+    std::vector<uint8_t> out;
+    uint8_t tmp[1024];
+    struct pollfd pfd = {fds[0], POLLIN, 0};
+    int drained = 0;
+    for (int t = 0; t < 1000; t++) {
+        if (poll(&pfd, 1, 10) > 0) {
+            ssize_t r = read(fds[0], tmp, sizeof(tmp));
+            if (r > 0)
+                out.insert(out.end(), tmp, tmp + r);
+        }
+        if (bl_have(&d) == 0) {
+            drained = 1;
+            break;
+        }
+        usleep(5000);
+    }
+    // Join before asserting: a live thread must never see teardown.
+    ddci_push_stop(&d);
+    ASSERT(drained, "burst drained");
+    bl_read_remainder(fds[0], out);
+    std::vector<int> seqs;
+    size_t tail = 0;
+    ASSERT(bl_check_grid(out.data(), out.size(), seqs, tail) == 0,
+           "output stays on the TS grid");
+    ASSERT(seqs.size() == (size_t)NPKT, "no packet lost or duplicated");
+    for (int i = 0; i < NPKT; i++)
+        ASSERT(seqs[(size_t)i] == i, "packets arrive in order");
+    ASSERT(d.shed_bytes.load() == 0, "clean drain sheds nothing");
+    ASSERT(d.push_dropped == 0, "clean drain drops nothing");
+    ASSERT(!d.push_running.load(), "loop exited");
+    ASSERT(!d.push_thread.joinable(), "thread joined");
+    ddci_push_stop(&d);
+    close(fds[0]);
+    close(fds[1]);
+    ad2.fe = -1;
+    free_fifo(&d.push_backlog);
+    ddci_devices[2] = nullptr;
+    a[2] = nullptr;
+    return 0;
+}
+
+int test_ddci_push_idles_to_silence() {
+    ddci_device_t d = {};
+    adapter ad2 = {};
+    d.id = 2;
+    d.enabled = 1;
+    d.loopback = 1;
+    create_fifo(&d.push_backlog, DDCI_PUSH_BACKLOG_MAX);
+    memset(ddci_devices, 0, sizeof(ddci_devices));
+    ddci_devices[2] = &d;
+    create_adapter(&ad2, 2);
+    int fds[2];
+    ASSERT(pipe(fds) == 0, "pipe as mock dvr");
+    int flags = fcntl(fds[1], F_GETFL, 0);
+    ASSERT(fcntl(fds[1], F_SETFL, flags | O_NONBLOCK) == 0, "nonblock push");
+    ad2.fe = fds[1];
+    ddci_push_start(&d);
+    uint8_t msg[5 * 188];
+    for (int i = 0; i < 5; i++)
+        bl_make_seq(&msg[i * 188], i);
+    struct iovec io[1] = {{msg, sizeof(msg)}};
+    ASSERT(ddci_push_queue(&d, nullptr, 0, io, 1) == sizeof(msg), "queued");
+    int t = 0;
+    while (bl_have(&d) > 0 && t++ < 500)
+        usleep(10000);
+    ASSERT(bl_have(&d) == 0, "drained");
+    // Past the idle disarm: sink the wind-down nulls, then a
+    // disarmed thread must write nothing more to the pipe.
+    usleep((DDCI_PUSH_IDLE_MS + 400) * 1000);
+    std::vector<uint8_t> out;
+    bl_read_remainder(fds[0], out);
+    struct pollfd pfd = {fds[0], POLLIN, 0};
+    ASSERT(poll(&pfd, 1, 300) == 0, "disarmed thread stays silent");
+    // Re-arm across the silence: the grid must continue where the
+    // wind-down left it, completing any cut filler packet first.
+    uint8_t msg2[5 * 188];
+    for (int i = 0; i < 5; i++)
+        bl_make_seq(&msg2[i * 188], 5 + i);
+    struct iovec io2[1] = {{msg2, sizeof(msg2)}};
+    ASSERT(ddci_push_queue(&d, nullptr, 0, io2, 1) == sizeof(msg2),
+           "re-arm queued");
+    bl_read_until_drained(&d, fds[0], out, 5000);
+    int redrained = (bl_have(&d) == 0);
+    // Join before asserting: a live thread must never see teardown.
+    ddci_push_stop(&d);
+    ASSERT(redrained, "re-arm burst drained");
+    bl_read_remainder(fds[0], out);
+    std::vector<int> seqs;
+    size_t tail = 0;
+    ASSERT(bl_check_grid(out.data(), out.size(), seqs, tail) == 0,
+           "grid continues across the silence gap");
+    ASSERT(seqs.size() == 10, "no packet lost or duplicated");
+    for (int i = 0; i < 10; i++)
+        ASSERT(seqs[(size_t)i] == i, "packets arrive in order");
+    ASSERT(!d.push_running.load(), "loop exited on stop");
+    ASSERT(!d.push_thread.joinable(), "thread joined");
+    ASSERT(d.shed_bytes.load() == 0, "clean drain sheds nothing");
+    ASSERT(d.push_dropped == 0, "clean drain drops nothing");
+    ddci_push_stop(&d);
     close(fds[0]);
     close(fds[1]);
     ad2.fe = -1;
@@ -3249,6 +3563,12 @@ int main() {
               "testing push EAGAIN retries after a drain");
     TEST_FUNC(test_ddci_push_stop_sheds_stall(),
               "testing push stop sheds a stall");
+    TEST_FUNC(test_ddci_push_reserve_arm_burst(),
+              "testing push reserve arm with a burst");
+    TEST_FUNC(test_ddci_push_stays_frame_aligned(),
+              "testing push output stays on the TS grid");
+    TEST_FUNC(test_ddci_push_idles_to_silence(),
+              "testing push disarms to silence when idle");
     TEST_FUNC(test_ddci_output_shed_drains_demux_and_fifo(),
               "testing tune shed drains demux and fifo counted");
     TEST_FUNC(test_ddci_read_sec_data_skips_empty(),

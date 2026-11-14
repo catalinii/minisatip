@@ -34,9 +34,19 @@
 // the token burst the paced drain may emit at once (both bytes).
 #define DDCI_PUSH_RESERVE (188 * 3000)
 #define DDCI_PUSH_BURST (188 * 512)
+// Pacer tick, slow-stream arm cap, and idle disarm (all ms).
+#define DDCI_PUSH_TICK_MS 2
+#define DDCI_PUSH_ARM_MS 250
+#define DDCI_PUSH_IDLE_MS 500
+// Drain-rate clamp (B/s), seed, and producer retune period (ms).
+#define DDCI_PUSH_RATE_MIN 256000
+#define DDCI_PUSH_RATE_MAX 8000000
+#define DDCI_PUSH_RATE_INIT 1250000
+#define DDCI_PUSH_RETUNE_MS 500
 static_assert(DDCI_PUSH_BACKLOG_MAX % 188 == 0, "ring stays frame-aligned");
 static_assert(DDCI_PUSH_CHUNK % 188 == 0, "chunk stays frame-aligned");
 static_assert(DDCI_PUSH_RESERVE % 188 == 0, "reserve stays frame-aligned");
+static_assert(DDCI_PUSH_BURST % 188 == 0, "burst stays frame-aligned");
 static_assert(DDCI_PUSH_RESERVE < DDCI_PUSH_BACKLOG_MAX, "reserve fits ring");
 // Micro-kick backstop: EAGAIN past this long means the playpump
 // congestion latch is stuck, re-prime it via close/open.

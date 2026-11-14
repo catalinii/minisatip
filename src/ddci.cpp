@@ -1308,9 +1308,8 @@ int push_ts_to_adapter(ddci_device_t *d, adapter *ad, uint16_t *mapping) {
     return 0;
 }
 
-// Push loop: writes one peeked ring span per pass (up to DDCI_PUSH_CHUNK
-// or the ring wrap), no copy buffer. Loopback only; hardware writevs inline.
-// The CAM feed is jitter-buffered (see the pacing state below).
+// Push loop: paced ring drain, one TS-aligned quantum per pass
+// (up to DDCI_PUSH_CHUNK). Loopback only; hardware writevs inline.
 static void ddci_push_loop(int id, int fe) {
     ddci_device_t *d =
         (id >= 0 && id < MAX_ADAPTERS) ? ddci_devices[id] : nullptr;
@@ -1320,9 +1319,27 @@ static void ddci_push_loop(int id, int fe) {
     // Jitter buffer: prebuffer a reserve, then pace the drain with
     // wall-clock tokens at the measured producer rate (level-aware).
     bool armed = false;
-    int64_t tokens = 0, last_ms = getTick(), rate = 1250000;
+    int64_t tokens = 0, last_ms = getTick(), rate = DDCI_PUSH_RATE_INIT;
     uint64_t seen = 0;
-    int64_t rate_at = last_ms, queued_since = 0;
+    int64_t rate_at = last_ms, queued_since = -1, empty_since = -1;
+    // Short-write tail: wire offset inside an 188B packet, plus whether
+    // the cut packet is filler (ring tails stay in the ring itself).
+    size_t wire_off = 0;
+    bool wire_null = false;
+    uint8_t carry[DVB_FRAME];
+    // Fixed-CC null filler; PID 0x1FFF ignores CC, so any subspan also
+    // serves as the remainder of a filler packet cut by a short write.
+    static const uint8_t *null_buf = [] {
+        static uint8_t b[DDCI_PUSH_CHUNK];
+        for (size_t i = 0; i < sizeof(b); i += DVB_FRAME) {
+            b[i] = 0x47;
+            b[i + 1] = 0x1F;
+            b[i + 2] = 0xFF;
+            b[i + 3] = 0x10;
+            memset(b + i + 4, 0xFF, DVB_FRAME - 4);
+        }
+        return b;
+    }();
     while (!d->push_stop.load() && fe >= 0) {
         int64_t now = getTick();
         size_t level;
@@ -1330,10 +1347,24 @@ static void ddci_push_loop(int id, int fe) {
             std::lock_guard<std::mutex> lock(d->push_mutex);
             level = fifo_used(f);
         }
-        if (level == 0)
-            queued_since = 0;
-        else if (!queued_since)
-            queued_since = now;
+        if (level == 0) {
+            queued_since = -1;
+            // Idle: disarm after DDCI_PUSH_IDLE_MS so the thread stops
+            // streaming nulls at the last rate and sleeps instead.
+            if (armed) {
+                if (empty_since < 0)
+                    empty_since = now;
+                else if (now - empty_since > DDCI_PUSH_IDLE_MS) {
+                    armed = false;
+                    tokens = 0;
+                    empty_since = -1;
+                }
+            }
+        } else {
+            if (queued_since < 0)
+                queued_since = now;
+            empty_since = -1;
+        }
         // Refill tokens by wall clock at a level-aware rate.
         if (armed && now > last_ms) {
             int64_t eff = rate;
@@ -1348,91 +1379,162 @@ static void ddci_push_loop(int id, int fe) {
                 tokens = DDCI_PUSH_BURST;
         }
         last_ms = now;
-        // Retune the drain rate to the producer every 2 s.
-        if (armed && now - rate_at >= 2000) {
+        // Retune the drain rate to the producer every window; any
+        // produced bytes count, so a radio channel retunes down.
+        if (armed && now - rate_at >= DDCI_PUSH_RETUNE_MS) {
             std::lock_guard<std::mutex> lock(d->push_mutex);
             uint64_t produced = f->write_index - seen;
             int64_t measured =
                 (int64_t)(produced * 1000 / (uint64_t)(now - rate_at));
             seen = f->write_index;
             rate_at = now;
-            if (measured > 100000)
+            if (produced > 0)
                 rate = std::min<int64_t>(
-                    std::max<int64_t>(measured, 256000), 4000000);
+                    std::max<int64_t>(measured, DDCI_PUSH_RATE_MIN),
+                    DDCI_PUSH_RATE_MAX);
         }
-        // Keep the feed CBR like a live multiplex: null packets
-        // top the quantum up so the pump input never runs dry.
-        static const uint8_t *null_buf = [] {
-            static uint8_t b[DDCI_PUSH_CHUNK];
-            for (size_t i = 0; i < sizeof(b); i += 188) {
-                b[i] = 0x47;
-                b[i + 1] = 0x1F;
-                b[i + 2] = 0xFF;
-                b[i + 3] = static_cast<uint8_t>(0x10 | ((i / 188) & 0xF));
-                memset(b + i + 4, 0xFF, 184);
-            }
-            return b;
-        }();
-        void *base = nullptr;
-        size_t len = 0, real = 0;
+        void *comp_base = nullptr, *seg1 = nullptr, *seg2 = nullptr;
+        size_t need = 0, head = 0, n1 = 0, n2 = 0, pads = 0, len = 0;
+        bool stub_only = false;
         {
             std::unique_lock<std::mutex> lock(d->push_mutex);
-            d->push_cv.wait_for(lock, std::chrono::milliseconds(2), [&] {
-                return d->push_stop.load() ||
-                       (armed && tokens >= 188) ||
-                       (!armed && fifo_used(f) >= DDCI_PUSH_RESERVE);
-            });
+            if (!armed && fifo_used(f) == 0)
+                d->push_cv.wait(lock, [&] {
+                    return d->push_stop.load() || fifo_used(f) > 0;
+                });
+            else
+                d->push_cv.wait_for(
+                    lock, std::chrono::milliseconds(DDCI_PUSH_TICK_MS), [&] {
+                        return d->push_stop.load() ||
+                               (armed && (tokens >= DVB_FRAME ||
+                                          (wire_off != 0 &&
+                                           (wire_null || fifo_used(f) > 0)))) ||
+                               (!armed && fifo_used(f) >= DDCI_PUSH_RESERVE);
+                    });
             if (d->push_stop.load())
                 break;
             if (!armed) {
-                // Arm on a full reserve, or after 250 ms of queued
-                // data so slow streams are not held back.
+                // Arm on a full reserve, or after DDCI_PUSH_ARM_MS of
+                // queued data so slow streams are not held back.
                 if (fifo_used(f) < DDCI_PUSH_RESERVE &&
-                    !(fifo_used(f) > 0 && queued_since &&
-                      now - queued_since > 250))
+                    !(fifo_used(f) > 0 && queued_since >= 0 &&
+                      now - queued_since > DDCI_PUSH_ARM_MS))
                     continue;
                 armed = true;
                 tokens = DDCI_PUSH_BURST;
                 seen = f->write_index;
                 rate_at = last_ms = now;
+                rate = DDCI_PUSH_RATE_INIT;
             }
-            len = std::min<size_t>(static_cast<size_t>(tokens),
-                                   DDCI_PUSH_CHUNK);
-            if (len < 188)
+            size_t budget = tokens > 0
+                                ? std::min<size_t>(static_cast<size_t>(tokens),
+                                                   DDCI_PUSH_CHUNK)
+                                : 0;
+            budget -= budget % DVB_FRAME;
+            size_t used = fifo_used(f);
+            // Finish a cut packet first: filler tails come from the
+            // template, ring tails from the ring head itself.
+            need = wire_off ? DVB_FRAME - wire_off : 0;
+            if (need > 0 && !wire_null) {
+                head = fifo_peek(f, &comp_base, std::min(need, used), 0);
+                // No full completion ready (dry ring or wrap-split span):
+                // emit the stub alone and stay unaligned, never padded.
+                stub_only = (head < need);
+            }
+            if (!stub_only) {
+                size_t room = budget > need ? budget - need : 0;
+                size_t want = std::min(used - head, room);
+                if (want > 0) {
+                    n1 = fifo_peek(f, &seg1, want, head);
+                    n1 -= n1 % DVB_FRAME;
+                    // Ring wrap: the peek stops at the ring end, so a
+                    // second span picks up the packets past the wrap.
+                    if (n1 < want && head + n1 < used) {
+                        n2 = fifo_peek(f, &seg2, want - n1, head + n1);
+                        n2 -= n2 % DVB_FRAME;
+                    }
+                }
+                // Keep the feed CBR like a live multiplex: null packets
+                // top the quantum up so the pump input never runs dry.
+                pads = room - (n1 + n2);
+                len = need + n1 + n2 + pads;
+            } else {
+                len = head;
+            }
+            if (len == 0)
                 continue;
-            real = std::min(fifo_used(f), len);
-            if (real)
-                real = fifo_peek(f, &base, real, 0);
-            tokens -= static_cast<int64_t>(len);
         }
-        struct iovec iov[2];
+        if (need > 0 && wire_null)
+            memcpy(carry, null_buf + wire_off, need);
+        struct iovec iov[4];
         int iovcnt = 0;
-        if (real) {
-            iov[iovcnt].iov_base = base;
-            iov[iovcnt].iov_len = real;
+        size_t ring_total = 0;
+        if (need > 0) {
+            iov[iovcnt].iov_base = wire_null ? carry : comp_base;
+            iov[iovcnt].iov_len = wire_null ? need : head;
             iovcnt++;
+            ring_total += wire_null ? 0 : head;
         }
-        if (len > real) {
-            iov[iovcnt].iov_base = const_cast<uint8_t *>(null_buf);
-            iov[iovcnt].iov_len = len - real;
-            iovcnt++;
+        if (!stub_only) {
+            if (n1) {
+                iov[iovcnt].iov_base = seg1;
+                iov[iovcnt].iov_len = n1;
+                iovcnt++;
+                ring_total += n1;
+            }
+            if (n2) {
+                iov[iovcnt].iov_base = seg2;
+                iov[iovcnt].iov_len = n2;
+                iovcnt++;
+                ring_total += n2;
+            }
+            if (pads) {
+                iov[iovcnt].iov_base = const_cast<uint8_t *>(null_buf);
+                iov[iovcnt].iov_len = pads;
+                iovcnt++;
+            }
         }
         ssize_t w = writev(fe, iov, iovcnt);
         if (w > 0) {
             d->last_push_write.store(getTick(), std::memory_order_relaxed);
-            size_t from_ring = std::min(static_cast<size_t>(w), real);
+            // Deduct what left the fd: EAGAIN/EINTR/short writes keep
+            // their tokens instead of pacing below the measured rate.
+            tokens -= w;
+            // Ring bytes start past a filler completion; skipping by
+            // raw w would eat unwritten ring bytes and break the grid.
+            size_t comp_null = (need > 0 && wire_null) ? need : 0;
+            size_t from_ring = 0;
+            if (static_cast<size_t>(w) > comp_null)
+                from_ring =
+                    std::min(static_cast<size_t>(w) - comp_null, ring_total);
             if (from_ring) {
                 std::lock_guard<std::mutex> lock(d->push_mutex);
                 fifo_skip_bytes(f, from_ring);
+            }
+            // A cut packet ends mid-grid: remember it so the next
+            // quantum finishes it before any fresh packet starts.
+            size_t cut = (wire_off + static_cast<size_t>(w)) % DVB_FRAME;
+            if (cut != 0) {
+                size_t uw = static_cast<size_t>(w);
+                wire_null = (uw <= comp_null || uw > comp_null + ring_total);
+                wire_off = cut;
+            } else {
+                wire_off = 0;
+                wire_null = false;
             }
         } else if (w < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
             std::this_thread::sleep_for(std::chrono::microseconds(100));
         } else if (w < 0 && errno == EINTR) {
             continue;
         } else {
+            size_t queued;
+            {
+                std::lock_guard<std::mutex> lock(d->push_mutex);
+                queued = fifo_used(f);
+            }
             if (!d->push_stop.load() && !(w < 0 && errno == EBADF))
                 LOG("DDCI %d: push write %s (%zu queued)", d->id,
-                    w == 0 ? "zero" : strerror(errno), len);
+                    w == 0 ? "zero" : strerror(errno), queued);
             break;
         }
     }
