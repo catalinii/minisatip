@@ -103,7 +103,8 @@ int find_ddci_pid(ddci_device_t *d, int pid) {
         LOG_AND_RETURN(-1, "pid %d invalid", pid);
 
     for (ddci_pid = pid; (ddci_pid & 0xFFFF) < 8191; ddci_pid++) {
-        if (!get_ddci_pid(d, ddci_pid)) {
+        // #1565: ddci pid 17 carries the generated SDT only.
+        if (ddci_pid != 17 && !get_ddci_pid(d, ddci_pid)) {
             return ddci_pid;
         }
     }
@@ -115,8 +116,10 @@ int add_pid_mapping_table(int ad, int pid, int pmt, ddci_device_t *d,
     ddci_mapping_table_t *m;
     if (!has_pid_mapping(d, ad, pid)) {
         // PAT maps to 0 (dropped at push for the generated table);
-        // other pids collide-remap via find_ddci_pid across tuners.
-        ddci_pid = pid == 0 ? 0 : find_ddci_pid(d, pid);
+        // SDT likewise (#1565: the CAM must see only the generated
+        // SDT, or both streams return on 17 with clashing CCs).
+        // Other pids collide-remap via find_ddci_pid across tuners.
+        ddci_pid = (pid == 0 || pid == 17) ? 0 : find_ddci_pid(d, pid);
         m = &d->mapping[MAKE_KEY(ad, pid)];
         m->ad = ad;
         m->pid = pid;

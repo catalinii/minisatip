@@ -1238,6 +1238,72 @@ int test_ddci_process_ts_drops_tuner_pat() {
     ASSERT(!saw_tuner_pat, "tuner PAT dropped at the push");
     return 0;
 }
+
+// #1565: the device generates its own SDT on pid 17, so the
+// transponder SDT must drop at the tuner like the PAT does;
+// feeding both duplicates the stream (CC errors on the CI out).
+int find_ddci_pid(ddci_device_t *d, int pid);
+int del_pmt_mapping_table(ddci_device_t *d, int ad, int pmt);
+int test_ddci_process_ts_drops_transponder_sdt() {
+    ddci_device_t d = {};
+    uint8_t buf[188 * 2];
+    adapter ad = {}, ad2 = {};
+    memset(buf, 0, sizeof(buf));
+    d.id = 2;
+    d.enabled = 1;
+    create_fifo(&d.fifo, DDCI_BUFFER);
+    memset(ddci_devices, 0, sizeof(ddci_devices));
+    ddci_devices[2] = &d;
+    create_adapter(&ad, 1);
+    create_adapter(&ad2, 2);
+    ad.buf = buf;
+    ad.lbuf = sizeof(buf);
+    ad.rlen = sizeof(buf);
+    buf[0] = 0x47;
+    set_pid_ts(buf, 1000);
+    memset(buf + 4, 0xAA, 8);
+    buf[188] = 0x47;
+    set_pid_ts(buf + 188, 17);
+    memset(buf + 188 + 4, 0xAA, 8);
+    int ddci_pid = add_pid_mapping_table(1, 1000, 0, &d, 1);
+    ASSERT(ddci_pid > 0, "stream pid mapped");
+    int sdt_ddci = add_pid_mapping_table(1, 17, 0, &d, 1);
+    ASSERT(sdt_ddci == 0, "transponder SDT maps to ddci 0 like PAT");
+    SPMT *save = pmts[0];
+    pmts.slot(0) = nullptr;
+    pushed_pids.clear();
+    _writev = cap_writev;
+    ddci_process_ts(&ad, &d);
+    _writev = writev;
+    pmts.slot(0) = save;
+    bool saw_stream = false, saw_transponder_sdt = false;
+    for (auto &pp : pushed_pids) {
+        if (pp.pid == ddci_pid && pp.marker)
+            saw_stream = true;
+        if (pp.pid == 17 && pp.marker)
+            saw_transponder_sdt = true;
+    }
+    free_fifo(&d.fifo);
+    ddci_devices[2] = nullptr;
+    a[1] = nullptr;
+    a[2] = nullptr;
+    ASSERT(saw_stream, "mapped stream pid pushed");
+    ASSERT(!saw_transponder_sdt, "transponder SDT dropped at the push");
+    return 0;
+}
+
+// #1565: ddci pid 17 carries the generated SDT, so no
+// collision remap may land on it.
+int test_ddci_find_ddci_pid_skips_sdt() {
+    ddci_device_t d = {};
+    d.id = 2;
+    for (int pid = 1; pid <= 16; pid++)
+        add_pid_mapping_table(2, pid, 0, &d, 0);
+    int remapped = find_ddci_pid(&d, 1);
+    del_pmt_mapping_table(&d, 2, 0);
+    ASSERT(remapped == 18, "remap skips reserved ddci pid 17");
+    return 0;
+}
 // The dump locks each device itself: calling it with d->mutex held
 // must return (a hang here fails via the ctest timeout).
 int test_dump_mapping_table_nested() {
@@ -3198,6 +3264,10 @@ int main() {
     TEST_FUNC(test_ddci_process_ts(), "testing ddci_process_ts");
     TEST_FUNC(test_ddci_process_ts_drops_tuner_pat(),
               "testing tuner PAT dropped at the push");
+    TEST_FUNC(test_ddci_process_ts_drops_transponder_sdt(),
+              "testing transponder SDT dropped at the push");
+    TEST_FUNC(test_ddci_find_ddci_pid_skips_sdt(),
+              "testing remap skips reserved ddci pid 17");
     TEST_FUNC(test_ddci_push_stop_joins_first(),
               "testing push stop joins before close");
     TEST_FUNC(test_dump_mapping_table_nested(),
