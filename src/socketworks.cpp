@@ -594,7 +594,8 @@ int sockets_add(int sock, USockAddr *sa, int sid, int type, socket_action a,
     if (!ss)
         LOG_AND_RETURN(-1, "sockets_add failed for socks %d", sock);
     int i = ss->id;
-    std::lock_guard<SMutex> lock(ss->mutex);
+    // No lock: nobody reaches the slot before enabled is set below, and
+    // locking it under the caller's adapter/stream lock inverts their order.
     ss->force_close = 0;
     ss->sock = sock;
     ss->nonblock = !!(type & TYPE_NONBLOCK);
@@ -867,6 +868,9 @@ void *select_and_execute(void *arg) {
                     // Hold lock while reading
                     {
                         std::lock_guard<SMutex> lock(master->mutex);
+                        // Deleted since the check above, maybe being refilled
+                        if (!ss->enabled || !master->enabled)
+                            continue;
 
                         if (!master->buf || master->buf == buf) {
                             master->buf = buf;
@@ -1011,6 +1015,8 @@ void *select_and_execute(void *arg) {
                         if (ss->sock == SOCK_TIMEOUT)
                             ss->rtime = getTick();
                         std::unique_lock<SMutex> lock(ss->mutex);
+                        if (!ss->enabled || !ss->timeout)
+                            continue; // deleted since, maybe being refilled
                         if (ss->timeout(ss)) {
                             lock.unlock();
                             sockets_del(ss->id);
@@ -1569,6 +1575,8 @@ int flush_socket_prio(sockets *s) {
 
 int flush_socket(sockets *s) {
     std::lock_guard<SMutex> lock(s->mutex);
+    if (!s->enabled) // deleted since the caller found it
+        return 0;
     flush_enqued_data_if_neededf_needed(s);
     if (s->force_close || s->prio_data_len) {
         return flush_socket_prio(s);
@@ -1592,6 +1600,8 @@ int sockets_set_handle(int sock_id, int new_handle) {
     }
 
     std::lock_guard<SMutex> lock(s->mutex);
+    if (!s->enabled) // deleted since get_sockets()
+        return -1;
     int old_handle = s->sock;
     s->sock = new_handle;
     LOG("sockets_set_handle: socket id %d, old handle %d -> new handle %d",
