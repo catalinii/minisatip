@@ -128,6 +128,7 @@ struct struct_adapter {
                                // stream, decrypt errors
     diseqc diseqc_param;
     int diseqc_multi;
+    int diseqc_voltage;        // ==0: target voltage; <>0: forced value
     int8_t absolute_table[MAX_SOURCES];
     int old_diseqc;
     int old_hiband;

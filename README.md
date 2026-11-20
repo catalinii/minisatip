@@ -63,11 +63,13 @@ Help
 * -z --cache-dir dir : set the app cache directory to dir. The directory will be created if it doesn't exist. 
 	* defaults to /var/cache/minisatip (/var/lib/minisatip on Enigma) 
 
-* -d --diseqc ADAPTER1:COMMITTED1-UNCOMMITTED1[,ADAPTER2:COMMITTED2-UNCOMMITTED2[,...]
+* -d --diseqc ADAPTER1[~|%]:COMMITTED1-UNCOMMITTED1[,ADAPTER2[~|%]:COMMITTED2-UNCOMMITTED2[,...]
 	* The first argument is the adapter number, second is the number of committed packets to send to a Diseqc 1.0 switch, third the number of uncommitted commands to sent to a Diseqc 1.1 switch
 	The higher number between the committed and uncommitted will be sent first.
 	* eg: -d 0:1-0  (which is the default for each adapter).
 	- note: * as adapter means apply to all adapters
+	- note: ~ before : forces 13V voltage
+	- note: % before : forces 18V voltage
 	- note: * before committed number enables fast-switch (only voltage/tone)
 	- note: @ before committed number sets 'Any Device' diseqc address (0x00)
 	- note: . before committed number sets 'LNB' diseqc address (0x11)

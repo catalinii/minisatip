@@ -346,11 +346,13 @@ Help\n\
 * -z --cache-dir dir : set the app cache directory to dir. The directory will be created if it doesn't exist. \n\
 	* defaults to /var/cache/minisatip (/var/lib/minisatip on Enigma) \n\
 \n\
-* -d --diseqc ADAPTER1:COMMITTED1-UNCOMMITTED1[,ADAPTER2:COMMITTED2-UNCOMMITTED2[,...]\n\
+* -d --diseqc ADAPTER1[~|%%]:COMMITTED1-UNCOMMITTED1[,ADAPTER2[~|%%]:COMMITTED2-UNCOMMITTED2[,...]\n\
 \t* The first argument is the adapter number, second is the number of committed packets to send to a Diseqc 1.0 switch, third the number of uncommitted commands to sent to a Diseqc 1.1 switch\n\
 \tThe higher number between the committed and uncommitted will be sent first.\n\
 	* eg: -d 0:1-0  (which is the default for each adapter).\n\
 	- note: * as adapter means apply to all adapters\n\
+	- note: ~ before : forces 13V voltage\n\
+	- note: %% before : forces 18V voltage\n\
 	- note: * before committed number enables fast-switch (only voltage/tone)\n\
 	- note: @ before committed number sets 'Any Device' diseqc address (0x00)\n\
 	- note: . before committed number sets 'LNB' diseqc address (0x11)\n\
@@ -675,6 +677,7 @@ void set_options(int argc, char *argv[]) {
     opts.diseqc_after_tone = 0;
     opts.diseqc_committed_no = 1;
     opts.diseqc_multi = -1;
+    opts.diseqc_voltage = 0;
     opts.lnb_low = (9750 * 1000UL);
     opts.lnb_high = (10600 * 1000UL);
     opts.lnb_circular = (10750 * 1000UL);

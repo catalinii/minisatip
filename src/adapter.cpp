@@ -97,6 +97,7 @@ adapter *adapter_alloc() {
     ad->dmx_source = -1;
     ad->master_source = -1;
     ad->diseqc_multi = opts.diseqc_multi;
+    ad->diseqc_voltage = opts.diseqc_voltage;
 
     /* LOF setup */
     ad->diseqc_param.lnb_low = opts.lnb_low;
@@ -1676,12 +1677,13 @@ void set_unicable_adapters(char *o, int type) {
 }
 
 void set_diseqc_adapters(char *o) {
-    int a_id, fast, addr, committed_no, uncommitted_no;
+    int a_id, fast, addr, committed_no, uncommitted_no, diseqc_voltage;
     adapter *ad;
     if (!o)
         return;
     auto arg = split(o, ',');
     for (const auto &token : arg) {
+        diseqc_voltage = 0;
         if (!token.empty() && token[0] == '*') {
             ad = NULL;
             a_id = -1;
@@ -1700,6 +1702,15 @@ void set_diseqc_adapters(char *o) {
         if (colon_pos == std::string_view::npos ||
             dash_pos == std::string_view::npos)
             continue;
+
+        if (colon_pos > 0 && (token[colon_pos - 1] == '~' ||
+                              token[colon_pos - 1] == '%') ) {
+            if (token[colon_pos - 1] == '~') {
+                diseqc_voltage = 13;
+            } else {
+                diseqc_voltage = 18;
+            }
+        }
 
         size_t offset = colon_pos + 1;
         fast = 0;
@@ -1727,11 +1738,13 @@ void set_diseqc_adapters(char *o) {
             ad->diseqc_param.addr = addr;
             ad->diseqc_param.committed_no = committed_no;
             ad->diseqc_param.uncommitted_no = uncommitted_no;
+            ad->diseqc_voltage = diseqc_voltage;
         } else {
             opts.diseqc_fast = fast;
             opts.diseqc_addr = addr;
             opts.diseqc_committed_no = committed_no;
             opts.diseqc_uncommitted_no = uncommitted_no;
+            opts.diseqc_voltage = diseqc_voltage;
             int j;
             for (j = 0; j < MAX_ADAPTERS; j++)
                 if (a[j]) {
@@ -1739,11 +1752,12 @@ void set_diseqc_adapters(char *o) {
                     a[j]->diseqc_param.addr = addr;
                     a[j]->diseqc_param.committed_no = committed_no;
                     a[j]->diseqc_param.uncommitted_no = uncommitted_no;
+                    a[j]->diseqc_voltage = diseqc_voltage;
                 }
         }
         LOG("Setting diseqc adapter %d fast %d addr 0x%02x committed_no %d "
-            "uncommitted_no %d",
-            a_id, fast, addr, committed_no, uncommitted_no);
+            "uncommitted_no %d diseqc_voltage %d",
+            a_id, fast, addr, committed_no, uncommitted_no, diseqc_voltage);
     }
 }
 

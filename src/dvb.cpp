@@ -1003,11 +1003,11 @@ int send_diseqc(adapter *ad, int fd, int pos, int pos_change, int pol,
 
     if (!d->fast || pos_change) {
 
-        // Use 18V/No-Tone to send DiseqC commands
         if (ioctl(fd, FE_SET_TONE, SEC_TONE_OFF) == -1)
             LOG("send_diseqc: FE_SET_TONE failed for fd %d: %s", fd,
                 strerror(errno));
-        if (ioctl(fd, FE_SET_VOLTAGE, SEC_VOLTAGE_18) == -1)
+        // Force 13/18v or use the target voltage
+        if (ioctl(fd, FE_SET_VOLTAGE, (ad->diseqc_voltage == 18 || (ad->diseqc_voltage == 0 && pol)) ? SEC_VOLTAGE_18 : SEC_VOLTAGE_13) == -1)
             LOG("send_diseqc: FE_SET_VOLTAGE failed for fd %d: %s", fd,
                 strerror(errno));
 
@@ -1029,11 +1029,11 @@ int send_diseqc(adapter *ad, int fd, int pos, int pos_change, int pol,
         sleep_msec(d->after_burst);
     }
 
-    if (ioctl(fd, FE_SET_TONE, hiband ? SEC_TONE_ON : SEC_TONE_OFF) == -1)
-        LOG("send_diseqc: FE_SET_TONE failed for fd %d: %s", fd,
-            strerror(errno));
     if (ioctl(fd, FE_SET_VOLTAGE, pol ? SEC_VOLTAGE_18 : SEC_VOLTAGE_13) == -1)
         LOG("send_diseqc: FE_SET_VOLTAGE failed for fd %d: %s", fd,
+            strerror(errno));
+    if (ioctl(fd, FE_SET_TONE, hiband ? SEC_TONE_ON : SEC_TONE_OFF) == -1)
+        LOG("send_diseqc: FE_SET_TONE failed for fd %d: %s", fd,
             strerror(errno));
 
     sleep_msec(d->after_tone);
