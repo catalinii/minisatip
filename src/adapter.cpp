@@ -1685,7 +1685,6 @@ void set_unicable_adapters(char *o, int type) {
 void set_diseqc_adapters(char *o) {
     int a_id, fast, committed_no, uncommitted_no, diseqc_voltage;
     uint8_t addr;
-
     adapter *ad;
     if (!o)
         return;
