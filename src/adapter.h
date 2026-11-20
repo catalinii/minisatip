@@ -130,7 +130,7 @@ struct struct_adapter {
     diseqc diseqc_param;
     int diseqc_multi;
     int diseqc_voltage;        // ==0: target voltage; <>0: forced value
-    int8_t absolute_table[MAX_SOURCES];
+    int absolute_table[MAX_SOURCES];
     int old_diseqc;
     int old_hiband;
     int old_pol;
