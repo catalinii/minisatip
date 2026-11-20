@@ -996,14 +996,15 @@ int send_diseqc(adapter *ad, int fd, int pos, int pos_change, int pol,
     if (ad->wakeup)
         ad->wakeup(ad, fd, pol ? SEC_VOLTAGE_18 : SEC_VOLTAGE_13);
 
-    if (ioctl(fd, FE_SET_TONE, SEC_TONE_OFF) == -1)
-        LOG("send_diseqc: FE_SET_TONE failed for fd %d: %s", fd,
-            strerror(errno));
-    if (ioctl(fd, FE_SET_VOLTAGE, pol ? SEC_VOLTAGE_18 : SEC_VOLTAGE_13) == -1)
-        LOG("send_diseqc: FE_SET_VOLTAGE failed for fd %d: %s", fd,
-            strerror(errno));
-
     if (!d->fast || pos_change) {
+
+        if (ioctl(fd, FE_SET_TONE, SEC_TONE_OFF) == -1)
+            LOG("send_diseqc: FE_SET_TONE failed for fd %d: %s", fd,
+                strerror(errno));
+        // Force 13/18v or use the target voltage
+        if (ioctl(fd, FE_SET_VOLTAGE, (ad->diseqc_voltage == 18 || (ad->diseqc_voltage == 0 && pol)) ? SEC_VOLTAGE_18 : SEC_VOLTAGE_13) == -1)
+            LOG("send_diseqc: FE_SET_VOLTAGE failed for fd %d: %s", fd,
+                strerror(errno));
 
         if (uncommitted_first)
             diseqc_cmd(fd, uncommitted_no, "uncommitted", &uncmd, d);
@@ -1019,10 +1020,13 @@ int send_diseqc(adapter *ad, int fd, int pos, int pos_change, int pol,
                   (pos & 1) ? SEC_MINI_B : SEC_MINI_A) == -1)
             LOG("send_diseqc: FE_DISEQC_SEND_BURST failed for fd %d: %s", fd,
                 strerror(errno));
+
+        sleep_msec(d->after_burst);
     }
 
-    sleep_msec(d->after_burst);
-
+    if (ioctl(fd, FE_SET_VOLTAGE, pol ? SEC_VOLTAGE_18 : SEC_VOLTAGE_13) == -1)
+        LOG("send_diseqc: FE_SET_VOLTAGE failed for fd %d: %s", fd,
+            strerror(errno));
     if (ioctl(fd, FE_SET_TONE, hiband ? SEC_TONE_ON : SEC_TONE_OFF) == -1)
         LOG("send_diseqc: FE_SET_TONE failed for fd %d: %s", fd,
             strerror(errno));
