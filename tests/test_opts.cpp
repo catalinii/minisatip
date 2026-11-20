@@ -31,10 +31,10 @@ void _reset_dvbapi_opts() {
     memset(opts.dvbapi_host, 0, sizeof(opts.dvbapi_host));
 }
 
-void _parse_dvbapi_opt(char *optarg) {
-    LOG("Parsing \"%s\"", optarg);
+void _parse_dvbapi_opt(const char *arg) {
+    LOG("Parsing \"%s\"", arg);
     _reset_dvbapi_opts();
-    parse_dvbapi_opt(optarg, &opts);
+    parse_dvbapi_opt(arg, &opts);
 }
 
 int test_parse_dvbapi_opt() {

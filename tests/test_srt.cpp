@@ -52,13 +52,13 @@ int test_srt_listener_drain_and_close() {
         ASSERT(c != SRT_INVALID_SOCK, "client socket create");
         char sid[32];
         snprintf(sid, sizeof(sid), "test-%d", i);
-        srt_setsockflag(c, SRTO_STREAMID, sid, strlen(sid));
+        srt_setsockflag(c, SRTO_STREAMID, sid, static_cast<int>(strlen(sid)));
         int conntimeo = 1500;
         srt_setsockflag(c, SRTO_CONNTIMEO, &conntimeo, sizeof(conntimeo));
         struct sockaddr_in sa = {};
         sa.sin_family = AF_INET;
         sa.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-        sa.sin_port = htons(opts.rtsp_port);
+        sa.sin_port = htons(static_cast<uint16_t>(opts.rtsp_port));
         int rc = srt_connect(c, (struct sockaddr *)&sa, sizeof(sa));
         ASSERT(rc != SRT_ERROR, "client connect must succeed");
         SRTSOCKET srv = SRT_INVALID_SOCK;

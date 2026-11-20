@@ -54,7 +54,7 @@ int get_max_descramblers(int ca_fd) {
         LOG("hw_descrambler: CA_GET_DESCR_INFO returned %u hardware "
             "descrambler slots",
             info.num);
-        return info.num;
+        return static_cast<int>(info.num);
     }
     LOG("hw_descrambler: CA_GET_DESCR_INFO unavailable, defaulting to %d slots",
         DEFAULT_MAX_DESCRAMBLERS);
@@ -78,7 +78,7 @@ class HwSlotManager {
     AdapterCaState *get_state(int physical_adapter_id) {
         if (physical_adapter_id < 0 || physical_adapter_id >= MAX_ADAPTERS)
             return nullptr;
-        return &adapters_[physical_adapter_id];
+        return &adapters_[static_cast<size_t>(physical_adapter_id)];
     }
 
   public:
@@ -139,21 +139,22 @@ class HwSlotManager {
         if (ca->num_descramblers <= 0)
             ca->num_descramblers = DEFAULT_MAX_DESCRAMBLERS;
 
-        const int max_desc = std::min(ca->num_descramblers, MAX_SLOTS);
+        const size_t max_desc =
+            static_cast<size_t>(std::min(ca->num_descramblers, MAX_SLOTS));
 
-        for (int i = 0; i < max_desc; ++i) {
+        for (size_t i = 0; i < max_desc; ++i) {
             if (ca->pmt_slots[i] == pmt_id) {
-                return i;
+                return static_cast<int>(i);
             }
         }
 
-        for (int i = 0; i < max_desc; ++i) {
+        for (size_t i = 0; i < max_desc; ++i) {
             if (ca->pmt_slots[i] == -1) {
                 ca->pmt_slots[i] = pmt_id;
                 LOG("hw_descrambler: Allocated hardware descrambler slot index "
-                    "%d for PMT %d on physical adapter %d",
+                    "%zu for PMT %d on physical adapter %d",
                     i, pmt_id, physical_adapter_id);
-                return i;
+                return static_cast<int>(i);
             }
         }
 
@@ -169,12 +170,13 @@ class HwSlotManager {
         if (!ca)
             return;
 
-        const int max_desc = std::min(ca->num_descramblers, MAX_SLOTS);
+        const size_t max_desc =
+            static_cast<size_t>(std::min(ca->num_descramblers, MAX_SLOTS));
 
-        for (int i = 0; i < max_desc; ++i) {
+        for (size_t i = 0; i < max_desc; ++i) {
             if (ca->pmt_slots[i] == pmt_id) {
                 LOG("hw_descrambler: Released hardware descrambler slot index "
-                    "%d for PMT %d on physical adapter %d",
+                    "%zu for PMT %d on physical adapter %d",
                     i, pmt_id, physical_adapter_id);
                 ca->pmt_slots[i] = -1;
                 break;
@@ -307,6 +309,8 @@ void hw_set_cw(SCW *cw, SPMT *pmt) {
             pmt_id, ad->pa);
         return;
     }
+    const unsigned slot = static_cast<unsigned>(k->slot_index);
+    const unsigned parity = static_cast<unsigned>(cw->parity);
 
     LOG("hw_descrambler: hw_set_cw called for PMT %d, adapter %d "
         "(pa %d, ca %d), slot %d/%d, algo %d, parity %d",
@@ -316,8 +320,8 @@ void hw_set_cw(SCW *cw, SPMT *pmt) {
     // 1. Configure Hardware Descrambler Algorithm Mode using pmt.h CA_ALGO_*
     // values
     struct ca_descr_mode mode_cmd{};
-    mode_cmd.index = k->slot_index;
-    mode_cmd.algo = cw->algo;
+    mode_cmd.index = slot;
+    mode_cmd.algo = static_cast<unsigned>(cw->algo);
     mode_cmd.cipher_mode = (cw->algo == CA_ALGO_AES128_CBC) ? 1 : 0;
 
     const int res_mode = ioctl(k->ca_fd, CA_SET_DESCR_MODE, &mode_cmd);
@@ -329,7 +333,7 @@ void hw_set_cw(SCW *cw, SPMT *pmt) {
     // 2. Bind PMT PIDs to Hardware Descrambler Slot
     for (std::size_t i = 0; i < pmt->stream_pids.size(); ++i) {
         struct ca_pid pid_cmd{};
-        pid_cmd.pid = pmt->stream_pids[i].pid;
+        pid_cmd.pid = static_cast<unsigned>(pmt->stream_pids[i].pid);
         pid_cmd.index = k->slot_index;
         const int res_pid = ioctl(k->ca_fd, CA_SET_PID, &pid_cmd);
         LOG("hw_descrambler: CA_SET_PID ioctl (pid=%d, slot=%d) -> result=%d%s",
@@ -340,8 +344,8 @@ void hw_set_cw(SCW *cw, SPMT *pmt) {
     // 3. Program Control Word (CW) and IV into Hardware Registers
     if (cw->algo == CA_ALGO_DVBCSA) {
         struct ca_descr descr{};
-        descr.index = k->slot_index;
-        descr.parity = cw->parity;
+        descr.index = slot;
+        descr.parity = parity;
         std::memcpy(descr.cw, cw->cw, 8);
         const int res_descr = ioctl(k->ca_fd, CA_SET_DESCR, &descr);
         LOG("hw_descrambler: CA_SET_DESCR (DVBCSA) ioctl (slot=%d, parity=%d) "
@@ -351,8 +355,8 @@ void hw_set_cw(SCW *cw, SPMT *pmt) {
     } else {
         // AES-128 16-byte Key
         struct ca_descr_data data_cmd{};
-        data_cmd.index = k->slot_index;
-        data_cmd.parity = cw->parity;
+        data_cmd.index = slot;
+        data_cmd.parity = parity;
         data_cmd.data_type = 0; // 0 = CW / Key
         data_cmd.data_len = 16;
         std::memcpy(data_cmd.data, cw->cw, 16);
@@ -365,8 +369,8 @@ void hw_set_cw(SCW *cw, SPMT *pmt) {
         // AES-128 16-byte IV (for CBC mode)
         if (cw->algo == CA_ALGO_AES128_CBC) {
             data_cmd = {};
-            data_cmd.index = k->slot_index;
-            data_cmd.parity = cw->parity;
+            data_cmd.index = slot;
+            data_cmd.parity = parity;
             data_cmd.data_type = 1; // 1 = IV
             data_cmd.data_len = 16;
             std::memcpy(data_cmd.data, cw->iv, 16);
@@ -422,7 +426,7 @@ static void hw_unbind_pids(int pa, const char *device_path,
         return;
     for (int pid : pids) {
         struct ca_pid pid_cmd{};
-        pid_cmd.pid = pid;
+        pid_cmd.pid = static_cast<unsigned>(pid);
         pid_cmd.index = -1; // -1 unbinds PID
         ioctl(ca_fd, CA_SET_PID, &pid_cmd);
     }

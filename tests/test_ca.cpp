@@ -19,6 +19,7 @@
  */
 #include "adapter.h"
 #include "ca.h"
+#include "ddci.h"
 #include "dvb.h"
 #include "minisatip.h"
 #include "socketworks.h"
@@ -61,7 +62,9 @@ SCAPMT *add_pmt_to_capmt(ca_device_t *d, SPMT *pmt, int multiple,
                          int *rejoined = NULL);
 int dvbca_del_pmt(adapter *ad, SPMT *spmt);
 extern ca_device_t *ca_devices[MAX_ADAPTERS];
+extern ddci_device_t *ddci_devices[MAX_ADAPTERS];
 extern int dvbca_id;
+extern int has_ci;
 extern SCA ca[];
 extern std::atomic<int> nca;
 int get_active_capmts(ca_device_t *d);
@@ -69,11 +72,14 @@ int dvbca_init_dev(adapter *ad);
 int dvbca_close_dev(adapter *ad);
 int ca_timeout(sockets *s);
 int ca_read(sockets *s);
-int ca_write_apdu(ca_session_t *s, int tag, const void *data, int len);
+int ca_write_apdu(ca_session_t *s, int tag, const void *data, size_t len);
 int ca_read_apdu(ca_session_t *session, uint8_t *buf, int buf_len);
 int ca_read_tpdu(int socket, void *buf, int buf_len, sockets *ss, int *rb);
 int ca_read_enigma(int socket, void *buf, int len, sockets *ss, int *rb);
 int get_enabled_pmts_for_ca(ca_device_t *d);
+int APP_MMI_handler(ca_session_t *session, int resource, uint8_t *buffer,
+                    int len);
+int APP_CA_handler(ca_session_t *session, int resource, uint8_t *data, int len);
 
 ca_device_t d;
 
@@ -107,10 +113,11 @@ int test_create_capmt_not_selected() {
     pmt_add_stream_pid(pmt, 0x501, 2, false, true);
     pmt_add_stream_pid(pmt, 0x502, 3, true, false);
 
-    SCAPMT scapmt = {.pmt_id = pmt->id,
-                     .other_id = {PMT_INVALID, PMT_INVALID},
-                     .version = 2,
-                     .sid = 0x1234};
+    SCAPMT scapmt = {};
+    scapmt.pmt_id = pmt_id;
+    scapmt.other_id[0] = scapmt.other_id[1] = PMT_INVALID;
+    scapmt.version = 2;
+    scapmt.sid = 0x1234;
 
     uint8_t capmt[1500];
     int len = create_capmt(&scapmt, CLM_UPDATE, capmt, sizeof(capmt),
@@ -120,7 +127,7 @@ int test_create_capmt_not_selected() {
     hexdump("CAPMT: ", capmt, len);
 
     ASSERT(capmt[0] == CLM_UPDATE, "ca_pmt_list_management incorrect");
-    uint16_t sid = (capmt[1] << 8) | capmt[2];
+    int sid = (capmt[1] << 8) | capmt[2];
     ASSERT(sid == 0x1234, "program_number incorrect");
     ASSERT(capmt[11] == CA_PMT_CMD_ID_NOT_SELECTED,
            "stream PID 1 should be released");
@@ -210,10 +217,11 @@ int test_create_capmt_single_clear() {
     pmt_add_stream_pid(pmt, 0x501, 2, false, true);
     pmt_add_stream_pid(pmt, 0x502, 3, true, false);
 
-    SCAPMT scampt = {.pmt_id = pmt->id,
-                     .other_id = {PMT_INVALID, PMT_INVALID},
-                     .version = 1,
-                     .sid = 0x1234};
+    SCAPMT scampt = {};
+    scampt.pmt_id = pmt_id;
+    scampt.other_id[0] = scampt.other_id[1] = PMT_INVALID;
+    scampt.version = 1;
+    scampt.sid = 0x1234;
 
     uint8_t capmt[1500];
     int len = create_capmt(&scampt, CLM_ONLY, capmt, sizeof(capmt),
@@ -223,13 +231,13 @@ int test_create_capmt_single_clear() {
     hexdump("CAPMT: ", capmt, len);
 
     ASSERT(capmt[0] == CLM_ONLY, "ca_pmt_list_management incorrect");
-    uint16_t sid = (capmt[1] << 8) | capmt[2];
+    int sid = (capmt[1] << 8) | capmt[2];
     ASSERT(sid == 0x1234, "program_number incorrect");
     uint8_t version = (capmt[3] & 0x3E) >> 1;
     ASSERT(version == 1, "version incorrect");
     bool current_next_indicator = (capmt[3] & 1) == 1;
     ASSERT(current_next_indicator == true, "current next indicator wrong");
-    uint16_t pi_len = (capmt[4] << 8) | capmt[5];
+    int pi_len = (capmt[4] << 8) | capmt[5];
     ASSERT(pi_len == 0, "program info length incorrect");
     ASSERT(capmt[6] == 2, "stream PID 1 service type incorrect");
     ASSERT(capmt[11] == 3, "stream PID 2 service type incorrect");
@@ -245,10 +253,11 @@ int test_capmt_content_hash_masks_version_and_listmgmt() {
     pmt_add_stream_pid(pmt, 0x501, 2, false, true);
     pmt_add_stream_pid(pmt, 0x502, 3, true, false);
 
-    SCAPMT scampt = {.pmt_id = pmt->id,
-                     .other_id = {PMT_INVALID, PMT_INVALID},
-                     .version = 1,
-                     .sid = 0x1234};
+    SCAPMT scampt = {};
+    scampt.pmt_id = pmt_id;
+    scampt.other_id[0] = scampt.other_id[1] = PMT_INVALID;
+    scampt.version = 1;
+    scampt.sid = 0x1234;
 
     uint8_t capmt[1500], other[1500];
     int len = create_capmt(&scampt, CLM_ONLY, capmt, sizeof(capmt),
@@ -260,18 +269,18 @@ int test_capmt_content_hash_masks_version_and_listmgmt() {
     ASSERT(capmt_content_hash(capmt, len) == hash, "hash should be stable");
     ASSERT(capmt[3] == ver_byte, "hash must restore the version byte");
 
-    memcpy(other, capmt, len);
+    memcpy(other, capmt, static_cast<size_t>(len));
     other[3] ^= 0x3E; // version bits only
     ASSERT(capmt_content_hash(other, len) == hash,
            "version-only change must not flip the hash");
     ASSERT(other[3] == (capmt[3] ^ 0x3E), "test setup broken");
 
-    memcpy(other, capmt, len);
+    memcpy(other, capmt, static_cast<size_t>(len));
     other[3] ^= 0x01; // current/next bit is content, not version
     ASSERT(capmt_content_hash(other, len) != hash,
            "non-version bit change must flip the hash");
 
-    memcpy(other, capmt, len);
+    memcpy(other, capmt, static_cast<size_t>(len));
     other[0] ^= 0xFF; // list management
     ASSERT(capmt_content_hash(other, len) == hash,
            "list management change must not flip the hash");
@@ -283,7 +292,7 @@ int test_capmt_content_hash_masks_version_and_listmgmt() {
     ASSERT(capmt_content_hash(other, ulen) == hash,
            "ONLY->UPDATE flip alone must not flip the hash");
 
-    memcpy(other, capmt, len);
+    memcpy(other, capmt, static_cast<size_t>(len));
     other[len - 1] ^= 0xFF; // stream tail
     ASSERT(capmt_content_hash(other, len) != hash,
            "content change must flip the hash");
@@ -298,10 +307,11 @@ int test_create_capmt_single_pmt_scrambled() {
     pmt_add_stream_pid(pmt, 0x501, 2, false, true);
     pmt_add_stream_pid(pmt, 0x502, 3, true, false);
 
-    SCAPMT scampt = {.pmt_id = pmt->id,
-                     .other_id = {PMT_INVALID, PMT_INVALID},
-                     .version = 1,
-                     .sid = 0x1234};
+    SCAPMT scampt = {};
+    scampt.pmt_id = pmt_id;
+    scampt.other_id[0] = scampt.other_id[1] = PMT_INVALID;
+    scampt.version = 1;
+    scampt.sid = 0x1234;
 
     uint8_t capmt[1500];
     int len = create_capmt(&scampt, CLM_ONLY, capmt, sizeof(capmt),
@@ -311,13 +321,13 @@ int test_create_capmt_single_pmt_scrambled() {
     hexdump("CAPMT: ", capmt, len);
 
     // Descriptors should have been added on the stream-level, not program level
-    uint16_t pi_len = (capmt[4] << 8) | capmt[5];
+    int pi_len = (capmt[4] << 8) | capmt[5];
     ASSERT(pi_len == 0, "program info length incorrect");
     ASSERT(capmt[6] == 2, "stream PID 1 service type incorrect");
-    uint16_t stream1_es_len = (capmt[9] << 8) | capmt[10];
+    int stream1_es_len = (capmt[9] << 8) | capmt[10];
     ASSERT(stream1_es_len == 7, "stream PID 1 ES info length incorrect");
     ASSERT(capmt[18] == 3, "stream PID 2 service type incorrect");
-    uint16_t stream2_es_len = (capmt[21] << 8) | capmt[22];
+    int stream2_es_len = (capmt[21] << 8) | capmt[22];
     ASSERT(stream2_es_len == 7, "stream PID 1 ES info length incorrect");
 
     return 0;
@@ -380,11 +390,12 @@ int test_capmt_single_star_packs_two() {
     dev.multiple_pmt = 1;
     dev.max_ca_pmt = 1;
 
-    int a = pmt_add(0, 1100, 1100), b = pmt_add(0, 1101, 1101),
-        c = pmt_add(0, 1102, 1102);
-    ASSERT(add_pmt_to_capmt(&dev, get_pmt(a), 1) == dev.capmt, "first PMT");
-    ASSERT(add_pmt_to_capmt(&dev, get_pmt(b), 1) == dev.capmt, "packed PMT");
-    ASSERT(add_pmt_to_capmt(&dev, get_pmt(c), 1) == NULL,
+    int first = pmt_add(0, 1100, 1100), second = pmt_add(0, 1101, 1101),
+        third = pmt_add(0, 1102, 1102);
+    ASSERT(add_pmt_to_capmt(&dev, get_pmt(first), 1) == dev.capmt, "first PMT");
+    ASSERT(add_pmt_to_capmt(&dev, get_pmt(second), 1) == dev.capmt,
+           "packed PMT");
+    ASSERT(add_pmt_to_capmt(&dev, get_pmt(third), 1) == NULL,
            "a third PMT should not fit with a single '*'");
     return 0;
 }
@@ -399,8 +410,12 @@ int test_create_capmt_three_pmts() {
         pmt_add_stream_pid(pmt, 0x800 + i * 0x10, 2, false, true);
         pmt_add_stream_pid(pmt, 0x801 + i * 0x10, 3, true, false);
     }
-    SCAPMT scapmt = {
-        .pmt_id = p[0], .other_id = {p[1], p[2]}, .version = 1, .sid = 0x1234};
+    SCAPMT scapmt = {};
+    scapmt.pmt_id = p[0];
+    scapmt.other_id[0] = p[1];
+    scapmt.other_id[1] = p[2];
+    scapmt.version = 1;
+    scapmt.sid = 0x1234;
 
     uint8_t capmt[1500];
     int len = create_capmt(&scapmt, CLM_ONLY, capmt, sizeof(capmt),
@@ -429,14 +444,17 @@ int test_create_capmt_multiple_pmt_scrambled() {
 
     pmt_id = pmt_add(0, 0x200, 0x201);
     SPMT *other = get_pmt(pmt_id);
+    ASSERT(other, "PMT not found");
     pmt_add_caid(other, 0x0B01, 0xABC, nullptr, 0);
     pmt_add_stream_pid(other, 0x601, 2, false, true);
     pmt_add_stream_pid(other, 0x602, 3, true, false);
 
-    SCAPMT scampt = {.pmt_id = pmt->id,
-                     .other_id = {other->id, PMT_INVALID},
-                     .version = 1,
-                     .sid = 0x1234};
+    SCAPMT scampt = {};
+    scampt.pmt_id = pmt->id;
+    scampt.other_id[0] = other->id;
+    scampt.other_id[1] = PMT_INVALID;
+    scampt.version = 1;
+    scampt.sid = 0x1234;
 
     uint8_t capmt[1500];
     int len = create_capmt(&scampt, CLM_ONLY, capmt, sizeof(capmt),
@@ -446,21 +464,21 @@ int test_create_capmt_multiple_pmt_scrambled() {
     hexdump("CAPMT: ", capmt, len);
 
     // Descriptors should have been added on the stream-level, not program level
-    uint16_t pi_len = (capmt[4] << 8) | capmt[5];
+    int pi_len = (capmt[4] << 8) | capmt[5];
     ASSERT(pi_len == 0, "program info length incorrect");
     ASSERT(capmt[6] == 2, "stream PID 1 service type incorrect");
-    uint16_t stream1_es_len = (capmt[9] << 8) | capmt[10];
+    int stream1_es_len = (capmt[9] << 8) | capmt[10];
     ASSERT(stream1_es_len == 7, "stream PID 1 ES info length incorrect");
     ASSERT(capmt[18] == 3, "stream PID 2 service type incorrect");
-    uint16_t stream2_es_len = (capmt[21] << 8) | capmt[22];
+    int stream2_es_len = (capmt[21] << 8) | capmt[22];
     ASSERT(stream2_es_len == 7, "stream PID 1 ES info length incorrect");
 
     // Stream PIDs from other PMT should be present too
     ASSERT(capmt[30] == 2, "stream PID 3 service type incorrect");
-    uint16_t stream3_es_len = (capmt[33] << 8) | capmt[34];
+    int stream3_es_len = (capmt[33] << 8) | capmt[34];
     ASSERT(stream3_es_len == 7, "stream PID 3 ES info length incorrect");
     ASSERT(capmt[42] == 3, "stream PID 3 service type incorrect");
-    uint16_t stream4_es_len = (capmt[45] << 8) | capmt[46];
+    int stream4_es_len = (capmt[45] << 8) | capmt[46];
     ASSERT(stream4_es_len == 7, "stream PID 4 ES info length incorrect");
     return 0;
 }
@@ -470,10 +488,11 @@ int test_create_capmt_different_listmgmt() {
     SPMT *pmt = get_pmt(pmt_id);
     pmt_add_stream_pid(pmt, 0x501, 2, false, true);
 
-    SCAPMT scampt = {.pmt_id = pmt->id,
-                     .other_id = {PMT_INVALID, PMT_INVALID},
-                     .version = 1,
-                     .sid = 0x1234};
+    SCAPMT scampt = {};
+    scampt.pmt_id = pmt_id;
+    scampt.other_id[0] = scampt.other_id[1] = PMT_INVALID;
+    scampt.version = 1;
+    scampt.sid = 0x1234;
 
     uint8_t capmt[1500];
     int len;
@@ -517,10 +536,11 @@ int test_create_capmt_different_cmd_ids() {
     pmt_add_caid(pmt, 0x0B00, 0x573, nullptr, 0);
     pmt_add_stream_pid(pmt, 0x501, 2, false, true);
 
-    SCAPMT scampt = {.pmt_id = pmt->id,
-                     .other_id = {PMT_INVALID, PMT_INVALID},
-                     .version = 1,
-                     .sid = 0x1234};
+    SCAPMT scampt = {};
+    scampt.pmt_id = pmt_id;
+    scampt.other_id[0] = scampt.other_id[1] = PMT_INVALID;
+    scampt.version = 1;
+    scampt.sid = 0x1234;
 
     uint8_t capmt[1500];
     int len;
@@ -549,10 +569,11 @@ int test_create_capmt_different_cmd_ids() {
 }
 
 int test_create_capmt_invalid_pmt() {
-    SCAPMT scampt = {.pmt_id = 9999, // invalid PMT ID
-                     .other_id = {PMT_INVALID, PMT_INVALID},
-                     .version = 1,
-                     .sid = 0x1234};
+    SCAPMT scampt = {};
+    scampt.pmt_id = 9999; // invalid PMT ID
+    scampt.other_id[0] = scampt.other_id[1] = PMT_INVALID;
+    scampt.version = 1;
+    scampt.sid = 0x1234;
 
     uint8_t capmt[1500];
     int len = create_capmt(&scampt, CLM_ONLY, capmt, sizeof(capmt),
@@ -568,10 +589,11 @@ int test_create_capmt_max_version() {
     SPMT *pmt = get_pmt(pmt_id);
     pmt_add_stream_pid(pmt, 0x501, 2, false, true);
 
-    SCAPMT scampt = {.pmt_id = pmt->id,
-                     .other_id = {PMT_INVALID, PMT_INVALID},
-                     .version = 15, // max 4-bit version
-                     .sid = 0x1234};
+    SCAPMT scampt = {};
+    scampt.pmt_id = pmt_id;
+    scampt.other_id[0] = scampt.other_id[1] = PMT_INVALID;
+    scampt.version = 15; // max 4-bit version
+    scampt.sid = 0x1234;
 
     uint8_t capmt[1500];
     int len = create_capmt(&scampt, CLM_ONLY, capmt, sizeof(capmt),
@@ -589,17 +611,18 @@ int test_create_capmt_large_sid() {
     SPMT *pmt = get_pmt(pmt_id);
     pmt_add_stream_pid(pmt, 0x501, 2, false, true);
 
-    SCAPMT scampt = {.pmt_id = pmt->id,
-                     .other_id = {PMT_INVALID, PMT_INVALID},
-                     .version = 1,
-                     .sid = 0xFFFF}; // max 16-bit SID
+    SCAPMT scampt = {};
+    scampt.pmt_id = pmt_id;
+    scampt.other_id[0] = scampt.other_id[1] = PMT_INVALID;
+    scampt.version = 1;
+    scampt.sid = 0xFFFF; // max 16-bit SID
 
     uint8_t capmt[1500];
     int len = create_capmt(&scampt, CLM_ONLY, capmt, sizeof(capmt),
                            CMD_ID_OK_DESCRAMBLING, 0);
 
     ASSERT(len > 0, "create_capmt failed");
-    uint16_t sid = (capmt[1] << 8) | capmt[2];
+    int sid = (capmt[1] << 8) | capmt[2];
     ASSERT(sid == 0xFFFF, "SID should be 0xFFFF");
 
     return 0;
@@ -623,10 +646,12 @@ int test_create_capmt_both_pmt_and_other_with_caids() {
     pmt_add_stream_pid(other, 0x601, 2, false, true);
     pmt_add_stream_pid(other, 0x602, 3, true, false);
 
-    SCAPMT scampt = {.pmt_id = pmt->id,
-                     .other_id = {other->id, PMT_INVALID},
-                     .version = 1,
-                     .sid = 0x1234};
+    SCAPMT scampt = {};
+    scampt.pmt_id = pmt->id;
+    scampt.other_id[0] = other->id;
+    scampt.other_id[1] = PMT_INVALID;
+    scampt.version = 1;
+    scampt.sid = 0x1234;
 
     uint8_t capmt[1500];
     int len = create_capmt(&scampt, CLM_ONLY, capmt, sizeof(capmt),
@@ -640,7 +665,7 @@ int test_create_capmt_both_pmt_and_other_with_caids() {
 
     // Header checks
     ASSERT(capmt[0] == CLM_ONLY, "ca_pmt_list_management incorrect");
-    uint16_t sid = (capmt[1] << 8) | capmt[2];
+    int sid = (capmt[1] << 8) | capmt[2];
     ASSERT(sid == 0x1234, "program_number incorrect");
 
     return 0;
@@ -668,10 +693,12 @@ int test_create_capmt_both_pmt_and_other_many_streams() {
                            (i % 2 == 0));
     }
 
-    SCAPMT scampt = {.pmt_id = pmt->id,
-                     .other_id = {other->id, PMT_INVALID},
-                     .version = 5,
-                     .sid = 0xABCD};
+    SCAPMT scampt = {};
+    scampt.pmt_id = pmt->id;
+    scampt.other_id[0] = other->id;
+    scampt.other_id[1] = PMT_INVALID;
+    scampt.version = 5;
+    scampt.sid = 0xABCD;
 
     uint8_t capmt[1500];
     int len = create_capmt(&scampt, CLM_ONLY, capmt, sizeof(capmt),
@@ -713,10 +740,12 @@ int test_create_capmt_size_near_limit() {
                            (i % 2 == 0));
     }
 
-    SCAPMT scampt = {.pmt_id = pmt->id,
-                     .other_id = {other->id, PMT_INVALID},
-                     .version = 1,
-                     .sid = 0x9999};
+    SCAPMT scampt = {};
+    scampt.pmt_id = pmt->id;
+    scampt.other_id[0] = other->id;
+    scampt.other_id[1] = PMT_INVALID;
+    scampt.version = 1;
+    scampt.sid = 0x9999;
 
     uint8_t capmt[1500];
     int len = create_capmt(&scampt, CLM_ONLY, capmt, sizeof(capmt),
@@ -742,10 +771,11 @@ int test_create_capmt_respects_length() {
     for (int i = 0; i < 20; i++)
         pmt_add_stream_pid(pmt, 0x500 + i, 2, false, true);
 
-    SCAPMT scampt = {.pmt_id = pmt->id,
-                     .other_id = {PMT_INVALID, PMT_INVALID},
-                     .version = 1,
-                     .sid = 0x9999};
+    SCAPMT scampt = {};
+    scampt.pmt_id = pmt->id;
+    scampt.other_id[0] = scampt.other_id[1] = PMT_INVALID;
+    scampt.version = 1;
+    scampt.sid = 0x9999;
     uint8_t capmt[128];
     memset(capmt, 0xAA, sizeof(capmt));
     int len =
@@ -864,7 +894,7 @@ static int fake_ca_add_pmt(adapter *ad, SPMT *pmt, int update) {
     (void)update;
     return TABLES_RESULT_OK;
 }
-static int fake_ca_del_pmt(adapter *ad, SPMT *pmt) {
+static int fake_ca_del_pmt(adapter *, SPMT *) {
     fake_ca_del_calls++;
     return TABLES_RESULT_OK;
 }
@@ -1064,9 +1094,10 @@ int test_ca_teardown_releases_pmts() {
     int second = pmt_add(0, 0x600, 0x601);
     dev.capmt[0].pmt_id = first;
     dev.capmt[0].other_id[0] = second;
-    uint64_t mask = 1ULL << dvbca_id;
+    int mask = 1 << dvbca_id;
     for (int id : {first, second}) {
         SPMT *pmt = get_pmt(id);
+        ASSERT(pmt, "PMT not found");
         pmt->ca_mask = mask | 0x40;
         pmt->ca_registered_mask = mask | 0x40;
         pmt->disabled_ca_mask = mask | 0x40;
@@ -1310,7 +1341,7 @@ int test_ca_cmd_watchdog() {
     memset(&dev, 0, sizeof(dev));
     ca_device_t *saved = ca_devices[65];
     ca_devices[65] = &dev;
-    int saved_enigma = opts.enigma;
+    auto saved_enigma = opts.enigma;
     opts.enigma = 0;
     dev.enabled = 1;
     dev.id = 65;
@@ -1319,6 +1350,8 @@ int test_ca_cmd_watchdog() {
     ASSERT(pipe(sp) == 0, "pipe for close observation");
     int id = sockets_add(sp[0], NULL, 65, TYPE_TCP, NULL, NULL, NULL);
     ASSERT(id >= 0, "socket added");
+    sockets *ss = get_sockets(id);
+    ASSERT(ss, "socket found");
     dev.sock = id;
     int fds[2];
     ASSERT(pipe(fds) == 0, "pipe for TPDU writes");
@@ -1330,48 +1363,48 @@ int test_ca_cmd_watchdog() {
     dev.pending_session = 3;
     dev.pending_since = t0;
     ca_cmd_watchdog(&dev, t0 + 1000);
-    ASSERT_EQUAL(get_sockets(id)->force_close, 0, "fresh command not closed");
+    ASSERT_EQUAL(ss->force_close, 0, "fresh command not closed");
     ASSERT(dev.pending_tag != 0, "fresh command stays tracked");
 
     dev.pending_tag = TAG_PROFILE_ENQUIRY;
     dev.pending_session = 1;
     dev.pending_since = t0;
     ca_cmd_watchdog(&dev, t0 + CA_CMD_TIMEOUT_MS);
-    ASSERT_EQUAL(get_sockets(id)->force_close, 1, "stale command resets");
+    ASSERT_EQUAL(ss->force_close, 1, "stale command resets");
     ASSERT_EQUAL(dev.pending_tag, 0, "reset clears pending");
     ASSERT_EQUAL(dev.pending_since, -1, "reset disarms");
-    get_sockets(id)->force_close = 0;
+    ss->force_close = 0;
 
     dev.pending_since = t0; // stalled init: nothing pending, quiet since t0
     ca_cmd_watchdog(&dev, t0 + CA_CMD_TIMEOUT_MS);
-    ASSERT_EQUAL(get_sockets(id)->force_close, 1, "stalled init resets");
+    ASSERT_EQUAL(ss->force_close, 1, "stalled init resets");
     ASSERT_EQUAL(dev.pending_since, -1, "init reset disarms");
-    get_sockets(id)->force_close = 0;
+    ss->force_close = 0;
 
     dev.state = CA_STATE_INITIALIZED;
     dev.pending_since = t0;
     ca_cmd_watchdog(&dev, t0 + 10 * CA_CMD_TIMEOUT_MS);
-    ASSERT_EQUAL(get_sockets(id)->force_close, 0, "initialized idles quietly");
+    ASSERT_EQUAL(ss->force_close, 0, "initialized idles quietly");
     ASSERT_EQUAL(dev.pending_since, t0, "quiet keeps anchor");
 
     dev.pending_tag = TAG_CA_INFO_ENQUIRY; // post-init commands still guarded
     dev.pending_session = 3;
     dev.pending_since = t0;
     ca_cmd_watchdog(&dev, t0 + CA_CMD_TIMEOUT_MS);
-    ASSERT_EQUAL(get_sockets(id)->force_close, 1, "post-init stale resets");
-    get_sockets(id)->force_close = 0;
+    ASSERT_EQUAL(ss->force_close, 1, "post-init stale resets");
+    ss->force_close = 0;
 
     dev.state = CA_STATE_ACTIVE;
     dev.pending_since = -1; // fully unarmed: late ticks stay quiet
     ca_cmd_watchdog(&dev, t0 + 10 * CA_CMD_TIMEOUT_MS);
-    ASSERT_EQUAL(get_sockets(id)->force_close, 0, "unarmed never resets");
+    ASSERT_EQUAL(ss->force_close, 0, "unarmed never resets");
 
     dev.pending_tag = TAG_CA_INFO_ENQUIRY; // tick-zero anchor still arms
     dev.pending_session = 3;
     dev.pending_since = 0;
     ca_cmd_watchdog(&dev, CA_CMD_TIMEOUT_MS);
-    ASSERT_EQUAL(get_sockets(id)->force_close, 1, "zero anchor fires");
-    get_sockets(id)->force_close = 0;
+    ASSERT_EQUAL(ss->force_close, 1, "zero anchor fires");
+    ss->force_close = 0;
 
     ca_session_t rs{};
     rs.ca = &dev;
@@ -1516,9 +1549,9 @@ int test_ca_cmd_watchdog() {
     ASSERT_EQUAL(ca_read(&cs), 0, "second close parsed");
     hi = getTick();
     ca_cmd_watchdog(&dev, hi + 1000);
-    ASSERT_EQUAL(get_sockets(id)->force_close, 0, "no instant reset");
+    ASSERT_EQUAL(ss->force_close, 0, "no instant reset");
     ca_cmd_watchdog(&dev, hi + CA_CMD_TIMEOUT_MS);
-    ASSERT_EQUAL(get_sockets(id)->force_close, 1, "quiet after close resets");
+    ASSERT_EQUAL(ss->force_close, 1, "quiet after close resets");
 
     opts.enigma = saved_enigma;
     sockets_del(id); // closes sp[0]
@@ -1584,6 +1617,7 @@ int test_ca_read_enigma_removal() {
     int id = sockets_add(fds[0], NULL, 63, TYPE_TCP, NULL, NULL, NULL);
     ASSERT(id >= 0, "socket added");
     sockets *ss = get_sockets(id);
+    ASSERT(ss, "socket registered");
     ca_device_t dev;
     memset(&dev, 0, sizeof(dev));
     dev.enabled = 1;
@@ -1666,6 +1700,7 @@ int test_dvbca_init_dev_guards() {
 int test_tables_clear_pmt_ca_masks() {
     int id = pmt_add(0, 0x800, 0x801);
     SPMT *pmt = get_pmt(id);
+    ASSERT(pmt, "PMT not found");
     tables_clear_pmt_ca_masks(NULL, 0x1, 1);
     pmt->ca_mask = 0x41;
     pmt->ca_registered_mask = 0x41;
@@ -1706,14 +1741,16 @@ int test_ca_timeout_branches() {
     close(fds[0]);
     close(fds[1]);
 
-    int saved_enigma = opts.enigma;
+    auto saved_enigma = opts.enigma;
     opts.enigma = 1;
     dev.fd = -1;
     dev.state = CA_STATE_ACTIVE;
     dev.poll_fails = 0;
+    dev.mode = ca_mode::ENIGMA;
     ASSERT_EQUAL(ca_timeout(&ss), 0, "enigma skips keepalive");
     ASSERT_EQUAL(dev.poll_fails, 0, "enigma counts nothing");
     opts.enigma = saved_enigma;
+    dev.mode = ca_mode::DVB;
 
     dev.state = CA_STATE_INITIALIZED;
     dev.datetime_response_interval = 30000;
@@ -1802,8 +1839,10 @@ int test_ca_open_session_table_full() {
     dev.fd = fds[1];
     ca_device_t *saved = ca_devices[72];
     ca_devices[72] = &dev;
-    int saved_enigma = opts.enigma, saved_debug = opts.debug;
+    auto saved_enigma = opts.enigma;
+    auto saved_debug = opts.debug;
     opts.enigma = 1; // SPDUs go to the fd unwrapped
+    dev.mode = ca_mode::ENIGMA;
     opts.debug |= LOG_DVBCA;
 
     unsigned char open_ai[6] = {0x91, 0x04, 0x00, 0x02, 0x00, 0x41};
@@ -1836,8 +1875,9 @@ int test_ca_open_session_unknown_resource() {
     dev.fd = fds[1];
     ca_device_t *saved = ca_devices[73];
     ca_devices[73] = &dev;
-    int saved_enigma = opts.enigma;
+    auto saved_enigma = opts.enigma;
     opts.enigma = 1; // SPDUs go to the fd unwrapped
+    dev.mode = ca_mode::ENIGMA;
 
     // ST_OPEN_SESSION_REQUEST for TS 103 205 MMI, which has no handler
     unsigned char open_mmi[6] = {0x91, 0x04, 0x00, 0x40, 0x00, 0x81};
@@ -2088,7 +2128,7 @@ static SPMT *packing_program(int sid) {
 static int read_capmts(std::vector<uint8_t> *last = nullptr) {
     std::vector<uint8_t> all;
     uint8_t buf[4096];
-    int n;
+    ssize_t n;
     while ((n = read(pcam->fds[0], buf, sizeof(buf))) > 0)
         all.insert(all.end(), buf, buf + n);
     int count = 0;
@@ -2102,11 +2142,35 @@ static int read_capmts(std::vector<uint8_t> *last = nullptr) {
                 len = (len << 8) | all[p++];
         }
         if (last && p + len <= all.size())
-            last->assign(all.begin() + p, all.begin() + p + len);
+            last->assign(all.data() + p, all.data() + p + len);
         count++;
         i = p + len - 1;
     }
     return count;
+}
+
+// List-management byte of every CAPMT written, in write order
+static std::vector<int> read_capmt_mgmts() {
+    std::vector<uint8_t> all;
+    uint8_t buf[4096];
+    ssize_t n;
+    while ((n = read(pcam->fds[0], buf, sizeof(buf))) > 0)
+        all.insert(all.end(), buf, buf + n);
+    std::vector<int> mgmts;
+    for (size_t i = 0; i + 4 < all.size(); i++) {
+        if (all[i] != 0x9F || all[i + 1] != 0x80 || all[i + 2] != 0x32)
+            continue;
+        size_t p = i + 3, len = all[p++];
+        if (len & 0x80) {
+            int bytes = len & 0x7F;
+            for (len = 0; bytes-- > 0;)
+                len = (len << 8) | all[p++];
+        }
+        if (p < all.size())
+            mgmts.push_back(all[p]);
+        i = p + len - 1;
+    }
+    return mgmts;
 }
 
 // True when the CAPMT lists this elementary stream
@@ -2114,7 +2178,7 @@ static int capmt_lists_pid(const std::vector<uint8_t> &c, int pid) {
     for (size_t i = 6; i + 4 < c.size();) {
         if (((c[i + 1] & 0x1F) << 8 | c[i + 2]) == pid)
             return 1;
-        i += 5 + ((c[i + 3] & 0x0F) << 8 | c[i + 4]);
+        i += 5 + static_cast<size_t>((c[i + 3] & 0x0F) << 8 | c[i + 4]);
     }
     return 0;
 }
@@ -2330,6 +2394,247 @@ int test_capmt_write_failure_retries() {
     return 0;
 }
 
+// Loopback CAPMT sends at once; holding it starves the TAPs
+// and deadlocks the retry, so the CAM never starts.
+int test_loopback_capmt_sends_at_once() {
+    packing_cam_open();
+    ddci_device_t loop = {};
+    loop.id = 3;
+    loop.enabled = 1;
+    loop.loopback = 1;
+    ddci_devices[3] = &loop;
+    auto saved_enigma = opts.enigma;
+    opts.enigma = 1;
+    pcam->dev.mode = ca_mode::ENIGMA_DDCI;
+    SPMT *p1 = packing_program(0x2c01);
+    ASSERT_EQUAL(dvbca_process_pmt(&pcam->ad, p1, 0), 0, "loopback join sends");
+    ASSERT_EQUAL(read_capmts(), 1, "CAPMT written at once");
+    opts.enigma = saved_enigma;
+    ddci_devices[3] = nullptr;
+    packing_cam_close();
+    return 0;
+}
+
+// ca_info on a fresh CA session re-sends the running CAPMT.
+int test_capmt_resend_after_ca_session_reset() {
+    packing_cam_open();
+    ca_device_t &dev = pcam->dev;
+    SPMT *p1 = packing_program(0x2d01), *p2 = packing_program(0x2d02);
+    dvbca_process_pmt(&pcam->ad, p1, 0);
+    dvbca_process_pmt(&pcam->ad, p2, 0);
+    ASSERT_EQUAL(read_capmts(), 2, "setup sends two CAPMTs");
+
+    dev.fresh_ca_session = 1;
+    ca_session_t s = {};
+    s.ca = &dev;
+    s.session_number = 2;
+    uint8_t ca_info[2] = {0x0B, 0x00}; // one CAID: 0x0B00
+    APP_CA_handler(&s, TAG_CA_INFO, ca_info, sizeof(ca_info));
+
+    std::vector<uint8_t> last;
+    ASSERT_EQUAL(read_capmts(&last), 1, "the reset re-sends the CAPMT");
+    ASSERT(capmt_lists_pid(last, p1->stream_pids[0].pid) &&
+               capmt_lists_pid(last, p2->stream_pids[0].pid),
+           "both running programs are re-sent");
+
+    APP_CA_handler(&s, TAG_CA_INFO, ca_info, sizeof(ca_info));
+    ASSERT_EQUAL(read_capmts(), 0, "repeated ca_info does not resend");
+    packing_cam_close();
+    return 0;
+}
+
+// Two unpacked CAPMTs rebuild as ONLY for the first, ADD for the rest
+int test_capmt_resend_only_then_add() {
+    packing_cam_open();
+    ca_device_t &dev = pcam->dev;
+    dev.multiple_pmt = 0;
+    dev.max_ca_pmt = 2;
+    SPMT *p1 = packing_program(0x2d01), *p2 = packing_program(0x2d02);
+    dvbca_process_pmt(&pcam->ad, p1, 0);
+    dvbca_process_pmt(&pcam->ad, p2, 0);
+    ASSERT_EQUAL(read_capmts(), 2, "setup sends two CAPMTs");
+
+    dev.fresh_ca_session = 1;
+    ca_session_t s = {};
+    s.ca = &dev;
+    s.session_number = 2;
+    uint8_t ca_info[2] = {0x0B, 0x00}; // one CAID: 0x0B00
+    APP_CA_handler(&s, TAG_CA_INFO, ca_info, sizeof(ca_info));
+
+    std::vector<int> mgmts = read_capmt_mgmts();
+    ASSERT_EQUAL((int)mgmts.size(), 2, "both CAPMTs are re-sent");
+    ASSERT(mgmts[0] == CLM_ONLY && mgmts[1] == CLM_ADD,
+           "first re-send is ONLY, the rest ADD");
+    packing_cam_close();
+    return 0;
+}
+
+// A PMT stopped while the session is down must not come back
+int test_capmt_no_resend_for_stopped_pmt() {
+    packing_cam_open();
+    ca_device_t &dev = pcam->dev;
+    SPMT *p1 = packing_program(0x2d01);
+    dvbca_process_pmt(&pcam->ad, p1, 0);
+    ASSERT_EQUAL(read_capmts(), 1, "setup sends the CAPMT");
+
+    dev.state = CA_STATE_ACTIVE; // session down
+    dvbca_del_pmt(&pcam->ad, p1);
+    ASSERT_EQUAL(read_capmts(), 0, "no NOT_SELECTED while the session is down");
+
+    dev.fresh_ca_session = 1;
+    ca_session_t s = {};
+    s.ca = &dev;
+    s.session_number = 2;
+    uint8_t ca_info[2] = {0x0B, 0x00}; // one CAID: 0x0B00
+    APP_CA_handler(&s, TAG_CA_INFO, ca_info, sizeof(ca_info));
+    ASSERT_EQUAL(read_capmts(), 0, "stopped PMT is not re-sent");
+    packing_cam_close();
+    return 0;
+}
+
+// A PMT deleted while the session is down writes no CAPMT at all
+int test_capmt_no_resend_for_deleted_pmt() {
+    packing_cam_open();
+    ca_device_t &dev = pcam->dev;
+    SPMT *p1 = packing_program(0x2d01);
+    dvbca_process_pmt(&pcam->ad, p1, 0);
+    ASSERT_EQUAL(read_capmts(), 1, "setup sends the CAPMT");
+
+    dev.state = CA_STATE_ACTIVE; // session down
+    pmt_del(p1->id);
+
+    dev.fresh_ca_session = 1;
+    ca_session_t s = {};
+    s.ca = &dev;
+    s.session_number = 2;
+    uint8_t ca_info[2] = {0x0B, 0x00}; // one CAID: 0x0B00
+    APP_CA_handler(&s, TAG_CA_INFO, ca_info, sizeof(ca_info));
+    ASSERT_EQUAL(read_capmts(), 0, "deleted PMT writes no CAPMT");
+    packing_cam_close();
+    return 0;
+}
+
+// ca_info with nothing running sends nothing
+int test_capmt_ca_info_without_pmts_sends_nothing() {
+    packing_cam_open();
+    ca_device_t &dev = pcam->dev;
+    dev.fresh_ca_session = 1;
+    ca_session_t s = {};
+    s.ca = &dev;
+    s.session_number = 2;
+    uint8_t ca_info[2] = {0x0B, 0x00}; // one CAID: 0x0B00
+    APP_CA_handler(&s, TAG_CA_INFO, ca_info, sizeof(ca_info));
+    ASSERT_EQUAL(read_capmts(), 0, "nothing active, nothing sent");
+    packing_cam_close();
+    return 0;
+}
+
+// A failed resend clears the tables masks so the normal path retries
+int test_capmt_failed_resend_retries_via_tables() {
+    packing_cam_open();
+    ca_device_t &dev = pcam->dev;
+    SPMT *p1 = packing_program(0x2d01);
+    dvbca_process_pmt(&pcam->ad, p1, 0);
+    ASSERT_EQUAL(read_capmts(), 1, "setup sends the CAPMT");
+    int mask = 1 << dvbca_id;
+    p1->ca_mask |= mask;
+
+    dev.fresh_ca_session = 1;
+    dev.fd = -1; // the resend write fails
+    ca_session_t s = {};
+    s.ca = &dev;
+    s.session_number = 2;
+    uint8_t ca_info[2] = {0x0B, 0x00}; // one CAID: 0x0B00
+    APP_CA_handler(&s, TAG_CA_INFO, ca_info, sizeof(ca_info));
+    dev.fd = pcam->fds[1];
+
+    ASSERT_EQUAL(read_capmts(), 0, "failed resend writes nothing");
+    ASSERT(!(p1->ca_mask & mask), "tables mask cleared for the retry");
+    packing_cam_close();
+    return 0;
+}
+
+#ifndef DISABLE_DDCI
+// Loopback owns its stored CI slot; the enigma tuner on that slot
+// stands down so /dev/ciX is driven only by the DDCI adapter.
+int test_loopback_owns_ci_slot() {
+    auto saved_enigma = opts.enigma;
+    int saved_has_ci = has_ci;
+    ddci_device_t *saved_ddci[MAX_ADAPTERS];
+    memcpy(saved_ddci, ddci_devices, sizeof(saved_ddci));
+    memset(ddci_devices, 0, sizeof(ddci_devices));
+    opts.enigma = 1;
+    has_ci = 1;
+    ASSERT_EQUAL(ddci_loopback_owns_slot(1), 0, "no loopback claims nothing");
+
+    ddci_device_t loop = {};
+    loop.id = 71;
+    loop.loopback = 1;
+    loop.slot_claimed.store(true);
+    loop.ci_slot = 1;
+    ddci_devices[71] = &loop;
+    ASSERT_EQUAL(ddci_loopback_owns_slot(1), 1, "stored claim is read");
+    loop.slot_claimed.store(false);
+    ASSERT_EQUAL(ddci_loopback_owns_slot(1), 0, "close releases the claim");
+    loop.slot_claimed.store(true);
+
+    adapter tuner = {};
+    tuner.id = 1;
+    tuner.type = ADAPTER_DVB;
+    ca_device_t *saved_ca1 = ca_devices[1];
+    ca_devices[1] = nullptr;
+    ASSERT_EQUAL(dvbca_init_dev(&tuner), TABLES_RESULT_ERROR_NORETRY,
+                 "owned slot stands down");
+    ASSERT(ca_devices[1] == nullptr, "no CA device opened for it");
+
+    adapter other = {};
+    other.id = 72;
+    other.type = ADAPTER_DVB;
+    ca_device_t *saved_ca72 = ca_devices[72];
+    ca_devices[72] = nullptr;
+    ASSERT_EQUAL(dvbca_init_dev(&other), TABLES_RESULT_OK,
+                 "other slots still probe");
+    ca_devices[72] = saved_ca72;
+
+    ca_devices[1] = saved_ca1;
+
+    memcpy(ddci_devices, saved_ddci, sizeof(saved_ddci));
+    opts.enigma = saved_enigma;
+    has_ci = saved_has_ci;
+    return 0;
+}
+
+int test_loopback_init_without_stack_fails_loud() {
+    auto saved_enigma = opts.enigma;
+    int saved_has_ci = has_ci;
+    ddci_device_t *saved_ddci[MAX_ADAPTERS];
+    memcpy(saved_ddci, ddci_devices, sizeof(saved_ddci));
+    memset(ddci_devices, 0, sizeof(ddci_devices));
+    opts.enigma = 1;
+    has_ci = 1;
+    ddci_device_t loop = {};
+    loop.id = 73;
+    loop.enabled = 1;
+    loop.loopback = 1;
+    loop.slot_claimed.store(true);
+    loop.ci_slot = 7; // no /dev/ci7 in test envs
+    ddci_devices[73] = &loop;
+    ca_device_t *saved_ca73 = ca_devices[73];
+    ca_devices[73] = nullptr;
+    adapter ad = {};
+    ad.id = 73;
+    ad.type = ADAPTER_DVB;
+    ASSERT_EQUAL(dvbca_init_dev(&ad), TABLES_RESULT_ERROR_NORETRY,
+                 "missing stack fails loud");
+    ASSERT(ca_devices[73] == nullptr, "no CA device opened for it");
+    ca_devices[73] = saved_ca73;
+    memcpy(ddci_devices, saved_ddci, sizeof(saved_ddci));
+    opts.enigma = saved_enigma;
+    has_ci = saved_has_ci;
+    return 0;
+}
+#endif
+
 // CAPMT 0 = {1, 3}, CAPMT 1 = {2}: zapping 3 -> 4 -> 3 -> 4 restarts
 // a resident once; the zaps back return to kept places.
 int test_capmt_zap_back_keeps_places() {
@@ -2366,6 +2671,320 @@ int test_capmt_zap_back_keeps_places() {
         ASSERT_EQUAL(read_capmts(), 0, "zapping back sends nothing");
     }
     packing_cam_close();
+    return 0;
+}
+
+// Short or truncated MMI APDUs must not read past the buffer or send replies;
+// choice_nb bounds the number of items read when != 0xFF.
+int test_mmi_short_apdus_and_choice_bounds() {
+    ca_clear_mmi_messages();
+    packing_cam_open();
+    ca_session_t *s = &pcam->dev.sessions[1];
+    uint8_t drain[256];
+
+    // 0-byte and 1-byte buffers on heap so ASan catches any out-of-bounds read.
+    for (int tag :
+         {TAG_DISPLAY_CONTROL, TAG_ENQUIRY, TAG_MENU_LAST, TAG_LIST_LAST}) {
+        std::vector<uint8_t> empty;
+        APP_MMI_handler(s, tag, empty.data(), 0);
+        ASSERT(read(pcam->fds[0], drain, sizeof(drain)) < 0,
+               "empty MMI APDU sends no reply");
+    }
+    for (int tag : {TAG_DISPLAY_CONTROL, TAG_ENQUIRY}) {
+        std::vector<uint8_t> one = {0x01};
+        APP_MMI_handler(s, tag, one.data(), 1);
+        ASSERT(read(pcam->fds[0], drain, sizeof(drain)) < 0,
+               "1-byte display_control/enquiry sends no reply");
+    }
+
+    // Truncated 0x82 length at the end of a menu item must not read past max.
+    std::vector<uint8_t> trunc_len = {0xFF, 0x9F, 0x88, 0x03, 0x82, 0x00};
+    APP_MMI_handler(s, TAG_MENU_LAST, trunc_len.data(),
+                    static_cast<int>(trunc_len.size()));
+    ssize_t trunc_n = read(pcam->fds[0], drain, sizeof(drain));
+    ASSERT(trunc_n > 0, "truncated menu still closes the MMI session");
+    while (read(pcam->fds[0], drain, sizeof(drain)) > 0) {
+    }
+    ASSERT(get_json_mmi().find("\"messages\":[]") != std::string::npos,
+           "truncated menu with <3 header lines must not be recorded");
+
+    // choice_nb = 1 means 4 text lines (title, subtitle, bottom, 1 choice);
+    // test 0x81 long-form length and ensure trailing 0x82 header is ignored.
+    std::vector<uint8_t> menu = {1};
+    for (int i = 0; i < 3; i++) {
+        menu.insert(menu.end(), {0x9F, 0x88, 0x03, 0x01, 'A'});
+    }
+    menu.insert(menu.end(), {0x9F, 0x88, 0x03, 0x81, 0x01, 'B'});
+    menu.insert(menu.end(), {0x9F, 0x88, 0x03, 0x82});
+    APP_MMI_handler(s, TAG_MENU_LAST, menu.data(),
+                    static_cast<int>(menu.size()));
+    ssize_t menu_n = read(pcam->fds[0], drain, sizeof(drain));
+    ASSERT(menu_n > 0, "valid choice_nb=1 menu sends close reply");
+    while (read(pcam->fds[0], drain, sizeof(drain)) > 0) {
+    }
+    std::string menu_json = get_json_mmi();
+    ASSERT(menu_json.find("\"title\":\"A\",\"subtitle\":\"A\",\"bottom\":\"A\","
+                          "\"items\":[\"B\"]") != std::string::npos,
+           "choice_nb=1 with 0x81 item must record 1 item and ignore trailer");
+
+    // Outer ca_read_apdu length exceeding SPDU buffer must be dropped safely.
+    sockets cs{};
+    cs.sid = pcam->dev.id;
+    unsigned char open_mmi[6] = {0x91, 0x04, 0x00, 0x40, 0x00, 0x41};
+    cs.buf = open_mmi;
+    cs.rlen = sizeof(open_mmi);
+    ASSERT_EQUAL(ca_read(&cs), 0, "open MMI session parsed");
+    while (read(pcam->fds[0], drain, sizeof(drain)) > 0) {
+    }
+    std::vector<uint8_t> bad_apdu = {0x90, 0x02, 0x00, 0x01, 0x9F, 0x88, 0x07,
+                                     0x81, 0xC8, 0x00, 0x04, 'P',  'I',  'N'};
+    cs.buf = bad_apdu.data();
+    cs.rlen = static_cast<int>(bad_apdu.size());
+    ASSERT_EQUAL(ca_read(&cs), 0, "inflated outer APDU handled");
+    ASSERT(read(pcam->fds[0], drain, sizeof(drain)) < 0,
+           "inflated outer APDU must be dropped before APP_MMI_handler");
+    ASSERT(get_json_mmi().find("\"last_seq\":1") != std::string::npos,
+           "inflated outer APDU must not record an MMI message");
+
+    packing_cam_close();
+    ca_clear_mmi_messages();
+    return 0;
+}
+
+static void append_mmi_line(std::vector<uint8_t> &apdu,
+                            std::initializer_list<uint8_t> bytes,
+                            uint32_t tag = TAG_TEXT_LAST) {
+    apdu.push_back(static_cast<uint8_t>((tag >> 16) & 0xFF));
+    apdu.push_back(static_cast<uint8_t>((tag >> 8) & 0xFF));
+    apdu.push_back(static_cast<uint8_t>(tag & 0xFF));
+    apdu.push_back(static_cast<uint8_t>(bytes.size()));
+    apdu.insert(apdu.end(), bytes.begin(), bytes.end());
+}
+
+static std::vector<uint8_t> drain_cam_pipe(int fd) {
+    std::vector<uint8_t> out;
+    uint8_t buf[256];
+    ssize_t n;
+    while ((n = read(fd, buf, sizeof(buf))) > 0) {
+        out.insert(out.end(), buf, buf + n);
+    }
+    return out;
+}
+
+static bool has_apdu_tag(const std::vector<uint8_t> &buf, uint32_t tag) {
+    uint8_t t0 = static_cast<uint8_t>((tag >> 16) & 0xFF);
+    uint8_t t1 = static_cast<uint8_t>((tag >> 8) & 0xFF);
+    uint8_t t2 = static_cast<uint8_t>(tag & 0xFF);
+    for (size_t i = 0; i + 2 < buf.size(); ++i) {
+        if (buf[i] == t0 && buf[i + 1] == t1 && buf[i + 2] == t2)
+            return true;
+    }
+    return false;
+}
+
+int test_mmi_json_empty() {
+    ca_clear_mmi_messages();
+    std::string json = get_json_mmi();
+    const char *expected =
+        "{\n\"last_changed\":0,\n\"last_seq\":0,\n\"messages\":[]\n}\n";
+    ASSERT(json == expected, "empty get_json_mmi() output mismatch");
+    return 0;
+}
+
+int test_mmi_enquiry_auto_answered_and_manual() {
+    ca_clear_mmi_messages();
+    packing_cam_open();
+    ca_session_t *s = &pcam->dev.sessions[1];
+    s->session_number = 3;
+
+    // Empty pin_str with answer_length == 0 must not send TAG_ANSWER.
+    pcam->dev.pin_str[0] = '\0';
+    std::vector<uint8_t> enq0 = {0x00, 0, 'I', 'n', 'f', 'o'};
+    APP_MMI_handler(s, TAG_ENQUIRY, enq0.data(), static_cast<int>(enq0.size()));
+    std::vector<uint8_t> r0 = drain_cam_pipe(pcam->fds[0]);
+    ASSERT(!has_apdu_tag(r0, TAG_ANSWER) && has_apdu_tag(r0, TAG_CLOSE_MMI),
+           "0-length manual enquiry must send CLOSE without ANSWER");
+
+    // Empty pin_str with answer_length == 4 must not send TAG_ANSWER.
+    std::vector<uint8_t> enq1 = {0x01, 4,   'E', 'n', 't', 'e', 'r', ' ',
+                                 'P',  'I', 'N', ':', ' ', '"', '1', '"'};
+    APP_MMI_handler(s, TAG_ENQUIRY, enq1.data(), static_cast<int>(enq1.size()));
+    std::vector<uint8_t> r1 = drain_cam_pipe(pcam->fds[0]);
+    ASSERT(!has_apdu_tag(r1, TAG_ANSWER) && has_apdu_tag(r1, TAG_CLOSE_MMI),
+           "manual enquiry must send CLOSE without ANSWER");
+
+    // Configured pin_str with mismatched answer_length == 6 -> manual.
+    strcpy(pcam->dev.pin_str, "9876");
+    std::vector<uint8_t> enq_mis = {0x01, 6, 'P', 'I', 'N', '6'};
+    APP_MMI_handler(s, TAG_ENQUIRY, enq_mis.data(),
+                    static_cast<int>(enq_mis.size()));
+    std::vector<uint8_t> r2 = drain_cam_pipe(pcam->fds[0]);
+    ASSERT(!has_apdu_tag(r2, TAG_ANSWER) && has_apdu_tag(r2, TAG_CLOSE_MMI),
+           "mismatched PIN length must not send ANSWER");
+
+    // Configured pin_str matching answer_length == 4 -> sends TAG_ANSWER.
+    std::vector<uint8_t> enq2 = {0x00, 4, 'P', 'I', 'N'};
+    APP_MMI_handler(s, TAG_ENQUIRY, enq2.data(), static_cast<int>(enq2.size()));
+    std::vector<uint8_t> r3 = drain_cam_pipe(pcam->fds[0]);
+    ASSERT(has_apdu_tag(r3, TAG_ANSWER) && has_apdu_tag(r3, TAG_CLOSE_MMI),
+           "matching PIN length must send both ANSWER and CLOSE");
+
+    std::string json = get_json_mmi();
+    ASSERT(json.find("\"last_seq\":4") != std::string::npos,
+           "last_seq should be 4 after four enquiries");
+    ASSERT(json.find("\"seq\":1") != std::string::npos &&
+               json.find("\"blind\":0,\"auto_answered\":false,"
+                         "\"text\":\"Info\"") != std::string::npos,
+           "0-length enquiry with empty pin_str must have auto_answered:false");
+    ASSERT(json.find("\"seq\":2") != std::string::npos &&
+               json.find("\"blind\":1,\"auto_answered\":false,"
+                         "\"text\":\"Enter PIN: \\\"1\\\"\"") !=
+                   std::string::npos,
+           "second enquiry should have auto_answered:false and escaped quotes");
+    ASSERT(json.find("\"seq\":3") != std::string::npos &&
+               json.find("\"blind\":1,\"auto_answered\":false,"
+                         "\"text\":\"PIN6\"") != std::string::npos,
+           "mismatched PIN length should have auto_answered:false");
+    ASSERT(json.find("\"seq\":4") != std::string::npos &&
+               json.find("\"blind\":0,\"auto_answered\":true,"
+                         "\"text\":\"PIN\"") != std::string::npos,
+           "fourth enquiry should have auto_answered:true");
+    ASSERT(json.find("9876") == std::string::npos &&
+               json.find("answer_length") == std::string::npos,
+           "PIN value and answer_length oracle must never appear in /mmi.json");
+
+    packing_cam_close();
+    ca_clear_mmi_messages();
+    return 0;
+}
+
+int test_mmi_menu_and_list_charset_and_0xff() {
+    ca_clear_mmi_messages();
+    packing_cam_open();
+    ca_session_t *s = &pcam->dev.sessions[1];
+    s->session_number = 2;
+
+    // Menu with choice_nb = 0xFF, split title (TEXT_MORE + TEXT_LAST),
+    // Latin-1 high bytes, 0x8A CR/LF + 0x86/0x87 emphasis, and >255-byte cap.
+    std::vector<uint8_t> menu = {0xFF};
+    append_mmi_line(menu, {0x10, 0x00, 0x01, 'M', 'e'}, TAG_TEXT_MORE);
+    append_mmi_line(menu, {'n', 0xFC}, TAG_TEXT_LAST); // joined -> "Menü"
+    append_mmi_line(menu, {'S', 'u', 'b'});
+    append_mmi_line(menu, {'O', 'K'});
+    append_mmi_line(menu, {'T', 'e', 's', 't', ' ', 0xE4, 0xF6, 0xFC});
+    append_mmi_line(
+        menu, {0x01, 0x86, 'L', 'i', 'n', 'e', '1', 0x87, 0x8A, 'L', '2'});
+    // Overlong item: 200 'X' via 0x81 length in TEXT_MORE + 100 'X' in
+    // TEXT_LAST.
+    menu.insert(menu.end(), {0x9F, 0x88, 0x04, 0x81, 200});
+    menu.insert(menu.end(), 200, 'X');
+    menu.insert(menu.end(), {0x9F, 0x88, 0x03, 100});
+    menu.insert(menu.end(), 100, 'X');
+    menu.insert(menu.end(), {0x00, 0x00}); // 2 trailing padding bytes
+    APP_MMI_handler(s, TAG_MENU_LAST, menu.data(),
+                    static_cast<int>(menu.size()));
+    drain_cam_pipe(pcam->fds[0]);
+
+    // List with choice_nb = 1 plus trailing bytes after the 1st item.
+    std::vector<uint8_t> list_apdu = {0x01};
+    append_mmi_line(list_apdu, {'L', 'i', 's', 't'});
+    append_mmi_line(list_apdu, {'S', '2'});
+    append_mmi_line(list_apdu, {'B', '2'});
+    append_mmi_line(list_apdu, {'O', 'n', 'l', 'y'});
+    append_mmi_line(list_apdu, {'E', 'x', 't', 'r', 'a'});
+    APP_MMI_handler(s, TAG_LIST_LAST, list_apdu.data(),
+                    static_cast<int>(list_apdu.size()));
+    drain_cam_pipe(pcam->fds[0]);
+
+    std::string json = get_json_mmi();
+    std::string x255(MAX_MMI_TEXT_LEN, 'X');
+    std::string x256(MAX_MMI_TEXT_LEN + 1, 'X');
+    ASSERT(json.find("\"type\":\"menu\",\"title\":\"Men\xC3\xBC\","
+                     "\"subtitle\":\"Sub\",\"bottom\":\"OK\","
+                     "\"items\":[\"Test \xC3\xA4\xC3\xB6\xC3\xBC\","
+                     "\"Line1\\nL2\",\"" +
+                     x255 + "\"]") != std::string::npos,
+           "menu should join TEXT_MORE+TEXT_LAST, strip C0/0x86/0x87, map 0x8A "
+           "to \\n, and cap joined item at 255 bytes");
+    ASSERT(json.find(x256) == std::string::npos,
+           "joined item must not exceed MAX_MMI_TEXT_LEN");
+    ASSERT(json.find("\"type\":\"list\",\"title\":\"List\","
+                     "\"subtitle\":\"S2\",\"bottom\":\"B2\","
+                     "\"items\":[\"Only\"]") != std::string::npos,
+           "list with choice_nb=1 must stop after 1 item and ignore extra");
+    ASSERT(json.find("Extra") == std::string::npos,
+           "trailing item past choice_nb must not be recorded");
+
+    packing_cam_close();
+    ca_clear_mmi_messages();
+    return 0;
+}
+
+int test_mmi_bad_text_tag_rejected() {
+    ca_clear_mmi_messages();
+    packing_cam_open();
+    ca_session_t *s = &pcam->dev.sessions[1];
+
+    std::vector<uint8_t> bad_menu = {0x01};
+    append_mmi_line(bad_menu, {'T'});
+    append_mmi_line(bad_menu, {'S'}, 0x9F8899); // invalid text tag
+    append_mmi_line(bad_menu, {'B'});
+    append_mmi_line(bad_menu, {'I'});
+    APP_MMI_handler(s, TAG_MENU_LAST, bad_menu.data(),
+                    static_cast<int>(bad_menu.size()));
+    drain_cam_pipe(pcam->fds[0]);
+
+    std::string json = get_json_mmi();
+    ASSERT(json.find("\"messages\":[]") != std::string::npos,
+           "menu with invalid text tag must not be recorded");
+
+    packing_cam_close();
+    ca_clear_mmi_messages();
+    return 0;
+}
+
+int test_mmi_ring_eviction_and_teardown() {
+    ca_clear_mmi_messages();
+    packing_cam_open();
+    ca_session_t *s = &pcam->dev.sessions[1];
+
+    for (int i = 1; i <= 18; ++i) {
+        char label[16];
+        int n = snprintf(label, sizeof(label), "Prompt-%d", i);
+        std::vector<uint8_t> enq = {0x00, 4};
+        enq.insert(enq.end(), label, label + n);
+        APP_MMI_handler(s, TAG_ENQUIRY, enq.data(),
+                        static_cast<int>(enq.size()));
+        drain_cam_pipe(pcam->fds[0]);
+    }
+
+    std::string json = get_json_mmi();
+    ASSERT(json.find("\"last_seq\":18") != std::string::npos,
+           "last_seq should be 18 after 18 messages");
+    ASSERT(json.find("\"Prompt-1\"") == std::string::npos &&
+               json.find("\"Prompt-2\"") == std::string::npos,
+           "oldest 2 messages should be evicted when ring cap is 16");
+    ASSERT(json.find("\"seq\":3") != std::string::npos &&
+               json.find("\"Prompt-3\"") != std::string::npos &&
+               json.find("\"seq\":18") != std::string::npos &&
+               json.find("\"Prompt-18\"") != std::string::npos,
+           "messages 3..18 should remain in ring buffer");
+
+    // Teardown clears messages for this CA slot and advances last_seq once.
+    ca_teardown(&pcam->dev);
+    std::string after = get_json_mmi();
+    ASSERT(after.find("\"last_seq\":19") != std::string::npos,
+           "ca_teardown should bump last_seq when removing slot messages");
+    ASSERT(after.find("\"messages\":[]") != std::string::npos,
+           "ca_teardown should clear slot messages");
+
+    // Second teardown on an empty ring must not bump last_seq.
+    ca_teardown(&pcam->dev);
+    ASSERT(get_json_mmi().find("\"last_seq\":19") != std::string::npos,
+           "ca_teardown on empty ring must not bump last_seq");
+
+    packing_cam_close();
+    ca_clear_mmi_messages();
     return 0;
 }
 
@@ -2414,6 +3033,26 @@ int main() {
               "testing that a changed rejoin is not suppressed");
     TEST_FUNC(test_capmt_write_failure_retries(),
               "testing that a failed CAPMT write is retried");
+    TEST_FUNC(test_loopback_capmt_sends_at_once(),
+              "testing that loopback CAPMT is not held");
+    TEST_FUNC(test_capmt_resend_after_ca_session_reset(),
+              "testing that a CA session reset re-sends the CAPMT");
+    TEST_FUNC(test_capmt_resend_only_then_add(),
+              "testing that the resend rebuilds with ONLY then ADD");
+    TEST_FUNC(test_capmt_no_resend_for_stopped_pmt(),
+              "testing that a PMT stopped while down is not re-sent");
+    TEST_FUNC(test_capmt_no_resend_for_deleted_pmt(),
+              "testing that a PMT deleted while down writes no CAPMT");
+    TEST_FUNC(test_capmt_ca_info_without_pmts_sends_nothing(),
+              "testing that ca_info with nothing active sends nothing");
+    TEST_FUNC(test_capmt_failed_resend_retries_via_tables(),
+              "testing that a failed resend clears the tables masks");
+#ifndef DISABLE_DDCI
+    TEST_FUNC(test_loopback_owns_ci_slot(),
+              "testing that the tuner yields its CI slot to the loopback");
+    TEST_FUNC(test_loopback_init_without_stack_fails_loud(),
+              "testing loopback init without a stack fails loud");
+#endif
     TEST_FUNC(test_get_authdata_filename(), "testing filename helper function");
     TEST_FUNC(test_capmt_content_hash_masks_version_and_listmgmt(),
               "testing the CAPMT hash masks version and listmgmt");
@@ -2474,6 +3113,17 @@ int main() {
     TEST_FUNC(test_ca_read_resets_fails(), "testing ca_read sign of life");
     TEST_FUNC(test_send_skips_stale_set(), "testing stale mask-set skip");
     TEST_FUNC(test_ca_read_bad_session(), "testing bad session drop");
+    TEST_FUNC(test_mmi_short_apdus_and_choice_bounds(),
+              "testing MMI short APDU and choice_nb bounds");
+    TEST_FUNC(test_mmi_json_empty(), "testing empty /mmi.json output");
+    TEST_FUNC(test_mmi_enquiry_auto_answered_and_manual(),
+              "testing MMI enquiry recording and PIN privacy");
+    TEST_FUNC(test_mmi_menu_and_list_charset_and_0xff(),
+              "testing MMI menu/list charset decoding and choice_nb=0xFF");
+    TEST_FUNC(test_mmi_bad_text_tag_rejected(),
+              "testing MMI menu with invalid text tag is rejected");
+    TEST_FUNC(test_mmi_ring_eviction_and_teardown(),
+              "testing MMI ring buffer eviction and ca_teardown clear");
     free_all_adapters();
     pmts.destroy_all();
     fflush(stdout);

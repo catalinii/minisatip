@@ -59,7 +59,7 @@
 
 int read_fd, id;
 int test_socket_enque_highprio() {
-    sockets *ss = s[id];
+    sockets *ss = sockets_pool[static_cast<size_t>(id)];
     struct iovec iov[2];
     iov[0].iov_base = (void *)"test1";
     iov[0].iov_len = 5;
@@ -69,7 +69,7 @@ int test_socket_enque_highprio() {
     iov[0].iov_base = (void *)"test3";
     socket_enque_highprio(ss, iov, 1);
     if (strncmp((char *)ss->prio_data, "test1test2test3", ss->prio_data_len))
-        LOG_AND_RETURN(1, "expected != the actual result: %s len %d",
+        LOG_AND_RETURN(1, "expected != the actual result: %s len %zu",
                        ss->prio_data, ss->prio_data_len);
     free(ss->prio_data);
     ss->prio_data_len = 0;
@@ -79,7 +79,7 @@ int test_socket_enque_highprio() {
 
 // A reply with a file body exceeds any small fixed queue
 int test_socket_enque_highprio_large() {
-    sockets *ss = s[id];
+    sockets *ss = sockets_pool[static_cast<size_t>(id)];
     std::vector<char> body(30000, 'x');
     struct iovec iov[2];
     iov[0].iov_base = (void *)"head";
@@ -108,7 +108,7 @@ int test_socket_writev_flush_enqued() {
     int rv;
     memset(buf, 0, sizeof(buf));
     memset(&iov, 0, sizeof(iov));
-    sockets *ss = s[id];
+    sockets *ss = sockets_pool[static_cast<size_t>(id)];
     create_fifo(&ss->fifo, 100);
 
     // flush enqued data (everything after 0x24 is not written)
@@ -122,7 +122,7 @@ int test_socket_writev_flush_enqued() {
     ss->flush_enqued_data = 1;
     sockets_write(id, (void *)"2", 1);
     flush_socket(ss);
-    if (3 != (rv = read(read_fd, buf, sizeof(buf))))
+    if (3 != (rv = static_cast<int>(read(read_fd, buf, sizeof(buf)))))
         LOG_AND_RETURN(2, "read unexpected number of bytes %d", rv);
     if (strncmp(buf, "012", 3))
         LOG_AND_RETURN(2, "unexpected result: 012 != %s", buf);
@@ -137,13 +137,14 @@ int to_write;
 
 // simulates a write to the buffer
 // assumes all data to write is less than the buffer size
-ssize_t writev_test(int rsock, const struct iovec *iov, int iiov) {
+ssize_t writev_test(int, const struct iovec *iov, int iiov) {
     int i;
     int left = to_write;
     int old_pos = buf_pos;
     for (i = 0; i < iiov; i++) {
-        int w = (left < iov[i].iov_len) ? left : iov[i].iov_len;
-        memcpy(test_buf + buf_pos, iov[i].iov_base, w);
+        int w = static_cast<int>(
+            std::min(static_cast<size_t>(left), iov[i].iov_len));
+        memcpy(test_buf + buf_pos, iov[i].iov_base, static_cast<size_t>(w));
         left -= w;
         buf_pos += w;
     }
@@ -156,14 +157,14 @@ int test_socket_buffering() {
     uint8_t start_rtsp_frame[] = {0x24, 0x0, 1, 2, 0x80, 0x21};
     int i;
     // account for 9 missing bytes at offset 50 (prio data + start_rtsp_frame)
-    for (i = 0; i < sizeof(buf); i++)
-        if (i < 50)
-            buf[i] = i;
+    for (size_t j = 0; j < sizeof(buf); j++)
+        if (j < 50)
+            buf[j] = static_cast<char>(j);
         else
-            buf[i] = i + 9;
+            buf[j] = static_cast<char>(j + 9);
 
     memset(&iov, 0, sizeof(iov));
-    sockets *ss = s[id];
+    sockets *ss = sockets_pool[static_cast<size_t>(id)];
     create_fifo(&ss->fifo, 100);
     ss->fifo.write_index = 50;
     ss->fifo.read_index = 50;

@@ -24,7 +24,7 @@ jobs:
 
     - name: Build all disabled
       run: |
-        rm -rf build;cmake -B build . -DLINUXDVB=OFF  && (cd build && make)
+        rm -rf build;cmake -B build . -DLINUXDVB=OFF -DDEV_WARNINGS=ON && (cd build && make)
 
     - name: Install additional build dependencies
       run: |
@@ -35,13 +35,13 @@ jobs:
 
     - name: Build all enabled
       run: |
-       rm -rf build;cmake -B build .  && (cd build && make)
+       rm -rf build;cmake -B build . -DDEV_WARNINGS=ON && (cd build && make)
 
     - name: Build clang
       run: |
-       rm -rf build;CXX=/usr/bin/clang++ cmake -B build && (cd build && make)
+       rm -rf build;CXX=/usr/bin/clang++ cmake -B build -DDEV_WARNINGS=ON && (cd build && make)
 
     - name: Build without libssl-dev
       run: |
        apt-get -y remove --purge libssl-dev
-       rm -rf build;cmake -B build .  && (cd build && make)
+       rm -rf build;cmake -B build . -DDEV_WARNINGS=ON && (cd build && make)

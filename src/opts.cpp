@@ -26,10 +26,10 @@
 #include <stdio.h>
 #include <string.h>
 
-void parse_dvbapi_opt(char *optarg, struct_opts_t *optz) {
+void parse_dvbapi_opt(const char *arg, struct_opts_t *optz) {
     char buf[100];
     memset(buf, 0, sizeof(buf));
-    safe_strncpy(buf, optarg);
+    safe_strncpy(buf, arg);
     if (buf[0] == '~') {
         optz->pids_all_no_dec = 1;
         memmove(buf, buf + 1, strlen(buf));
@@ -65,11 +65,11 @@ void parse_dvbapi_opt(char *optarg, struct_opts_t *optz) {
 }
 
 /* Parses --sdt-charset, returns DVB_CHARSET_AUTO/LATIN1, or -1. */
-int parse_sdt_charset_opt(const char *optarg) {
-    if (!strcmp(optarg, "auto"))
+int parse_sdt_charset_opt(const char *arg) {
+    if (!strcmp(arg, "auto"))
         return DVB_CHARSET_AUTO;
-    if (!strcmp(optarg, "latin1") || !strcmp(optarg, "iso-8859-1") ||
-        !strcmp(optarg, "iso8859-1"))
+    if (!strcmp(arg, "latin1") || !strcmp(arg, "iso-8859-1") ||
+        !strcmp(arg, "iso8859-1"))
         return DVB_CHARSET_LATIN1;
     return -1;
 }

@@ -42,7 +42,7 @@ typedef struct struct_satipc {
     int satip_fe;
     char last_cmd;
     satipc_transport_type transport_type;
-    char no_pids_all;
+    bool no_pids_all;
     char state;
     int64_t last_setup, last_connect, last_close, last_response_sent;
     uint8_t addpids, setup_pids;
@@ -92,7 +92,7 @@ typedef struct satip_xml_data {
 
 void find_satip_adapter();
 int satip_getxml(void *);
-char *init_satip_pointer(int len);
+char *init_satip_pointer(size_t len);
 int satipc_timeout(sockets *s);
 void get_s2_url(adapter *ad, char *url, int url_len);
 // Timeout-race helpers (defined in satipc.cpp, unit-tested).

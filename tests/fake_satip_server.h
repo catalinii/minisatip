@@ -51,8 +51,9 @@ struct FakeSatipServer {
                 LOG_AND_RETURN(-1, "fake server has no reply for: %s",
                                req.c_str());
             requests.push_back(req);
-            snprintf(reply_buf, reply_size, "%s", reply->c_str());
-            s->rlen = strlen(reply_buf);
+            snprintf(reply_buf, static_cast<size_t>(reply_size), "%s",
+                     reply->c_str());
+            s->rlen = static_cast<int>(strlen(reply_buf));
             satipc_reply(s);
             count++;
         }

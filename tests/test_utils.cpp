@@ -82,7 +82,7 @@ int test_fifo() {
     fifo_push_force(&f3, in_buf, 50, 1); // write_index = 50, read_index = 0
     uint64_t offset = 30;                // 20 bytes available at offset 30
     char out_buf[50] = {0};
-    uint32_t popped = fifo_pop_offset(&f3, out_buf, 50, &offset);
+    size_t popped = fifo_pop_offset(&f3, out_buf, 50, &offset);
     ASSERT_EQUAL(
         popped, 20,
         "Expected fifo_pop_offset to cap to write_index - offset (20 bytes)");
@@ -286,7 +286,7 @@ int test_obtain_mt() {
     ASSERT(total == N, "all slots claimed exactly once");
     // The loop index is the expected id here.
     for (int i : std::views::iota(0, N)) {
-        TestSlot *s = pool[i];
+        TestSlot *s = pool[static_cast<size_t>(i)];
         ASSERT(s && s->id == i, "slot id matches index");
     }
     ASSERT(pool.obtain() == nullptr, "full stays full");
@@ -306,14 +306,14 @@ int test_obtain_churn() {
             int id = s->id;
             if (id < 0 || id >= N)
                 bad_id++;
-            else if (held[id].exchange(true))
+            else if (held[static_cast<size_t>(id)].exchange(true))
                 dups++;
             s->enabled = true;
             s->enabled = false;
             // Drop the hold before publishing the release, so a racing
             // claimer never sees a stale hold.
             if (id >= 0 && id < N)
-                held[id] = false;
+                held[static_cast<size_t>(id)] = false;
             s->allocated = false;
             total++;
         }

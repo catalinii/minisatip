@@ -30,7 +30,7 @@ extern SegmentedPool<Shttp_client *, HTTPC_BUCKETS, MAX_HTTPC> httpc;
 static inline Shttp_client *get_httpc(int i) {
     if (i < 0 || i >= MAX_HTTPC)
         return NULL;
-    Shttp_client *h = httpc[i];
+    Shttp_client *h = httpc[static_cast<size_t>(i)];
     return (h && h->enabled) ? h : NULL;
 }
 

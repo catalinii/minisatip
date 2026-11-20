@@ -44,18 +44,18 @@ extern "C" int srt_send(SRTSOCKET u, const char *buf, int len) {
 }
 #endif
 
-int mock_adapter_tune(int aid, transponder *tp) { return 0; }
+int mock_adapter_tune(int, transponder *) { return 0; }
 
-int mock_set_pid(adapter *ad, int i_pid) {
+int mock_set_pid(adapter *, int) {
     return 123; // Dummy fd for the demux filter
 }
 
-int mock_del_filters(adapter *ad, int fd, int pid) { return 0; }
+int mock_del_filters(adapter *, int, int) { return 0; }
 
 void setup_test_env() {
     // Clean all streams, sockets, and adapters
-    s.destroy_all();
-    st.destroy_all();
+    sockets_pool.destroy_all();
+    streams_pool.destroy_all();
     free_all_adapters();
 
     a_count = 1;
@@ -240,7 +240,7 @@ int test_setup_after_play_new_mux_releases_adapter() {
 
 int test_setup_after_play_other_fe_releases_adapter() {
     setup_test_env();
-    int16_t saved_fe[2 * MAX_ADAPTERS];
+    int saved_fe[2 * MAX_ADAPTERS];
     memcpy(saved_fe, fe_map, sizeof(fe_map));
     memset(fe_map, -1, sizeof(fe_map));
     fe_map[0] = 0;
@@ -344,6 +344,110 @@ int test_flush_stream_srt_accounts_bw() {
     ASSERT(bw == bw1, "bw should not change on failed SRT send");
     mock_srt_fail = 0;
     return 0;
+}
+
+// Re-PLAY with the same SRT transport must reuse the attached socket
+// once the first PLAY has consumed the pending entry.
+static int srt_test_free_udp_port() {
+    int s = socket(AF_INET, SOCK_DGRAM, 0);
+    if (s < 0)
+        return -1;
+    struct sockaddr_in sa = {};
+    sa.sin_family = AF_INET;
+    sa.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    if (bind(s, (struct sockaddr *)&sa, sizeof(sa))) {
+        close(s);
+        return -1;
+    }
+    socklen_t len = sizeof(sa);
+    getsockname(s, (struct sockaddr *)&sa, &len);
+    close(s);
+    return ntohs(sa.sin_port);
+}
+
+int test_decode_transport_srt_replay_reuses_socket() {
+    setup_test_env();
+    srt_startup();
+    int saved_port = opts.rtsp_port;
+    int saved_ipv4 = opts.use_ipv4_only;
+    opts.use_ipv4_only = 1;
+    opts.rtsp_port = srt_test_free_udp_port();
+
+    // Teardown must run even on failure: early return strands the
+    // listener and open SRT sockets, hanging libsrt exit cleanup.
+    int rv = 0;
+    SRTSOCKET c = SRT_INVALID_SOCK;
+    SRTSOCKET srv = SRT_INVALID_SOCK;
+    streams *sid = NULL;
+    sockets rtsp = {};
+    struct sockaddr_in sa = {};
+    char host[] = "127.0.0.1";
+    const char *streamid = "replay-1";
+    int conntimeo = 1500;
+#define TCHECK(cond, msg)                                                      \
+    if (!(cond)) {                                                             \
+        LOG("srt-replay-test: %s", msg);                                       \
+        rv = 1;                                                                \
+        goto cleanup;                                                          \
+    }
+    TCHECK(opts.rtsp_port > 0, "need a free UDP port");
+    TCHECK(srt_listener_init() == 0, "listener must init");
+
+    rtsp.enabled = 1;
+    rtsp.sock = 1000;
+    rtsp.id = 0;
+    rtsp.sid = -1;
+    rtsp.type = TYPE_RTSP;
+
+    sid = setup_stream("?src=1&freq=11362&pol=h&sr=22000&pids=0", &rtsp);
+    TCHECK(sid != NULL, "setup_stream returned NULL");
+
+    // Client opens the SRT connection the first PLAY will consume.
+    c = srt_create_socket();
+    TCHECK(c != SRT_INVALID_SOCK, "client socket create");
+    srt_setsockflag(c, SRTO_STREAMID, streamid, (int)strlen(streamid));
+    srt_setsockflag(c, SRTO_CONNTIMEO, &conntimeo, sizeof(conntimeo));
+    sa.sin_family = AF_INET;
+    sa.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    sa.sin_port = htons((uint16_t)opts.rtsp_port);
+    TCHECK(srt_connect(c, (struct sockaddr *)&sa, sizeof(sa)) != SRT_ERROR,
+           "client connect must succeed");
+    // Wait for the accept to land connected in the pending map, then hand
+    // it back: decode_transport must be the one to consume it below.
+    for (int t = 0; t < 100 && srv == SRT_INVALID_SOCK; t++) {
+        srv = srt_pending_take(streamid);
+        if (srv == SRT_INVALID_SOCK)
+            usleep(20000);
+    }
+    TCHECK(srv != SRT_INVALID_SOCK, "server must queue the accept");
+    for (int t = 0; t < 100 && !srt_socket_is_connected(srv); t++)
+        usleep(20000);
+    TCHECK(srt_socket_is_connected(srv), "accepted socket must connect");
+    srt_pending_return(srv, streamid);
+
+    TCHECK(decode_transport(&rtsp, "RTP/AVP/SRT;srt_streamid=replay-1", host,
+                            opts.start_rtp) == 0,
+           "first SRT transport failed");
+    TCHECK(sid->srt_sock == srv, "attached socket must come from pending");
+
+    // Re-PLAY with the identical Transport header and no new SRT
+    // connection: must reuse the attached socket instead of failing.
+    TCHECK(decode_transport(&rtsp, "RTP/AVP/SRT;srt_streamid=replay-1", host,
+                            opts.start_rtp) == 0,
+           "SRT re-PLAY must reuse the attached socket");
+    TCHECK(sid->srt_sock == srv, "re-PLAY must keep the attached socket");
+
+cleanup:
+    if (sid)
+        close_stream(sid->sid);
+    if (c != SRT_INVALID_SOCK)
+        srt_close(c);
+    srt_listener_close();
+    opts.rtsp_port = saved_port;
+    opts.use_ipv4_only = saved_ipv4;
+    srt_cleanup();
+#undef TCHECK
+    return rv;
 }
 #endif
 
@@ -533,7 +637,7 @@ int test_start_play_pid_exhaustion_returns_503() {
 int test_start_play_pinned_fe_mismatch_returns_403() {
     setup_test_env();
     // Pin fe=1 to adapter 0, like production init (rest unmapped).
-    int16_t saved_fe[2 * MAX_ADAPTERS];
+    int saved_fe[2 * MAX_ADAPTERS];
     memcpy(saved_fe, fe_map, sizeof(fe_map));
     memset(fe_map, -1, sizeof(fe_map));
     fe_map[0] = 0;
@@ -574,7 +678,7 @@ int test_start_play_unmapped_fe_ignored_when_busy() {
     ASSERT(sid1 != NULL, "first setup_stream returned NULL");
     ASSERT(start_play(sid1, &http1) == 0, "first start_play failed");
 
-    int16_t saved_fe[2 * MAX_ADAPTERS];
+    int saved_fe[2 * MAX_ADAPTERS];
     memcpy(saved_fe, fe_map, sizeof(fe_map));
     memset(fe_map, -1, sizeof(fe_map));
 
@@ -737,10 +841,15 @@ static int run_rtsp_request(const char *req, std::string &out) {
         return -1;
     }
     sockets *s = get_sockets(id);
+    if (!s) {
+        close(sp[0]);
+        close(sp[1]);
+        return -1;
+    }
     char buf[1024];
     snprintf(buf, sizeof(buf), "%s", req);
     s->buf = (unsigned char *)buf;
-    s->rlen = strlen(buf);
+    s->rlen = static_cast<int>(strlen(buf));
     mywritev saved = _writev;
     captured_rtsp.clear();
     _writev = capture_writev;
@@ -765,6 +874,11 @@ static int run_empty_request(int type, int (*fn)(sockets *), int *flags_after,
         return -1;
     }
     sockets *s = get_sockets(id);
+    if (!s) {
+        close(sp[0]);
+        close(sp[1]);
+        return -1;
+    }
     static unsigned char empty[1] = {0};
     s->buf = empty;
     s->lbuf = sizeof(empty);
@@ -859,7 +973,7 @@ int test_read_rtsp_bogus_session_when_full_returns_454() {
     setup_test_env();
     for (int i = 0; i < MAX_STREAMS; ++i)
         ASSERT(streams_add() >= 0, "streams_add failed before MAX_STREAMS");
-    for (streams *s : st)
+    for (streams *s : streams_pool)
         s->ssrc = 1000 + s->id;
 
     std::string out;
@@ -893,7 +1007,7 @@ int test_read_rtsp_play_while_busy_returns_503() {
     ASSERT(sid1 != NULL, "first setup_stream returned NULL");
     ASSERT(start_play(sid1, &http1) == 0, "first start_play failed");
 
-    int saved_rtp = opts.start_rtp;
+    auto saved_rtp = opts.start_rtp;
     char *saved_disc = opts.disc_host;
     opts.start_rtp = 45600;
     opts.disc_host = (char *)"127.0.0.1"; // set at startup in production
@@ -976,6 +1090,8 @@ int main() {
 #ifndef DISABLE_SRT
     TEST_FUNC(test_flush_stream_srt_accounts_bw(),
               "test SRT flush_stream updates bw counters");
+    TEST_FUNC(test_decode_transport_srt_replay_reuses_socket(),
+              "test SRT re-PLAY reuses the attached socket");
 #endif
 
     fflush(stdout);

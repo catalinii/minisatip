@@ -60,9 +60,7 @@
 #include "satipc.h"
 #endif
 
-#ifndef DISABLE_DVBCA
 #include "ca.h"
-#endif
 
 #ifndef DISABLE_DDCI
 #include "ddci.h"
@@ -74,7 +72,7 @@ struct struct_opts opts;
 
 #define DESC_XML "desc.xml"
 #define PID_NAME "/var/run/%s.pid"
-char version[] = VERSION;
+char app_version[] = VERSION;
 char app_name[] = "minisatip";
 char pid_file[50];
 char public_str[] = "Public: OPTIONS, DESCRIBE, SETUP, PLAY, TEARDOWN";
@@ -141,6 +139,7 @@ int rtsp, http, si, si1, ssdp1;
 #define CLIENT_SEND_BUFFER_OPT (LONG_OPT_ONLY_START + 4)
 #define HW_DESCRAMBLER_OPT (LONG_OPT_ONLY_START + 5)
 #define SDT_CHARSET_OPT (LONG_OPT_ONLY_START + 6)
+#define ENIGMA_DDCI_OPT (LONG_OPT_ONLY_START + 7)
 
 static const struct option long_options[] = {
     {"adapters", required_argument, NULL, ADAPTERS_OPT},
@@ -212,6 +211,7 @@ static const struct option long_options[] = {
     {"ca-channels", required_argument, NULL, CA_CHANNELS_OPT},
 #endif
     {"hw-descrambler", no_argument, NULL, HW_DESCRAMBLER_OPT},
+    {"enigma-ddci", no_argument, NULL, ENIGMA_DDCI_OPT},
 
     {0, 0, 0, 0}};
 
@@ -273,7 +273,7 @@ void print_version(int use_log, int print_built_info) {
     int i;
     memset(buf, 0, sizeof(buf));
     sprintf(buf, "%s version %s, compiled on %s %s, with s2api version: %04X",
-            app_name, version, __DATE__, __TIME__, LOGDVBAPIVERSION);
+            app_name, app_version, __DATE__, __TIME__, LOGDVBAPIVERSION);
     if (!use_log)
         puts(buf);
     else
@@ -564,6 +564,8 @@ Help\n\
 \t* Provides more reliable decrypting for channels included in multiple providers\n\
 \n\
 * --hw-descrambler: Enable hardware descrambler (Enigma2 CA ioctl). Disabled by default\n\
+\n\
+* --enigma-ddci: Enable the enigma DVR loopback on any model. Disabled by default\n\
 \n"
 #ifndef DISABLE_DVBCA
         "\
@@ -590,9 +592,9 @@ By default every CAM supports 1 channels\n\
     exit(1);
 }
 
-char *get_command_line_string(int argc, char *argv[]) {
+char *get_command_line_string(int argc, const char *const argv[]) {
     int i;
-    size_t len = argc;
+    size_t len = static_cast<size_t>(argc);
 
     for (i = 0; i < argc; i++) {
         len += strlen(argv[i]) + 1;
@@ -610,13 +612,13 @@ char *get_command_line_string(int argc, char *argv[]) {
     return dest;
 }
 
-void get_short_opts(char *short_opts, const struct option *long_options) {
+void get_short_opts(char *short_opts, const struct option *long_opts) {
     int i = 0;
-    while (long_options[i].name) {
-        *short_opts++ = long_options[i].val;
-        if (long_options[i].has_arg == required_argument)
+    while (long_opts[i].name) {
+        *short_opts++ = static_cast<char>(long_opts[i].val);
+        if (long_opts[i].has_arg == required_argument)
             *short_opts++ = ':';
-        else if (long_options[i].has_arg == optional_argument) {
+        else if (long_opts[i].has_arg == optional_argument) {
             *short_opts++ = ':';
             *short_opts++ = ':';
         }
@@ -955,7 +957,9 @@ void set_options(int argc, char *argv[]) {
 #ifdef DISABLE_DVBAPI
             LOG("%s was not compiled with DVBAPI support, please install "
                 "libdvbcsa "
-                "(libdvbcsa-dev in Ubuntu) and change the Makefile",
+                "(libdvbcsa-dev in Ubuntu, or "
+                "https://github.com/oe-mirrors/libdvbcsa for ICAM support) "
+                "and change the Makefile",
                 app_name);
             exit(0);
 #else
@@ -1036,13 +1040,13 @@ void set_options(int argc, char *argv[]) {
             if (sep1 != NULL) {
                 *sep1 = 0;
                 opts.netcv_if = optarg;
-                opts.netcv_count = parse_int(sep1 + 1);
+                opts.netcv_count = static_cast<uint8_t>(parse_int(sep1 + 1));
                 break;
             }
 
             // default interface is vlan4 as it is used on the REEL
             opts.netcv_if = (char *)"vlan4";
-            opts.netcv_count = parse_int(optarg);
+            opts.netcv_count = static_cast<uint8_t>(parse_int(optarg));
 #endif
             break;
         }
@@ -1107,6 +1111,10 @@ void set_options(int argc, char *argv[]) {
             opts.hw_descrambler = 1;
             break;
 
+        case ENIGMA_DDCI_OPT:
+            opts.enigma_ddci = 1;
+            break;
+
         case SDT_CHARSET_OPT: {
             int cs = parse_sdt_charset_opt(optarg);
             if (cs < 0) {
@@ -1132,7 +1140,7 @@ void set_options(int argc, char *argv[]) {
 
     if (!opts.http_host) {
         opts.http_host = (char *)malloc(MAX_HOST);
-        snprintf(opts.http_host, MAX_HOST, "%s:%u", lip, opts.http_port);
+        snprintf(opts.http_host, MAX_HOST, "%s:%d", lip, opts.http_port);
     }
 
     opts.rtsp_host = (char *)malloc(MAX_HOST);
@@ -1181,7 +1189,8 @@ void set_options(int argc, char *argv[]) {
 int read_rtsp(sockets *s) {
     if (!s->rlen) // nothing buffered (EOF), nothing to parse
         return 0;
-    int cseq, i, rlen;
+    int cseq, rlen;
+    size_t i;
     int sess_id = 0;
     char buf[2000];
     char ra[50];
@@ -1198,15 +1207,15 @@ int read_rtsp(sockets *s) {
             s->id, s->sid, s->rlen, rtsp_len, s->buf[4], s->buf[5],
             (s->rlen == rtsp_len + 4) ? "complete" : "fragment");
         if (s->rlen >= rtsp_len + 4) { // we did not receive the entire packet
-            memmove(s->buf, s->buf + rtsp_len + 4, s->rlen - (rtsp_len + 4));
+            memmove(s->buf, s->buf + rtsp_len + 4,
+                    static_cast<size_t>(s->rlen - (rtsp_len + 4)));
             s->rlen -= rtsp_len + 4;
             if (s->rlen == 0)
                 return 0;
         } else { // handle the remaining data as next fragment
             rtsp_len -= s->rlen - 4;
             s->rlen = 4;
-            s->buf[2] = rtsp_len >> 8;
-            s->buf[3] = rtsp_len & 0xFF;
+            copy16(s->buf, 2, rtsp_len);
             return 0;
         }
     }
@@ -1251,7 +1260,7 @@ int read_rtsp(sockets *s) {
             s->id, s->sid, rlen);
 
     if (s->sid < 0)
-        for (i = 0; i < (int)arg.size(); i++)
+        for (i = 0; i < arg.size(); i++)
             if (starts_with_case_insensitive(arg[i], "Session:")) {
                 sess_id = parse_int(header_parameter(arg, i));
                 s->sid = find_session_id(sess_id);
@@ -1280,7 +1289,7 @@ int read_rtsp(sockets *s) {
     std::string_view useragent_sv;
     std::string_view transport_sv;
 
-    for (i = 0; i < (int)arg.size(); i++)
+    for (i = 0; i < arg.size(); i++)
         if (starts_with_case_insensitive(arg[i], "CSeq:"))
             cseq = parse_int(header_parameter(arg, i));
         else if (starts_with_case_insensitive(arg[i], "Transport:")) {
@@ -1307,7 +1316,7 @@ int read_rtsp(sockets *s) {
     if (starts_with_case_insensitive(arg[0], "PLAY") ||
         starts_with_case_insensitive(arg[0], "GET") ||
         starts_with_case_insensitive(arg[0], "SETUP")) {
-        char ra[100];
+        char destination[100];
         int rv;
 
         if (!(sid = get_sid(s->sid))) {
@@ -1358,11 +1367,11 @@ int read_rtsp(sockets *s) {
             s_timeout =
                 ((sid->timeout > 20000) ? sid->timeout : opts.timeout_sec) /
                 1000;
-            get_stream_rhost(sid->sid, ra, sizeof(ra));
+            get_stream_rhost(sid->sid, destination, sizeof(destination));
 
             switch (sid->type) {
             case STREAM_RTSP_UDP:
-                if (atoi(ra) < 224)
+                if (atoi(destination) < 224)
                     snprintf(
                         buf, sizeof(buf),
                         "Transport: "
@@ -1371,7 +1380,7 @@ int read_rtsp(sockets *s) {
                         "d;server_"
                         "port=%d-%d\r\nSession: "
                         "%010d;timeout=%d\r\ncom.ses.streamID: %d",
-                        ra,
+                        destination,
                         get_sock_shost(s->sock, localhost, sizeof(localhost)),
                         get_stream_rport(sid->sid),
                         get_stream_rport(sid->sid) + 1,
@@ -1384,7 +1393,7 @@ int read_rtsp(sockets *s) {
                         "RTP/"
                         "AVP;multicast;destination=%s;port=%d-%d\r\nSession: "
                         "%010d;timeout=%d\r\ncom.ses.streamID: %d",
-                        ra, get_stream_rport(sid->sid),
+                        destination, get_stream_rport(sid->sid),
                         get_stream_rport(sid->sid) + 1, get_session_id(s->sid),
                         s_timeout, sid->sid + 1);
                 break;
@@ -1468,7 +1477,7 @@ int read_http(sockets *s) {
     char ra[50];
     char *space;
     int is_head = 0;
-    static const char *xml =
+    static constexpr char xml[] =
         "<?xml version=\"1.0\"?>"
         "<root xmlns=\"urn:schemas-upnp-org:device-1-0\" configId=\"1\">"
         "<specVersion><major>1</major><minor>1</minor></specVersion>"
@@ -1544,7 +1553,7 @@ int read_http(sockets *s) {
     opts.datetime_current[24] = ' ';
     opts.datetime_current[25] = '\0';
 
-    double seconds = difftime(now, opts.start_time);
+    int seconds = static_cast<int>(difftime(now, opts.start_time));
     int days = seconds / 60 / 60 / 24;
     seconds -= days * 24 * 60 * 60;
     int hours = seconds / 60 / 60;
@@ -1602,7 +1611,7 @@ int read_http(sockets *s) {
             strcpy(adapters, "DVBS2-0,");
         adapters[strlen(adapters) - 1] = 0;
         snprintf(buf, sizeof(buf), xml, opts.name_app, app_name, opts.name_app,
-                 version, opts.uuid, opts.http_host, adapters,
+                 app_version, opts.uuid, opts.http_host, adapters,
                  opts.playlist ? opts.playlist : "");
         sprintf(headers,
                 "Cache-Control: no-cache\r\nContent-type: "
@@ -1613,32 +1622,48 @@ int read_http(sockets *s) {
     }
 
     if (url_sv == "/state.json") {
-        char *buf = (char *)malloc(JSON_STATE_MAXLEN);
+        char *json = (char *)malloc(JSON_STATE_MAXLEN);
         char *sbuf = (char *)malloc(JSON_STRING_MAXLEN);
         memset(sbuf, 0, JSON_STRING_MAXLEN);
         int len =
-            get_json_state(buf, JSON_STATE_MAXLEN, sbuf, JSON_STRING_MAXLEN);
+            get_json_state(json, JSON_STATE_MAXLEN, sbuf, JSON_STRING_MAXLEN);
         http_response(
             s, 200,
             (char *)("Content-Type: application/json; charset=utf-8\r\n"
+                     "X-Content-Type-Options: nosniff\r\n"
                      "Connection: close\r\n"
                      "Access-Control-Allow-Origin: *"),
-            buf, 0, len);
-        free(buf);
+            json, 0, len);
+        free(json);
         free(sbuf);
         return 0;
     }
 
     if (url_sv == "/bandwidth.json") {
-        char *buf = (char *)malloc(JSON_BANDWIDTH_MAXLEN);
-        int len = get_json_bandwidth(buf, JSON_BANDWIDTH_MAXLEN);
+        char *json = (char *)malloc(JSON_BANDWIDTH_MAXLEN);
+        int len = get_json_bandwidth(json, JSON_BANDWIDTH_MAXLEN);
         http_response(
             s, 200,
             (char *)("Content-Type: application/json; charset=utf-8\r\n"
+                     "X-Content-Type-Options: nosniff\r\n"
                      "Connection: close\r\n"
                      "Access-Control-Allow-Origin: *"),
-            buf, 0, len);
-        free(buf);
+            json, 0, len);
+        free(json);
+        return 0;
+    }
+
+    // Shares /state.json's unauthenticated LAN/CORS posture; PIN value and
+    // answer_length are never included in get_json_mmi().
+    if (url_sv == "/mmi.json") {
+        std::string json = get_json_mmi();
+        http_response(
+            s, 200,
+            (char *)("Content-Type: application/json; charset=utf-8\r\n"
+                     "X-Content-Type-Options: nosniff\r\n"
+                     "Connection: close\r\n"
+                     "Access-Control-Allow-Origin: *"),
+            json.data(), 0, static_cast<int>(json.size()));
         return 0;
     }
 
@@ -1730,7 +1755,7 @@ int ssdp_notify(sockets *s, int alive) {
         strcatf(buf, ptr, "NTS: ssdp:%s\r\n", alive ? "alive" : "byebye");
         if (alive)
             strcatf(buf, ptr, "SERVER: Linux/1.0 UPnP/1.1 %s/%s\r\n",
-                    opts.name_app, version);
+                    opts.name_app, app_version);
         strcatf(buf, ptr, "USN: uuid:%s%s\r\n", opts.uuid, i == 1 ? "" : nt[i]);
         strcatf(buf, ptr, "BOOTID.UPNP.ORG: %d\r\n", opts.bootid);
         strcatf(buf, ptr, "CONFIGID.UPNP.ORG: 0\r\n");
@@ -1739,10 +1764,10 @@ int ssdp_notify(sockets *s, int alive) {
         strcatf(buf, ptr, "\r\n\r\n");
 
         LOGM("%s packet %d:\n%s", op, i + 1, buf);
-        int wb = sendto(s->sock, buf, ptr, MSG_NOSIGNAL, &ssdp_sa.sa,
-                        SOCKADDR_SIZE(ssdp_sa));
+        ssize_t wb = sendto(s->sock, buf, static_cast<size_t>(ptr),
+                            MSG_NOSIGNAL, &ssdp_sa.sa, SOCKADDR_SIZE(ssdp_sa));
         if (wb != ptr)
-            LOG("incomplete ssdp_discovery: wrote %d out of %d: error %d: %s",
+            LOG("incomplete ssdp_discovery: wrote %zd out of %d: error %d: %s",
                 wb, ptr, errno, strerror(errno));
         ptr = 0;
     }
@@ -1764,23 +1789,25 @@ int ssdp_byebye(sockets *s) { return ssdp_notify(s, 0); }
 
 int ssdp;
 int ssdp_reply(sockets *s) {
-    const char *reply = "HTTP/1.1 200 OK\r\n"
-                        "CACHE-CONTROL: max-age=1800\r\n"
-                        "DATE: %s\r\n"
-                        "EXT:\r\n"
-                        "LOCATION: http://%s/%s\r\n"
-                        "SERVER: Linux/1.0 UPnP/1.1 %s/%s\r\n"
-                        "ST: urn:ses-com:device:SatIPServer:1\r\n"
-                        "USN: uuid:%s::urn:ses-com:device:SatIPServer:1\r\n"
-                        "BOOTID.UPNP.ORG: %d\r\n"
-                        "CONFIGID.UPNP.ORG: 0\r\n"
-                        "DEVICEID.SES.COM: %d\r\n\r\n\0";
-    const char *device_id_conflict = "M-SEARCH * HTTP/1.1\r\n"
-                                     "HOST: %s:1900\r\n"
-                                     "MAN: \"ssdp:discover\"\r\n"
-                                     "ST: urn:ses-com:device:SatIPServer:1\r\n"
-                                     "USER-AGENT: Linux/1.0 UPnP/1.1 %s/%s\r\n"
-                                     "DEVICEID.SES.COM: %d\r\n\r\n\0";
+    static constexpr char reply[] =
+        "HTTP/1.1 200 OK\r\n"
+        "CACHE-CONTROL: max-age=1800\r\n"
+        "DATE: %s\r\n"
+        "EXT:\r\n"
+        "LOCATION: http://%s/%s\r\n"
+        "SERVER: Linux/1.0 UPnP/1.1 %s/%s\r\n"
+        "ST: urn:ses-com:device:SatIPServer:1\r\n"
+        "USN: uuid:%s::urn:ses-com:device:SatIPServer:1\r\n"
+        "BOOTID.UPNP.ORG: %d\r\n"
+        "CONFIGID.UPNP.ORG: 0\r\n"
+        "DEVICEID.SES.COM: %d\r\n\r\n";
+    static constexpr char device_id_conflict[] =
+        "M-SEARCH * HTTP/1.1\r\n"
+        "HOST: %s:1900\r\n"
+        "MAN: \"ssdp:discover\"\r\n"
+        "ST: urn:ses-com:device:SatIPServer:1\r\n"
+        "USER-AGENT: Linux/1.0 UPnP/1.1 %s/%s\r\n"
+        "DEVICEID.SES.COM: %d\r\n\r\n";
     char *man, *man_sd, *didsescom, *ruuid, *rdid;
     char buf[500];
     char ra[50];
@@ -1813,14 +1840,14 @@ int ssdp_reply(sockets *s) {
             ptr = 0;
             strcatf(buf, ptr, device_id_conflict,
                     opts.bind ? opts.bind : getlocalip(), opts.name_app,
-                    version, opts.device_id);
+                    app_version, opts.device_id);
             LOG("A new device joined the network with the same Device ID:  %s, "
                 "asking to change DEVICEID.SES.COM",
                 get_sockaddr_host(s->sa, ra, sizeof(ra)));
-            int wb = sendto(ssdp, buf, ptr, MSG_NOSIGNAL, &s->sa.sa,
-                            SOCKADDR_SIZE(s->sa));
+            ssize_t wb = sendto(ssdp, buf, static_cast<size_t>(ptr),
+                                MSG_NOSIGNAL, &s->sa.sa, SOCKADDR_SIZE(s->sa));
             if (wb != ptr)
-                LOG("incomplete ssdp_reply notify: wrote %d out of %d: error "
+                LOG("incomplete ssdp_reply notify: wrote %zd out of %d: error "
                     "%d: %s",
                     wb, ptr, errno, strerror(errno));
         }
@@ -1853,17 +1880,18 @@ int ssdp_reply(sockets *s) {
 
     ptr = 0;
     strcatf(buf, ptr, reply, get_current_timestamp(), opts.http_host,
-            opts.xml_path, opts.name_app, version, opts.uuid, opts.bootid, did);
+            opts.xml_path, opts.name_app, app_version, opts.uuid, opts.bootid,
+            did);
 
     LOGM("Send Reply SSDP packet (fd: %d) %s:%d, bootid: %d deviceid: %d http: "
          "%s\n%s",
          ssdp, get_sockaddr_host(s->sa, ra, sizeof(ra)),
          get_sockaddr_port(s->sa), opts.bootid, did, opts.http_host, buf);
     // use ssdp (unicast) even if received to multicast address
-    int wb =
-        sendto(ssdp, buf, ptr, MSG_NOSIGNAL, &s->sa.sa, SOCKADDR_SIZE(s->sa));
+    ssize_t wb = sendto(ssdp, buf, static_cast<size_t>(ptr), MSG_NOSIGNAL,
+                        &s->sa.sa, SOCKADDR_SIZE(s->sa));
     if (wb != ptr)
-        LOG("incomplete ssdp_reply: wrote %d out of %d: error %d: %s", wb, ptr,
+        LOG("incomplete ssdp_reply: wrote %zd out of %d: error %d: %s", wb, ptr,
             errno, strerror(errno));
     return 0;
 }
@@ -2130,7 +2158,7 @@ void http_response(sockets *s, int rc, const char *ah, const char *desc,
     desc1 = desc;
     resp[sizeof(resp) - 1] = 0;
     if (!lr)
-        lr = strlen(desc);
+        lr = static_cast<int>(strlen(desc));
     else {
         binary = 1;
         desc1 = (char *)"";
@@ -2149,7 +2177,7 @@ void http_response(sockets *s, int rc, const char *ah, const char *desc,
         strlcatf(resp, sizeof(resp) - 1, lresp, "CSeq: %d\r\n", cseq);
     if (rc != 501)
         strlcatf(resp, sizeof(resp) - 1, lresp, "Server: %s/%s\r\n", app_name,
-                 version);
+                 app_version);
 
     if (ah && ah[0] && rc != 454 && rc != 404)
         strlcatf(resp, sizeof(resp) - 1, lresp, "%s\r\n", ah);
@@ -2172,7 +2200,7 @@ void http_response(sockets *s, int rc, const char *ah, const char *desc,
     iov[0].iov_len = strlen(resp);
     if (binary) {
         iov[1].iov_base = const_cast<char *>(desc);
-        iov[1].iov_len = lr;
+        iov[1].iov_len = static_cast<size_t>(lr);
     }
     sockets_writev_prio(s->id, iov, binary ? 2 : 1, 1);
 }
@@ -2198,6 +2226,6 @@ _symbols minisatip_sym[] = {
     {"time_running", VAR_PSTRING, &opts.time_running, 0, 0, 0},
     {"run_user", VAR_INT, &opts.run_user, 1, 0, 0},
     {"run_pid", VAR_INT, &opts.run_pid, 1, 0, 0},
-    {"version", VAR_STRING, &version, 1, 0, 0},
+    {"version", VAR_STRING, &app_version, 1, 0, 0},
     {"command_line", VAR_PSTRING, &opts.command_line, 1, 0, 0},
     {NULL, 0, NULL, 0, 0, 0}};

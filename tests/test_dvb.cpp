@@ -287,7 +287,7 @@ int test_dvb_lock_recovery_rejects_failed_tunes() {
     ad.tp = tp;
 
     adapter *saved_adapter = a[0];
-    int saved_log = opts.log;
+    auto saved_log = opts.log;
     a[0] = &ad;
     opts.log = 0;
 
@@ -356,7 +356,7 @@ int test_dvb_lock_recovery_forced_switch_resend() {
     ad.tp.diseqc_param.lnb_switch = 11700000;
     ad.wakeup = count_lock_recovery_wakeup;
     lock_recovery_wakeup_calls = 0;
-    int old_log = opts.log;
+    auto old_log = opts.log;
     opts.log = 0;
 
     setup_switch(&ad, false);
@@ -389,6 +389,82 @@ static struct {
     uint16_t v3_snr;
     uint32_t v3_ber;
 } mock_fe;
+
+static struct {
+    int set_pes_count;
+    struct dmx_pes_filter_params last_pes;
+    int add_pid_count;
+    uint16_t last_add_pid;
+    int remove_count;
+    int stop_count;
+    int last_fd;
+} demux_seq_cap;
+
+static int mock_ioctl_demux_seq(int fd, unsigned long req, ...) {
+    va_list ap;
+    va_start(ap, req);
+    void *arg = va_arg(ap, void *);
+    va_end(ap);
+    switch (req) {
+    case DMX_SET_PES_FILTER:
+        demux_seq_cap.set_pes_count++;
+        demux_seq_cap.last_fd = fd;
+        demux_seq_cap.last_pes =
+            *static_cast<struct dmx_pes_filter_params *>(arg);
+        return 0;
+    case DMX_ADD_PID:
+        demux_seq_cap.add_pid_count++;
+        demux_seq_cap.last_fd = fd;
+        demux_seq_cap.last_add_pid = *static_cast<uint16_t *>(arg);
+        return 0;
+    case DMX_REMOVE_PID:
+        demux_seq_cap.remove_count++;
+        demux_seq_cap.last_fd = fd;
+        return 0;
+    case DMX_STOP:
+        demux_seq_cap.stop_count++;
+        demux_seq_cap.last_fd = fd;
+        return 0;
+    }
+    errno = EINVAL;
+    return -1;
+}
+
+// Shared demux fd lifecycle, enigma2 record style: first pid
+// SET_PES_FILTER TSDEMUX_TAP IMMEDIATE, rest ADD_PID, last del STOPs.
+int test_dvb_demux_shared_fd_pid_sequence() {
+    adapter ad = {};
+    ad.id = 13;
+    ad.pa = 0;
+    ad.fn = 12;
+    int fd = open("/dev/null", O_RDWR);
+    ASSERT(fd >= 0, "need a stand-in demux fd");
+    ad.dvr = fd;
+    demux_seq_cap = {};
+    _ioctl = mock_ioctl_demux_seq;
+    ASSERT(dvb_demux_set_pid(&ad, 0) == fd, "first set returns the read fd");
+    ASSERT(demux_seq_cap.set_pes_count == 1, "first set arms the demux");
+    ASSERT(demux_seq_cap.last_fd == fd, "SET_PES targets the read fd");
+    ASSERT(demux_seq_cap.last_pes.pid == 0, "SET_PES carries the pid");
+    ASSERT(demux_seq_cap.last_pes.output == DMX_OUT_TSDEMUX_TAP,
+           "SET_PES taps the demux side");
+    ASSERT(demux_seq_cap.last_pes.flags == DMX_IMMEDIATE_START,
+           "SET_PES starts immediately");
+    ASSERT(dvb_demux_set_pid(&ad, 2211) == fd, "second set reuses the fd");
+    ASSERT(demux_seq_cap.set_pes_count == 1, "second set adds, not re-arms");
+    ASSERT(demux_seq_cap.add_pid_count == 1, "second set issues ADD_PID");
+    ASSERT(demux_seq_cap.last_add_pid == 2211, "ADD_PID carries the pid");
+    ASSERT(dvb_demux_del_filters(&ad, fd, 0) == 0, "del reports ok");
+    ASSERT(demux_seq_cap.remove_count == 1, "del issues REMOVE_PID");
+    ASSERT(demux_seq_cap.stop_count == 0, "non-last del stays armed");
+    ASSERT(dvb_demux_del_filters(&ad, fd, 2211) == 0, "last del reports ok");
+    ASSERT(demux_seq_cap.remove_count == 2, "last del removes its pid");
+    ASSERT(demux_seq_cap.stop_count == 1, "last del stops the demux");
+    ASSERT(ad.active_demux_pids == 0, "sequence drains the counter");
+    _ioctl = ioctl;
+    close(fd);
+    return 0;
+}
 
 static int mock_ioctl(int fd, unsigned long req, ...) {
     va_list ap;
@@ -466,13 +542,14 @@ int test_dvb_signal_v5_fallback() {
     _ioctl = mock_ioctl;
 
     // entries without usable scales still count as v5 (TVH): no v3 attempt
-    mock_fe = {.status = 0,
-               .str_len = 1,
-               .str_scale = 0,
-               .cnr_len = 1,
-               .cnr_scale = 0,
-               .blk_len = 1,
-               .v3_fail = true};
+    mock_fe = {};
+    mock_fe.status = 0;
+    mock_fe.str_len = 1;
+    mock_fe.str_scale = 0;
+    mock_fe.cnr_len = 1;
+    mock_fe.cnr_scale = 0;
+    mock_fe.blk_len = 1;
+    mock_fe.v3_fail = true;
     dvb_get_signal(&ad);
     ASSERT(ad.new_gs == 1, "entries with N/A scales must use the v5 path");
     ASSERT(ad.strength == 0 && ad.snr == 0, "N/A scales read as zero");
@@ -590,5 +667,7 @@ int main() {
               "test DVB lock recovery forced switch resend");
     TEST_FUNC(test_dvb_signal_v5_fallback(),
               "test DVB signal v5 preference with v3 fallback");
+    TEST_FUNC(test_dvb_demux_shared_fd_pid_sequence(),
+              "test shared demux fd pid sequence");
     return 0;
 }

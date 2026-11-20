@@ -4,7 +4,7 @@
 
 // https://stackoverflow.com/a/71826534
 void uuid4_generate(char *uuid) {
-    srand(time(NULL));
+    srand(static_cast<unsigned int>(time(NULL)));
 
     char v[] = {'0', '1', '2', '3', '4', '5', '6', '7',
                 '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};

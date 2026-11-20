@@ -22,6 +22,8 @@
 #include <sys/socket.h>
 
 extern int satipc_tune(int aid, transponder *tp);
+extern int satipc_tcp_read(int socket, void *buf, int len, sockets *ss,
+                           int *rb);
 extern int satipc_commit(adapter *ad);
 extern int satipc_set_pid(adapter *ad, int pid);
 extern int satip_standby_device(adapter *ad);
@@ -598,9 +600,9 @@ int test_satipc_open_device_cleans_rtsp_on_rtp_failure() {
     getsockname(srv, (struct sockaddr *)&sa, &len);
     sip.sport = ntohs(sa.sin_port);
 
-    int saved_rtp = opts.start_rtp;
+    auto saved_rtp = opts.start_rtp;
     opts.start_rtp = 5500;
-    int listen_udp = opts.start_rtp + 1000 + aid * 2;
+    auto listen_udp = static_cast<uint16_t>(opts.start_rtp + 1000 + aid * 2);
     // Occupy the RTP port without reuse so the setup bind fails.
     int block4 = socket(AF_INET, SOCK_DGRAM, 0);
     struct sockaddr_in ba = {};
@@ -641,7 +643,7 @@ int test_satipc_open_device_cleans_rtsp_on_rtp_failure() {
     ASSERT(rv != 0, "RTP setup must fail on the occupied port");
     ASSERT(ad.fe_sock == -1 && ad.fe == -1,
            "failed open must drop the RTSP socket");
-    for (sockets *ss : s)
+    for (sockets *ss : sockets_pool)
         ASSERT(ss->sid != aid, "failed open must not leak tracking");
 
     close(srv);
@@ -750,6 +752,37 @@ int test_satipc_drop_raced_socket() {
     return 0;
 }
 
+// #1557: an RTSP reply arriving over a TCP satipc connection must be
+// processed without crashing. satipc_tcp_read hands the reply to
+// satipc_reply through a stack `sockets` temporary; since the pool
+// refactor gave `sockets` a destructor that frees its buffers, that
+// temporary must be value-initialized — otherwise scope exit frees
+// stack garbage (free(): invalid pointer, seen on 32-bit ARM).
+int test_satipc_tcp_rtsp_reply_no_crash() {
+    RtspFixture fx;
+    if (fx.setup())
+        return 1;
+    fx.sip.transport_type = SIP_TRANSPORT_TCP;
+    fx.ad.dvr = -1;
+
+    static const char reply[] =
+        "RTSP/1.0 200 OK\r\nCSeq: 1\r\nSession: AB12\r\n\r\n";
+    ASSERT(write(fx.pipefd[1], reply, sizeof(reply) - 1) ==
+               (ssize_t)(sizeof(reply) - 1),
+           "reply must queue");
+
+    char buf[2048];
+    int rb = -1;
+    int rc = satipc_tcp_read(fx.pipefd[0], buf, sizeof(buf), &fx.rsock, &rb);
+    ASSERT(rc == 1 && rb == 0, "RTSP reply carries no stream bytes");
+    ASSERT(fx.sip.tcp_pos == 0 && fx.sip.tcp_len == 0,
+           "reply must be fully consumed");
+    free(fx.sip.tcp_data);
+    fx.sip.tcp_data = NULL;
+    fx.teardown();
+    return 0;
+}
+
 #ifndef DISABLE_SRT
 // Abort releases exactly the raced publish: matching state is torn
 // down, anything else (or nobody) is left untouched.
@@ -773,8 +806,8 @@ int test_satipc_abort_srt() {
     ASSERT(sip.srt_sock == SRT_INVALID_SOCK, "srt must invalidate");
     ASSERT(sip.srt_streamid.empty(), "streamid must clear");
     ASSERT(sip.udp_sock == -1 && ad.dvr == -1, "udp/dvr must reset");
-    ASSERT(get_sockets(id) && get_sockets(id)->sock == SOCK_TIMEOUT,
-           "handle must swap");
+    sockets *ss = get_sockets(id);
+    ASSERT(ss && ss->sock == SOCK_TIMEOUT, "handle must swap");
     ASSERT(!srt_socket_is_connected(s), "closed srt must read down");
     SRTSOCKET s2 = srt_create_socket();
     sip.srt_sock = s2;
@@ -852,9 +885,9 @@ int test_satipc_open_device_full_table_closes_untracked() {
         return 1;
     sip.sport = port;
 
-    int saved_rtp = opts.start_rtp;
+    auto saved_rtp = opts.start_rtp;
     opts.start_rtp = 5500;
-    int listen_udp = opts.start_rtp + 1000 + aid * 2;
+    auto listen_udp = static_cast<uint16_t>(opts.start_rtp + 1000 + aid * 2);
     int block4 = socket(AF_INET, SOCK_DGRAM, 0);
     struct sockaddr_in ba = {};
     ba.sin_family = AF_INET;
@@ -883,7 +916,7 @@ int test_satipc_open_device_full_table_closes_untracked() {
     ASSERT(rv != 0, "RTP setup must fail on the occupied port");
     ASSERT(ad.fe == -1, "untracked fd must be released");
     ASSERT(before >= 0 && after == before, "no fd may leak");
-    for (sockets *ss : s)
+    for (sockets *ss : sockets_pool)
         ASSERT(ss->sid != aid, "failed open must not track");
 
     for (int id : ids | std::views::take(n))
@@ -925,6 +958,8 @@ int main() {
 #endif
     TEST_FUNC(test_satipc_drop_raced_socket(),
               "test raced drop only releases its own socket");
+    TEST_FUNC(test_satipc_tcp_rtsp_reply_no_crash(),
+              "test TCP RTSP reply survives tmp socket");
     TEST_FUNC(test_rtsp_timeout_reopen_keeps_live_adapter(),
               "test live reopen stays published");
     // Last: fills the whole socket table (restores it afterwards).

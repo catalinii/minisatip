@@ -113,6 +113,9 @@ typedef enum fe_guard_interval {
     GUARD_INTERVAL_1_128,
     GUARD_INTERVAL_19_128,
     GUARD_INTERVAL_19_256,
+    GUARD_INTERVAL_PN420,
+    GUARD_INTERVAL_PN595,
+    GUARD_INTERVAL_PN945,
 } fe_guard_interval_t;
 typedef enum fe_spectral_inversion {
     INVERSION_OFF,
@@ -294,7 +297,7 @@ typedef struct diseqc {
     int pin;            // unicable pin code
     int only13v;        // unicable - use 13V voltage only
     int fast;           // don't send diseqc without position change
-    int addr;           // diseqc address (second byte in the sequence)
+    uint8_t addr;       // diseqc address (second byte in the sequence)
     int committed_no;   // committed switch number
     int uncommitted_no; // uncommitted switch number
     /* timing */
@@ -354,6 +357,10 @@ typedef struct struct_transponder {
 int tune_it_s2(int fd_frontend, transponder *tp);
 
 fe_delivery_system_t dvb_delsys(int aid, int fd, fe_delivery_system_t *sys);
+typedef struct struct_adapter adapter;
+int dvb_demux_set_pid(adapter *a, int i_pid);
+int dvb_demux_del_filters(adapter *ad, int fd, int pid);
+void dvb_set_demux_source(adapter *ad);
 #endif
 int detect_dvb_parameters(std::string_view s, transponder *tp);
 void copy_dvb_parameters(transponder *s, transponder *d);

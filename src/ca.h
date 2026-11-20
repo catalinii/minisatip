@@ -1,6 +1,19 @@
 #ifndef CA_H
 #define CA_H
+#include <string>
+
+#define MAX_MMI_ITEMS 32
+#define MAX_MMI_MESSAGES 16
+#define MAX_MMI_TEXT_LEN 255
+
+#ifdef DISABLE_DVBCA
+static inline std::string get_json_mmi() {
+    return "{\n\"last_changed\":0,\n\"last_seq\":0,\n\"messages\":[]\n}\n";
+}
+static inline void ca_clear_mmi_messages() {}
+#else
 #include "adapter.h"
+#include "ddci.h"
 #include "pmt.h"
 #include <openssl/evp.h>
 #include <openssl/rsa.h>
@@ -68,6 +81,8 @@
 #define TAG_CLOSE_MMI 0x9f8800
 #define TAG_DISPLAY_CONTROL 0x9f8801
 #define TAG_DISPLAY_REPLY 0x9f8802
+#define TAG_TEXT_LAST 0x9f8803
+#define TAG_TEXT_MORE 0x9f8804
 #define TAG_ENQUIRY 0x9f8807
 #define TAG_ANSWER 0x9f8808
 #define TAG_MENU_LAST 0x9f8809
@@ -192,6 +207,12 @@ struct cc_ctrl_data {
     EVP_PKEY *rsa_device_key;
 };
 
+// CI stack owner: live tuner, hardware DDCI, enigma tuner, loopback.
+enum class ca_mode : uint8_t { DVB = 0, DDCI, ENIGMA, ENIGMA_DDCI };
+
+// Enigma boxes expose at most two CI slots; enigma scans these.
+constexpr int MAX_ENIGMA_CI_SLOTS = 2;
+
 struct ca_device {
     // enabled/fd/sock/state are plain cross-thread ints: writers
     // take the per-device lock, readers tolerate one stale pass.
@@ -200,7 +221,10 @@ struct ca_device {
     int max_ca_pmt, multiple_pmt;
     int fd, sock;
     int id;
+    int ci_slot;  // /dev/ciN and tsmux slot, may differ from id
+    ca_mode mode; // zero-init DVB; set once at init publish
     int state;
+    int fresh_ca_session; // set at CA session create; ca_info consumes it
     uint16_t caid[MAX_CAID];
     uint32_t caids;
     int has_forced_caids;
@@ -210,7 +234,7 @@ struct ca_device {
 
     int uri_mask;
     char force_ci;
-    char linked_adapter;
+    int linked_adapter;
 
     /*
      * CAM module info
@@ -225,7 +249,7 @@ struct ca_device {
     /*
      * CAM date time handling
      */
-    uint64_t datetime_response_interval;
+    int64_t datetime_response_interval;
     int64_t datetime_next_send;
 
     // Reconnect pacing, written only by the CA poller thread.
@@ -242,11 +266,12 @@ struct ca_device {
 
 extern ca_device_t *ca_devices[];
 
+bool set_ci_input_str(int ci, const char *val);
 ca_device_t *alloc_ca_device();
 int ca_init(ca_device_t *d);
 void dvbca_init();
-int create_capmt(SCAPMT *ca, int listmgmt, uint8_t *capmt, int capmt_len,
-                 int cmd_id, int added_only, int kept = 1,
+int create_capmt(SCAPMT *ca, uint8_t listmgmt, uint8_t *capmt, int capmt_len,
+                 uint8_t cmd_id, int added_only, int kept = 1,
                  int (*spans)[2] = nullptr);
 void capmt_forget_sent(SCAPMT *c);
 uint32_t capmt_content_hash(uint8_t *capmt, int len);
@@ -258,8 +283,8 @@ int get_ca_multiple_pmt(int i);
 int capmt_has_pmt(const SCAPMT *c, int pmt_id);
 int capmt_pmt_count(const SCAPMT *c);
 int get_max_pmt_for_ca(int i);
-void get_authdata_filename(char *dest, size_t len, unsigned int slot,
-                           char *ci_name);
+void get_authdata_filename(char *dest, size_t len, int slot,
+                           const char *ci_name);
 char *get_ca_caids_string(int i, char *dest, int max_len);
 
 // CAM reset policy: reset attempts and ready polls per attempt.
@@ -300,5 +325,9 @@ void ca_cmd_watchdog(ca_device_t *d, int64_t now);
 
 struct struct_sockets;
 int ca_close(struct struct_sockets *s);
+// Serialize recent MMI messages; last_seq also advances when a slot is cleared.
+std::string get_json_mmi();
+void ca_clear_mmi_messages();
 
+#endif // DISABLE_DVBCA
 #endif

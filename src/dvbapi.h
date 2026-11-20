@@ -64,7 +64,7 @@ typedef struct struct_key {
     int algo;
     unsigned char cw[2][16];
     uint32_t cw_time[2];
-    int key_len;
+    size_t key_len;
     int sid;
     int pmt_pid;
     int64_t last_ecm, last_dmx_stop;
@@ -106,7 +106,7 @@ int dvbapi_enabled();
 int send_ecm(int filter_id, unsigned char *b, int len, void *opaque);
 int batch_size();
 int decrypt_stream(adapter *ad, void *arg);
-int keys_add(int adapter, int pmt_id);
+int keys_add(int aid, int pmt_id);
 int keys_del(int i);
 int dvbapi_process_pmt(unsigned char *b, adapter *ad);
 void dvbapi_pid_add(adapter *a, int pid, SPid *cp, int existing);

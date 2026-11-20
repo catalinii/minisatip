@@ -24,20 +24,24 @@ extern int pmt_del(int id);
 static adapter *setup_mock_adapter(int id, int physical_adapter, int ca_num) {
     if (id < 0 || id >= MAX_ADAPTERS)
         return nullptr;
-    if (!a[id]) {
-        a[id] = static_cast<adapter *>(calloc(1, sizeof(adapter)));
-        a[id]->id = id;
-        a[id]->pa = physical_adapter;
-        a[id]->fn = ca_num;
-        a[id]->enabled = 1;
+    adapter *&ad = a[static_cast<size_t>(id)];
+    if (!ad) {
+        ad = static_cast<adapter *>(calloc(1, sizeof(adapter)));
+        ad->id = id;
+        ad->pa = physical_adapter;
+        ad->fn = ca_num;
+        ad->enabled = 1;
     }
-    return a[id];
+    return ad;
 }
 
 static void cleanup_mock_adapter(int id) {
-    if (id >= 0 && id < MAX_ADAPTERS && a[id]) {
-        free(a[id]);
-        a[id] = nullptr;
+    if (id < 0 || id >= MAX_ADAPTERS)
+        return;
+    adapter *&ad = a[static_cast<size_t>(id)];
+    if (ad) {
+        free(ad);
+        ad = nullptr;
     }
 }
 
@@ -312,7 +316,7 @@ static int test_csa_vs_csa_icam_routing() {
 static int test_hw_ca_update_retarget() {
     adapter *ad = setup_mock_adapter(0, 0, 0);
     ASSERT(ad != nullptr, "setup_mock_adapter failed");
-    int saved = opts.hw_descrambler;
+    auto saved = opts.hw_descrambler;
     opts.hw_descrambler = 1;
 
     int pmt_id = pmt_add(0, 500, 5000);
