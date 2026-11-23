@@ -97,14 +97,21 @@ constexpr std::array<int, 4> DDCI_TABLE_PIDS = {0, 1, 16, 20};
     return std::ranges::find(DDCI_TABLE_PIDS, pid) != DDCI_TABLE_PIDS.end();
 }
 
+// Pids the device generates itself (PAT, SDT, EIT): transponder
+// content on them drops at the push, remaps never land on them.
+[[nodiscard]] static constexpr bool ddci_is_generated_psi_pid(int pid) {
+    return pid == 0 || pid == 17 || pid == 18;
+}
+
 int find_ddci_pid(ddci_device_t *d, int pid) {
     int ddci_pid;
     if (pid < 0 || pid > 8191)
         LOG_AND_RETURN(-1, "pid %d invalid", pid);
 
     for (ddci_pid = pid; (ddci_pid & 0xFFFF) < 8191; ddci_pid++) {
-        // #1565: ddci pid 17 carries the generated SDT only.
-        if (ddci_pid != 17 && !get_ddci_pid(d, ddci_pid)) {
+        // #1565: generated-PSI pids carry device tables only.
+        if (!ddci_is_generated_psi_pid(ddci_pid) &&
+            !get_ddci_pid(d, ddci_pid)) {
             return ddci_pid;
         }
     }
@@ -115,11 +122,9 @@ int add_pid_mapping_table(int ad, int pid, int pmt, ddci_device_t *d,
     int ddci_pid = -1;
     ddci_mapping_table_t *m;
     if (!has_pid_mapping(d, ad, pid)) {
-        // PAT maps to 0 (dropped at push for the generated table);
-        // SDT likewise (#1565: the CAM must see only the generated
-        // SDT, or both streams return on 17 with clashing CCs).
-        // Other pids collide-remap via find_ddci_pid across tuners.
-        ddci_pid = (pid == 0 || pid == 17) ? 0 : find_ddci_pid(d, pid);
+        // Generated PSI maps to 0 (dropped at push for the device
+        // tables); other pids collide-remap via find_ddci_pid.
+        ddci_pid = ddci_is_generated_psi_pid(pid) ? 0 : find_ddci_pid(d, pid);
         m = &d->mapping[MAKE_KEY(ad, pid)];
         m->ad = ad;
         m->pid = pid;
@@ -642,6 +647,9 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt, int update) {
     }
 
     d->pmt[pos].id = pmt->id;
+    // No PCR until a kept stream proves one (null, never the PAT
+    // pid); the stream loop below recomputes it every (re-)send.
+    d->pmt[pos].pcr_pid = 0x1FFF;
     // A (re-)registered channel emits on the next tick.
     d->pmt[pos].last_pmt = 0;
 
@@ -710,8 +718,8 @@ int ddci_process_pmt(adapter *ad, SPMT *pmt, int update) {
         count_new(stream_pid.pid);
         int ddci_pid =
             add_pid_mapping_table(ad->id, stream_pid.pid, pmt->id, d, 0);
-        // map the PCR pid as well
-        if (stream_pid.pid == pmt->pcr_pid) {
+        // map the PCR pid as well, unless dropped (0 stays null)
+        if (stream_pid.pid == pmt->pcr_pid && ddci_pid > 0) {
             d->pmt[pos].pcr_pid = ddci_pid;
         }
     }
@@ -1055,6 +1063,16 @@ int safe_get_pid_mapping(ddci_device_t *d, int aid, int pid) {
     return pid;
 }
 
+// CA descriptor whose ECM drops at the push: advertising it would
+// point the CAM at a generated table's pid.
+static bool ddci_is_dropped_ecm(ddci_device_t *d, int aid,
+                                const descriptor_t &desc) {
+    if (!desc.is_ca_descriptor() || desc.len < 4 || desc.data.size() < 4)
+        return false;
+    int raw = ((desc.data[2] & 0x1F) << 8) | desc.data[3];
+    return safe_get_pid_mapping(d, aid, raw) == 0;
+}
+
 int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *new_pmt, int pmt_size,
                     ddci_pmt_t *dp) {
     int pid = pmt->pid, pi_len = 0, i;
@@ -1085,6 +1103,10 @@ int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *new_pmt, int pmt_size,
 
     // Add CA IDs and CA Pids
     for (i = 0; i < pmt->caids; i++) {
+        int ecm_pid = safe_get_pid_mapping(d, pmt->adapter, pmt->ca[i]->pid);
+        // Dropped ECM (generated-PSI pid): the CAM gets no stream.
+        if (ecm_pid == 0)
+            continue;
         int private_data_len =
             static_cast<int>(pmt->ca[i]->private_data.size());
         if (b - new_pmt + 10 + private_data_len > pmt_size) {
@@ -1095,7 +1117,7 @@ int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *new_pmt, int pmt_size,
         *b++ = 0x09;
         *b++ = static_cast<uint8_t>(0x04 + private_data_len);
         copy16(b, 0, pmt->ca[i]->id);
-        copy16(b, 2, safe_get_pid_mapping(d, pmt->adapter, pmt->ca[i]->pid));
+        copy16(b, 2, ecm_pid);
         std::copy_n(pmt->ca[i]->private_data.data(), private_data_len, b + 4);
         pi_len += 6 + private_data_len;
         b += 4 + private_data_len;
@@ -1120,10 +1142,17 @@ int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *new_pmt, int pmt_size,
             }
         }
 
-        // ES info length
+        int ddci_stream = safe_get_pid_mapping(d, pmt->adapter, stream_pid.pid);
+        // Dropped at the push (generated-PSI pid): never advertise
+        // a device table's pid as a descrambled stream.
+        if (ddci_stream == 0)
+            continue;
+
+        // ES info length, sans dropped-ECM CA descriptors
         int es_info_len = 0;
         for (const auto &desc : stream_pid.descriptors) {
-            es_info_len += desc.len + 2;
+            if (!ddci_is_dropped_ecm(d, pmt->adapter, desc))
+                es_info_len += desc.len + 2;
         }
         if (b - new_pmt + 9 + es_info_len > pmt_size) {
             LOG("%s: truncating PMT %d stream list, buffer full", __FUNCTION__,
@@ -1133,7 +1162,7 @@ int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *new_pmt, int pmt_size,
 
         // Stream type + PID
         *b = stream_pid.type;
-        copy16(b, 1, safe_get_pid_mapping(d, pmt->adapter, stream_pid.pid));
+        copy16(b, 1, ddci_stream);
         b += 3;
 
         copy16(b, 0, es_info_len);
@@ -1141,6 +1170,8 @@ int ddci_create_pmt(ddci_device_t *d, SPMT *pmt, uint8_t *new_pmt, int pmt_size,
 
         // Descriptors, remapping the ECM pid of CA descriptors
         for (const auto &desc : stream_pid.descriptors) {
+            if (ddci_is_dropped_ecm(d, pmt->adapter, desc))
+                continue;
             *b++ = desc.type;
             *b++ = desc.len;
             if (desc.is_ca_descriptor() && desc.len >= 4 &&
@@ -2019,9 +2050,9 @@ int ddci_process_cat(int filter, unsigned char *b, int, void *opaque) {
         caid = b[i + 2] * 256 + b[i + 3];
         capid = (b[i + 4] & 0x1F) * 256 + b[i + 5];
         LOG("CAT pos %d caid %04X, pid %d", k, caid, capid);
-        // Fixed table pids always collide: a CAT claiming EMMs on
-        // them is broken SI, not a reason to skip or EMM-map them.
-        if (ddci_is_table_pid(capid))
+        // Table and generated-PSI pids always collide: a CAT
+        // claiming EMMs on them is broken SI, skip it.
+        if (ddci_is_table_pid(capid) || ddci_is_generated_psi_pid(capid))
             continue;
 
         emm_pids.push_back(capid);
