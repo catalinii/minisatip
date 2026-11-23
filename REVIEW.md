@@ -16,6 +16,8 @@ Review the changes on the current branch against `master`
 - Scale the number and diversity of reviewers to the request,
   then stop on evidence state or an explicit caller or runtime boundary.
 - A fixed batch count never proves completion.
+- Stopping below the sized minimum on a caller or runtime boundary
+  is partial coverage; the verdict cap in Report format applies.
 
 ## Rules (same as the original review protocol)
 
@@ -42,6 +44,15 @@ Review the changes on the current branch against `master`
 - For behavior, abuse resistance, and a reported failure, use separate
   correctness, security, and reproduction lenses,
   each with a distinct falsification target.
+- Challenge the diagnosis, not just the patch: for a reported failure,
+  state each alternative mechanism consistent with the symptoms and
+  rule it in or out from inspected code. Untested trust is unresolved.
+- Trace changed values to every reader: when a change alters the value
+  or domain produced at a site, list every read of that value and
+  check each one, not just the readers the description names.
+- Fix the class, not the instance: when a change mirrors a precedent
+  or handles one member of a kind, list the kind's members and
+  disposition each (covered, out of scope with reason, or unresolved).
 
 ## Convergence
 
@@ -60,12 +71,16 @@ Review the changes on the current branch against `master`
 - Security: injection, unsafe input, secrets.
 - Concurrency: races, deadlocks, lifetime issues.
 - Style: comments max 2 lines (see AGENTS.md); match surrounding conventions.
-- Tests: changed behavior covered; no weakened assertions or skipped tests.
+- Tests: changed behavior covered, each pinning both the new outcome
+  and the preserved outcome; no weakened assertions or skipped tests.
 
 ## Report format (adapted for agent reporting)
 
 - Findings ordered by severity: blocker / major / minor.
 - Each finding: `path:line`, short description (1-2 lines), suggested fix.
 - End with a one-line verdict: approve / approve with comments / request changes.
+- Cap the verdict to the coverage: a bare approve needs every rule
+  above applied to each material surface; bounded coverage names its
+  gaps as residual risk, verdicting at most approve with comments.
 - State omitted scope for top-N, sampling, no-retry, capacity, caller limit,
   and runtime budget boundaries; never describe a bounded sample as exhaustive.
