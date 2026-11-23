@@ -75,6 +75,7 @@ typedef struct struct_opts {
     int diseqc_after_burst;
     int diseqc_after_tone;
     int diseqc_multi;
+    int diseqc_voltage; // -1: not forced ; 13|18: forced
     int lnb_low, lnb_high, lnb_switch, lnb_circular;
     int adapter_timeout;
     int max_pids;

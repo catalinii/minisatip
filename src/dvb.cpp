@@ -959,6 +959,7 @@ int send_diseqc(adapter *ad, int fd, int pos, int pos_change, int pol,
     int committed_no = d->committed_no;
     int uncommitted_no = d->uncommitted_no;
     int uncommitted_first = 0;
+    int restore_voltage = 0; // Set when target voltage difers from forced voltage
     int posu, posc;
     /* DiSEqC 1.0 */
     struct dvb_diseqc_master_cmd cmd = {{0xe0, 0x10, 0x38, 0xf0, 0x00, 0x00},
@@ -970,6 +971,10 @@ int send_diseqc(adapter *ad, int fd, int pos, int pos_change, int pol,
     if (pos_change && ad->diseqc_multi >= 0 && pos != ad->diseqc_multi) {
         send_diseqc(ad, fd, ad->diseqc_multi, 1, pol, hiband, d);
         pos_change = 1;
+    }
+
+    if ((opts.diseqc_voltage == 13 && pol) || (opts.diseqc_voltage == 18 && !pol)) {
+        restore_voltage = 1;
     }
 
     if (uncommitted_no > committed_no)
@@ -991,15 +996,15 @@ int send_diseqc(adapter *ad, int fd, int pos, int pos_change, int pol,
     uncmd.msg[1] = d->addr;
     uncmd.msg[3] = static_cast<uint8_t>(0xf0 | (posu & 0x0f));
 
-    LOGM("send_diseqc fd %d, pos = %d (c %d u %d), pol = %d, hiband = %d", fd,
-         pos, posc, posu, pol, hiband);
+    LOGM("send_diseqc fd %d, pos = %d (c %d u %d), pol = %d, hiband = %d, voltage = %d", fd,
+         pos, posc, posu, pol, hiband, (!pol != !restore_voltage)? 18 : 13);
     if (ad->wakeup)
         ad->wakeup(ad, fd, pol ? SEC_VOLTAGE_18 : SEC_VOLTAGE_13);
 
     if (ioctl(fd, FE_SET_TONE, SEC_TONE_OFF) == -1)
         LOG("send_diseqc: FE_SET_TONE failed for fd %d: %s", fd,
             strerror(errno));
-    if (ioctl(fd, FE_SET_VOLTAGE, pol ? SEC_VOLTAGE_18 : SEC_VOLTAGE_13) == -1)
+    if (ioctl(fd, FE_SET_VOLTAGE, (!pol != !restore_voltage) ? SEC_VOLTAGE_18 : SEC_VOLTAGE_13) == -1)
         LOG("send_diseqc: FE_SET_VOLTAGE failed for fd %d: %s", fd,
             strerror(errno));
 
@@ -1019,15 +1024,20 @@ int send_diseqc(adapter *ad, int fd, int pos, int pos_change, int pol,
                   (pos & 1) ? SEC_MINI_B : SEC_MINI_A) == -1)
             LOG("send_diseqc: FE_DISEQC_SEND_BURST failed for fd %d: %s", fd,
                 strerror(errno));
-    }
 
-    sleep_msec(d->after_burst);
+        sleep_msec(d->after_burst);
+    }
 
     if (ioctl(fd, FE_SET_TONE, hiband ? SEC_TONE_ON : SEC_TONE_OFF) == -1)
         LOG("send_diseqc: FE_SET_TONE failed for fd %d: %s", fd,
             strerror(errno));
 
     sleep_msec(d->after_tone);
+
+    if (restore_voltage)
+        if (ioctl(fd, FE_SET_VOLTAGE, pol ? SEC_VOLTAGE_18 : SEC_VOLTAGE_13) == -1)
+            LOG("send_diseqc: FE_SET_VOLTAGE failed for fd %d: %s", fd,
+                strerror(errno));
 
     return 0;
 }

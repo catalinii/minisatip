@@ -76,6 +76,8 @@ Help
 	* All timing values are in ms, default adapter values are: 15-54-15-15-15-0
 	- note: * as adapter means apply to all adapters
 
+* --diseqc-voltage 13|18 - enforces the voltage when sending DiseqC commands
+
 * -D --device-id DVC_ID: specify the device id (in case there are multiple SAT>IP servers in the network)
  	* eg: -D 4 
 
