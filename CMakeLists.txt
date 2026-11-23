@@ -156,7 +156,6 @@ if(NOT MINISATIP_HAS_NATIVE_64BIT_ATOMICS)
     if(NOT MINISATIP_HAS_LIBATOMIC)
         message(FATAL_ERROR "64-bit atomics require libatomic, but it could not be linked")
     endif()
-    list(APPEND MINISATIP_LIBS atomic)
 endif()
 
 # Export compile commands for IDE support
@@ -286,6 +285,10 @@ if(SRT)
 endif()
 if(NOT APPLE)
     list(APPEND MINISATIP_LIBS rt)
+endif()
+if(NOT MINISATIP_HAS_NATIVE_64BIT_ATOMICS)
+    # Keep libatomic after libraries that may reference its symbols.
+    list(APPEND MINISATIP_LIBS atomic)
 endif()
 
 # Main executable
