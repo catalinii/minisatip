@@ -1238,6 +1238,88 @@ int test_ddci_process_ts_drops_tuner_pat() {
     ASSERT(!saw_tuner_pat, "tuner PAT dropped at the push");
     return 0;
 }
+
+// #1565: the device generates its own SDT on pid 17, so the
+// transponder SDT must drop at the tuner like the PAT does.
+int find_ddci_pid(ddci_device_t *d, int pid);
+int del_pmt_mapping_table(ddci_device_t *d, int ad, int pmt);
+int test_ddci_process_ts_drops_transponder_sdt() {
+    ddci_device_t d = {};
+    uint8_t buf[188 * 2];
+    adapter ad = {}, ad2 = {};
+    memset(buf, 0, sizeof(buf));
+    d.id = 2;
+    d.enabled = 1;
+    create_fifo(&d.fifo, DDCI_BUFFER);
+    memset(ddci_devices, 0, sizeof(ddci_devices));
+    ddci_devices[2] = &d;
+    create_adapter(&ad, 1);
+    create_adapter(&ad2, 2);
+    ad.buf = buf;
+    ad.lbuf = sizeof(buf);
+    ad.rlen = sizeof(buf);
+    buf[0] = 0x47;
+    set_pid_ts(buf, 1000);
+    memset(buf + 4, 0xAA, 8);
+    buf[188] = 0x47;
+    set_pid_ts(buf + 188, 17);
+    memset(buf + 188 + 4, 0xAA, 8);
+    int ddci_pid = add_pid_mapping_table(1, 1000, 0, &d, 1);
+    ASSERT(ddci_pid > 0, "stream pid mapped");
+    int sdt_ddci = add_pid_mapping_table(1, 17, 0, &d, 1);
+    ASSERT(sdt_ddci == 0, "transponder SDT maps to ddci 0 like PAT");
+    SPMT *save = pmts[0];
+    pmts.slot(0) = nullptr;
+    pushed_pids.clear();
+    _writev = cap_writev;
+    ddci_process_ts(&ad, &d);
+    _writev = writev;
+    pmts.slot(0) = save;
+    bool saw_stream = false, saw_transponder_sdt = false;
+    for (auto &pp : pushed_pids) {
+        if (pp.pid == ddci_pid && pp.marker)
+            saw_stream = true;
+        if (pp.pid == 17 && pp.marker)
+            saw_transponder_sdt = true;
+    }
+    free_fifo(&d.fifo);
+    ddci_devices[2] = nullptr;
+    a[1] = nullptr;
+    a[2] = nullptr;
+    ASSERT(saw_stream, "mapped stream pid pushed");
+    ASSERT(!saw_transponder_sdt, "transponder SDT dropped at the push");
+    ASSERT(PID_FROM_TS(buf + 188) == 17, "tuner keeps its SDT for clients");
+    return 0;
+}
+
+// #1565: ddci pids 17/18 carry the generated SDT/EIT, so no
+// collision remap may land on them.
+int test_ddci_find_ddci_pid_skips_generated_psi() {
+    ddci_device_t d = {};
+    d.id = 2;
+    for (int pid = 1; pid <= 16; pid++)
+        add_pid_mapping_table(2, pid, 0, &d, 0);
+    int remapped = find_ddci_pid(&d, 1);
+    del_pmt_mapping_table(&d, 2, 0);
+    ASSERT(remapped == 19, "remap skips reserved ddci pids 17 and 18");
+    return 0;
+}
+
+// #1565 follow-up: NIT on two tuners must not collide with the
+// generated SDT/EIT (tuner B used to land on 17, then 18).
+int test_ddci_nit_two_tuners_skips_generated_psi() {
+    ddci_device_t d = {};
+    d.id = 2;
+    int first = add_pid_mapping_table(1, 16, 0, &d, 0);
+    int second = add_pid_mapping_table(2, 16, 1, &d, 0);
+    int eit = add_pid_mapping_table(1, 18, 0, &d, 0);
+    del_pmt_mapping_table(&d, 1, 0);
+    del_pmt_mapping_table(&d, 2, 1);
+    ASSERT(first == 16, "first tuner NIT keeps pid 16");
+    ASSERT(second == 19, "second tuner NIT skips 17 and 18");
+    ASSERT(eit == 0, "transponder EIT drops like PAT/SDT");
+    return 0;
+}
 // The dump locks each device itself: calling it with d->mutex held
 // must return (a hang here fails via the ctest timeout).
 int test_dump_mapping_table_nested() {
@@ -1795,6 +1877,72 @@ int test_create_pmt() {
 
 // The rebuilt PMT must emit mapped DDCI pids in the stream-level CA
 // descriptors too, never the raw source ECM pids.
+// Provider PMT with a stream and an ECM on pid 17: both drop at the
+// push, so the generated PMT skips them (never pid 0) with PCR null.
+int test_ddci_create_pmt_skips_dropped_pids() {
+    ddci_device_t d0 = {};
+    ca_device_t ca0 = {};
+    adapter ad = {}, a0 = {};
+
+    for (auto &slot : a)
+        slot = nullptr;
+    create_adapter(&ad, 8);
+    create_adapter(&a0, 0);
+    SPMT *pmt0 = create_pmt(8, 600, 601, 602, 0x100, 0x100);
+    pmt_add_stream_pid(pmt0, 17, 2, false, true);
+    pmt_add_caid(pmt0, 0x200, 17, NULL, 0);
+    pmt0->pcr_pid = 17;
+    memset(&d0.pmt, -1, sizeof(d0.pmt));
+    d0.id = 0;
+    d0.enabled = 1;
+    d0.max_channels = 1;
+    memset(ddci_devices, 0, sizeof(ddci_devices));
+    ddci_devices[0] = &d0;
+
+    ca0.id = 0;
+    ca0.enabled = 1;
+    ca0.state = CA_STATE_INITIALIZED;
+    memset(ca_devices, 0, sizeof(ca_devices));
+    ca_devices[0] = &ca0;
+    int dvbca_id = add_ca(&dvbca);
+    add_caid_mask(dvbca_id, 0, 0x100, 0xFFFF);
+
+    ASSERT(ddci_process_pmt(&ad, pmt0, 0) == TABLES_RESULT_OK, "slot expected");
+    ASSERT(d0.pmt[0].pcr_pid == 0x1FFF, "dropped PCR reads null, not PAT pid");
+    ASSERT(section_pcr_pid(&d0, pmt0) == 0x1FFF, "section PCR must be null");
+
+    uint8_t psi[1500];
+    int psi_len = ddci_create_pmt(&d0, pmt0, psi, sizeof(psi), &d0.pmt[0]);
+    ASSERT(psi_len > 0, "ddci_create_pmt failed");
+
+    uint8_t *b = psi + 1; // section start
+    int pi_len = ((b[10] & 0xF) << 8) | b[11];
+    uint8_t *es = b + 12 + pi_len;
+    uint8_t *end = psi + psi_len - 4; // before the CRC
+    int prog_ca = 0, es_count = 0;
+    for (uint8_t *dd = b + 12; dd + 2 <= es && dd + 2 + dd[1] <= es;
+         dd += 2 + dd[1]) {
+        if (dd[0] == 0x09 && dd[1] >= 4) {
+            int capid = ((dd[4] & 0x1F) << 8) | dd[5];
+            ASSERT(capid != 0, "program ECM must not be pid 0");
+            prog_ca++;
+        }
+    }
+    while (es + 5 <= end) {
+        int es_pid = ((es[1] & 0x1F) << 8) | es[2];
+        ASSERT(es_pid != 0, "stream pid must not be pid 0");
+        es_count++;
+        int es_len = ((es[3] & 0xF) << 8) | es[4];
+        es += 5 + es_len;
+    }
+    ASSERT(prog_ca == pmt0->caids - 1, "exactly the dropped ECM skipped");
+    ASSERT(es_count == 2, "dropped stream skipped, the rest kept");
+    ddci_devices[0] = NULL;
+    a[8] = nullptr;
+    a[0] = nullptr;
+    return 0;
+}
+
 int test_create_pmt_maps_es_ecm_pids() {
     ddci_device_t d = {};
     uint8_t psi[512];
@@ -1917,6 +2065,47 @@ int test_process_cat_fixed_pid_emm_ignored() {
     ASSERT(d.emm_pids.count(MAKE_KEY(0, 193)) > 0, "EMM PID 193 tracked");
     ASSERT(d.emm_pids.count(MAKE_KEY(0, 16)) == 0,
            "fixed table pid not EMM-tracked");
+
+    delete filters[0];
+    filters.slot(0) = nullptr;
+    ddci_devices[0] = NULL;
+
+    return 0;
+}
+
+// A CAT claiming EMMs on generated SDT/EIT pids is broken SI like a
+// fixed-table claim: the CAT processes, only the claims are moot.
+int test_process_cat_generated_pid_emm_ignored() {
+    uint8_t cat[] = {0x01, 0xb0, 0x21, 0xff, 0xff, 0xc5, 0x00, 0x00, 0x09,
+                     0x04, 0x0b, 0x00, 0xe0, 0x11, 0x09, 0x04, 0x09, 0x3e,
+                     0xe0, 0xc1, 0x09, 0x04, 0x09, 0x40, 0xe0, 0xc2, 0x09,
+                     0x04, 0x18, 0x8a, 0xe0, 0x12, 0xd9, 0x66, 0x34, 0x3b};
+
+    ddci_device_t d = {};
+    d.id = 0;
+    d.enabled = 1;
+    memset(ddci_devices, 0, sizeof(ddci_devices));
+    ddci_devices[0] = &d;
+    SFilter *f = new SFilter();
+    f->flags = FILTER_CRC;
+    f->id = 0;
+    f->adapter = 0;
+    f->pid = 1234;
+    f->next_filter = -1;
+    f->enabled = 1;
+    filters.slot(0) = f;
+
+    ddci_process_cat(0, cat, sizeof(cat) / sizeof(uint8_t), &d);
+
+    ASSERT(get_pid_mapping_allddci(0, 193) != -1,
+           "normal EMM still mapped past a generated-pid claim");
+    ASSERT(d.emm_pids.count(MAKE_KEY(0, 193)) > 0, "EMM PID 193 tracked");
+    ASSERT(d.emm_pids.count(MAKE_KEY(0, 17)) == 0,
+           "generated SDT pid not EMM-tracked");
+    ASSERT(d.emm_pids.count(MAKE_KEY(0, 18)) == 0,
+           "generated EIT pid not EMM-tracked");
+    ASSERT(get_pid_mapping_allddci(0, 17) == -1, "no mapping for EMM on 17");
+    ASSERT(get_pid_mapping_allddci(0, 18) == -1, "no mapping for EMM on 18");
 
     delete filters[0];
     filters.slot(0) = nullptr;
@@ -3170,6 +3359,8 @@ int main() {
     TEST_FUNC(test_process_cat(), "testing CAT processing");
     TEST_FUNC(test_process_cat_fixed_pid_emm_ignored(),
               "testing CAT fixed-pid EMM claim ignored");
+    TEST_FUNC(test_process_cat_generated_pid_emm_ignored(),
+              "testing CAT generated-pid EMM claim ignored");
     TEST_FUNC(test_channels(), "testing test_channels");
     TEST_FUNC(test_add_del_pmt(), "testing adding and removing pmts");
     TEST_FUNC(test_ddci_channel_count(),
@@ -3198,6 +3389,12 @@ int main() {
     TEST_FUNC(test_ddci_process_ts(), "testing ddci_process_ts");
     TEST_FUNC(test_ddci_process_ts_drops_tuner_pat(),
               "testing tuner PAT dropped at the push");
+    TEST_FUNC(test_ddci_process_ts_drops_transponder_sdt(),
+              "testing transponder SDT dropped at the push");
+    TEST_FUNC(test_ddci_find_ddci_pid_skips_generated_psi(),
+              "testing remap skips reserved ddci pids 17 and 18");
+    TEST_FUNC(test_ddci_nit_two_tuners_skips_generated_psi(),
+              "testing two-tuner NIT skips pids 17 and 18");
     TEST_FUNC(test_ddci_push_stop_joins_first(),
               "testing push stop joins before close");
     TEST_FUNC(test_dump_mapping_table_nested(),
@@ -3221,6 +3418,8 @@ int main() {
     TEST_FUNC(test_create_pmt(), "testing create_pmt");
     TEST_FUNC(test_create_pmt_maps_es_ecm_pids(),
               "testing that rebuilt PMTs carry mapped ES ECM pids");
+    TEST_FUNC(test_ddci_create_pmt_skips_dropped_pids(),
+              "testing dropped pids are skipped in generated PMTs");
     TEST_FUNC(test_ddci_full_device_retries(),
               "testing that a full DDCI device retries instead of burning");
     TEST_FUNC(test_initializing_ddci_does_not_block_others(),
