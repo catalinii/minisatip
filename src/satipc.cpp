@@ -956,10 +956,17 @@ int satip_close_device(adapter *ad) {
         sip->state = SATIP_STATE_TEARDOWN;
         satipc_request(ad);
     }
-    if (ad->fe_sock > 0)
-        sockets_del(ad->fe_sock);
-    if (sip->rtcp_sock > 0)
-        sockets_del(sip->rtcp_sock);
+    // close_adapter() holds the adapter lock: let the poller delete the
+    // sockets, detached so their close callbacks leave the adapter alone
+    if (ad->fe_sock > 0) {
+        set_sockets_sid(ad->fe_sock, -1);
+        sockets_force_close(ad->fe_sock);
+        ad->fe = -1; // the RTSP socket owns it, do not close it twice
+    }
+    if (sip->rtcp_sock > 0) {
+        set_sockets_sid(sip->rtcp_sock, -1);
+        sockets_force_close(sip->rtcp_sock);
+    }
     ad->fe_sock = -1;
     sip->rtcp_sock = -1;
     sip->enabled = 0;

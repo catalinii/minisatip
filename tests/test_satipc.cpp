@@ -27,6 +27,7 @@
 
 #include "httpc.h"
 #include <cstring>
+#include <fcntl.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -35,6 +36,7 @@ extern void satip_getxml_data(char *data, int len, void *opaque,
 extern void satipc_get_pids(adapter *ad, satipc *sip, char *url, int size,
                             int send_pids);
 extern int satipc_reply(sockets *s);
+extern int satip_close_device(adapter *ad);
 extern int satipc_set_pid(adapter *ad, int pid);
 extern int satipc_del_filters(adapter *ad, int fd, int pid);
 
@@ -310,6 +312,49 @@ int test_satipc_cancel_keeps_queued_pids() {
     return 0;
 }
 
+// satip_close_device() runs under the adapter lock, so it must leave the
+// sockets to the poller, detached from the adapter, and hand over ad->fe.
+int test_satip_close_device_defers_sockets() {
+    adapter ad = {};
+    satipc sip = {};
+    adapter *saved_a = a[0];
+    satipc *saved_sip = satip[0];
+    int rtsp[2], rtcp[2];
+    ASSERT(socketpair(AF_UNIX, SOCK_STREAM, 0, rtsp) == 0, "socketpair failed");
+    ASSERT(socketpair(AF_UNIX, SOCK_STREAM, 0, rtcp) == 0, "socketpair failed");
+
+    ad.id = 0;
+    ad.enabled = 1;
+    sip.enabled = 1;
+    a[0] = &ad;
+    satip[0] = &sip;
+    // satip_close_device() skips id 0, which the server's listener holds
+    int first =
+        sockets_add(open("/dev/null", O_RDONLY), NULL, -1, 0, NULL, NULL, NULL);
+    ad.fe = rtsp[0];
+    ad.fe_sock = sockets_add(rtsp[0], NULL, 0, TYPE_TCP, NULL, NULL, NULL);
+    sip.rtcp_sock = sockets_add(rtcp[0], NULL, 0, TYPE_TCP, NULL, NULL, NULL);
+    ASSERT(ad.fe_sock > 0 && sip.rtcp_sock > 0, "sockets_add failed");
+    int fe_sock = ad.fe_sock, rtcp_sock = sip.rtcp_sock;
+
+    satip_close_device(&ad);
+    ASSERT_EQUAL(ad.fe, -1, "ad->fe would be closed twice");
+    for (int id : {fe_sock, rtcp_sock}) {
+        sockets *s = get_sockets(id);
+        ASSERT(s != NULL, "socket deleted under the adapter lock");
+        ASSERT_EQUAL(s->force_close, 1, "socket not left to the poller");
+        ASSERT_EQUAL(s->sid, -1, "socket still attached to the adapter");
+        sockets_del(id);
+    }
+    ASSERT(fcntl(rtsp[0], F_GETFD) == -1, "RTSP handle not closed");
+    sockets_del(first);
+    close(rtsp[1]);
+    close(rtcp[1]);
+    a[0] = saved_a;
+    satip[0] = saved_sip;
+    return 0;
+}
+
 int test_satipc_reject_teardown_then_retry() {
     adapter ad = {};
     satipc sip = {};
@@ -427,6 +472,8 @@ int main() {
               "test satip_getxml_data parses satipcap delivery systems");
     TEST_FUNC(test_satipc_get_pids_add_and_del(),
               "test satipc_get_pids separates addpids/delpids with '&'");
+    TEST_FUNC(test_satip_close_device_defers_sockets(),
+              "testing satip_close_device leaves its sockets to the poller");
     TEST_FUNC(test_satipc_reject_teardown_then_retry(),
               "test rejected SETUP tears down and retries");
     TEST_FUNC(test_satipc_cancel_keeps_queued_pids(),
