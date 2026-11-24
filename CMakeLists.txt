@@ -140,6 +140,24 @@ endif()
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Some 32-bit targets need libatomic for 64-bit std::atomic operations.
+include(CheckCXXSourceCompiles)
+set(ATOMIC_TEST_SOURCE "#include <atomic>
+int main() {
+    std::atomic<long long> value{0};
+    return static_cast<int>(value.fetch_add(1, std::memory_order_relaxed));
+}")
+check_cxx_source_compiles("${ATOMIC_TEST_SOURCE}" MINISATIP_HAS_NATIVE_64BIT_ATOMICS)
+if(NOT MINISATIP_HAS_NATIVE_64BIT_ATOMICS)
+    set(_MINISATIP_REQUIRED_LIBRARIES "${CMAKE_REQUIRED_LIBRARIES}")
+    set(CMAKE_REQUIRED_LIBRARIES "${CMAKE_REQUIRED_LIBRARIES};atomic")
+    check_cxx_source_compiles("${ATOMIC_TEST_SOURCE}" MINISATIP_HAS_LIBATOMIC)
+    set(CMAKE_REQUIRED_LIBRARIES "${_MINISATIP_REQUIRED_LIBRARIES}")
+    if(NOT MINISATIP_HAS_LIBATOMIC)
+        message(FATAL_ERROR "64-bit atomics require libatomic, but it could not be linked")
+    endif()
+endif()
+
 # Export compile commands for IDE support
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -268,6 +286,10 @@ endif()
 if(NOT APPLE)
     list(APPEND MINISATIP_LIBS rt)
 endif()
+if(NOT MINISATIP_HAS_NATIVE_64BIT_ATOMICS)
+    # Keep libatomic after libraries that may reference its symbols.
+    list(APPEND MINISATIP_LIBS atomic)
+endif()
 
 # Main executable
 add_executable(minisatip ${MINISATIP_SOURCES})
@@ -287,14 +309,6 @@ set_target_properties(minisatip PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINA
 if(STATIC)
     # Full static linking with -static flag
     target_link_options(minisatip PRIVATE -static)
-endif()
-
-# 64-bit atomics need libatomic on 32-bit MIPS, static or not (#1498).
-# Toolchain builds report it via CMAKE_SYSTEM_PROCESSOR; plain
-# -DCMAKE_CXX_COMPILER_TARGET=... builds (CI) only via that variable.
-if(CMAKE_SYSTEM_PROCESSOR MATCHES "mips" OR
-        CMAKE_CXX_COMPILER_TARGET MATCHES "mips")
-    list(APPEND MINISATIP_LIBS atomic)
 endif()
 
 target_link_libraries(minisatip PRIVATE ${MINISATIP_LIBS})
@@ -322,9 +336,7 @@ if(BUILD_TESTING)
     if(DVBCSA_LIBRARY)
         list(APPEND TEST_LIBS dvbcsa)
     endif()
-    # Same libatomic need as the main binary on 32-bit MIPS (#1498)
-    if(CMAKE_SYSTEM_PROCESSOR MATCHES "mips" OR
-            CMAKE_CXX_COMPILER_TARGET MATCHES "mips")
+    if(NOT MINISATIP_HAS_NATIVE_64BIT_ATOMICS)
         list(APPEND TEST_LIBS atomic)
     endif()
 
