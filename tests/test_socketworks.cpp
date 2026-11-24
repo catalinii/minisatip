@@ -556,6 +556,21 @@ int test_sockets_destructor() {
     return 0;
 }
 
+// A flush that finds its socket deleted since leaves the slot alone.
+int test_flush_socket_deleted() {
+    int sp[2];
+    ASSERT(socketpair(AF_UNIX, SOCK_STREAM, 0, sp) == 0, "socketpair failed");
+    int sock_id = sockets_add(sp[0], NULL, -1, TYPE_TCP, NULL, NULL, NULL);
+    ASSERT(sock_id >= 0, "sockets_add failed");
+    sockets *ss = get_sockets(sock_id);
+    ss->flush_enqued_data = 1; // sockets_del() leaves it set
+    sockets_del(sock_id);
+    ASSERT_EQUAL(ss->flush_enqued_data, 1, "flag cleared, no stale flush");
+    ASSERT_EQUAL(flush_socket(ss), 0, "deleted socket not flushed");
+    close(sp[1]);
+    return 0;
+}
+
 int main() {
     opts.log = 1; // LOG_UTILS | LOG_SOCKET;
     strcpy(thread_info[thread_index].thread_name, "test_socketworks");
@@ -583,6 +598,8 @@ int main() {
               "testing EOF closes the socket without dispatching action");
     TEST_FUNC(test_sockets_destructor(),
               "testing sockets destructor closes and frees");
+    TEST_FUNC(test_flush_socket_deleted(),
+              "testing flush of a socket deleted since");
     fflush(stdout);
     free_all_adapters();
     return 0;
