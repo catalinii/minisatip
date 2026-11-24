@@ -959,6 +959,7 @@ int send_diseqc(adapter *ad, int fd, int pos, int pos_change, int pol,
     int committed_no = d->committed_no;
     int uncommitted_no = d->uncommitted_no;
     int uncommitted_first = 0;
+    int cmd_voltage = pol;
     int restore_voltage = 0; // Set when target voltage difers from forced voltage
     int posu, posc;
     /* DiSEqC 1.0 */
@@ -975,6 +976,7 @@ int send_diseqc(adapter *ad, int fd, int pos, int pos_change, int pol,
 
     if ((opts.diseqc_voltage == 13 && pol) || (opts.diseqc_voltage == 18 && !pol)) {
         restore_voltage = 1;
+        cmd_voltage = !pol; // When forcing we want the oposite to the requested polarization
     }
 
     if (uncommitted_no > committed_no)
@@ -997,14 +999,14 @@ int send_diseqc(adapter *ad, int fd, int pos, int pos_change, int pol,
     uncmd.msg[3] = static_cast<uint8_t>(0xf0 | (posu & 0x0f));
 
     LOGM("send_diseqc fd %d, pos = %d (c %d u %d), pol = %d, hiband = %d, voltage = %d", fd,
-         pos, posc, posu, pol, hiband, (!pol != !restore_voltage)? 18 : 13);
+         pos, posc, posu, pol, hiband, cmd_voltage ? 18 : 13);
     if (ad->wakeup)
         ad->wakeup(ad, fd, pol ? SEC_VOLTAGE_18 : SEC_VOLTAGE_13);
 
     if (ioctl(fd, FE_SET_TONE, SEC_TONE_OFF) == -1)
         LOG("send_diseqc: FE_SET_TONE failed for fd %d: %s", fd,
             strerror(errno));
-    if (ioctl(fd, FE_SET_VOLTAGE, (!pol != !restore_voltage) ? SEC_VOLTAGE_18 : SEC_VOLTAGE_13) == -1)
+    if (ioctl(fd, FE_SET_VOLTAGE, cmd_voltage ? SEC_VOLTAGE_18 : SEC_VOLTAGE_13) == -1)
         LOG("send_diseqc: FE_SET_VOLTAGE failed for fd %d: %s", fd,
             strerror(errno));
 
