@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
     - name: Install build tools and dependencies
       run: DEBIAN_FRONTEND=noninteractive sudo apt-get -y install build-essential libdvbcsa-dev libssl-dev zlib1g-dev libxml2-dev
     - name: cmake

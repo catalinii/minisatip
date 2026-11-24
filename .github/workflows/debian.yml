@@ -8,7 +8,7 @@ jobs:
     runs-on: ubuntu-24.04
     
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
       with:
         fetch-depth: '0'
     - name: Configure working directory as git safe.directory
@@ -28,7 +28,7 @@ jobs:
         dpkg-buildpackage -b -us -uc
 
     - name: Archive the built package
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v7
       with:
         name: minisatip-deb
         path: '*.deb'
