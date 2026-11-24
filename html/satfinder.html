@@ -312,10 +312,6 @@ progress::-webkit-progress-bar {
 					<div class="left" >CC:</div>
 						<div class="cc res"></div>
 					</div>
-					<div class="cnt">
-					<div class="left" >CC2:</div>
-						<div class="cc2 res"></div>
-					</div>
 
 			</div>
 		</div>
@@ -457,7 +453,6 @@ if ( $( ".mute_button" ).is( ".unmuted" ) ) {
         signal_snr = "<div class='level'><progress class='psnr " + snr_color + "' value='" + snr + "' max='100' />" + snr + "% <span class='" + snr_hide + "'>" + snrdb + "dB</span></div>";
         $(".snr").html(signal_snr);
         $(".cc").html(data.ad_ccerr[tuner]);
-        $(".cc2").html(data.ad_ccerr2[tuner]);
         $(".tuner").html(tuner);
         var pol = "";
         if (data.ad_pol[tuner] == 1) pol = "V";
