@@ -19,6 +19,8 @@
  */
 
 #include "adapter.h"
+#include "api/symbols.h"
+#include "api/variables.h"
 #include "minisatip.h"
 #include "socketworks.h"
 #include "stream.h"
@@ -27,6 +29,7 @@
 
 #include <linux/dvb/frontend.h>
 #include <string.h>
+#include <string_view>
 #include <sys/socket.h>
 #include <thread>
 #include <unistd.h>
@@ -34,6 +37,7 @@
 #include <vector>
 
 char *get_adapter_name(int aid, char *dest, int max_size);
+int get_adapter_ccerrs2(int aid);
 
 int test_get_lnb_hiband_universal() {
     transponder tp;
@@ -623,6 +627,41 @@ int test_next_pid_order_concurrent() {
     return 0;
 }
 
+// Exports check_cc2 errors per adapter over the first two ACTIVE pids.
+int test_get_adapter_ccerrs2() {
+    adapter ad = {};
+    adapter *saved_a = a[0];
+    a[0] = &ad;
+    ad.id = 0;
+    ad.enabled = 1;
+    ad.pids[0].flags = PID_STATE_ACTIVE;
+    ad.pids[0].cc_err2 = 3;
+    ad.pids[0].cc_err = 100; // pre-processing errors must not leak in
+    ad.pids[1].flags = PID_STATE_ACTIVE;
+    ad.pids[1].cc_err2 = 4;
+    ad.pids[2].flags = PID_STATE_ACTIVE;
+    ad.pids[2].cc_err2 = 50; // past the summed pair
+    ad.pids[3].flags = PID_STATE_INACTIVE;
+    ad.pids[3].cc_err2 = 60; // inactive pids are skipped
+    ASSERT_EQUAL(7, get_adapter_ccerrs2(0),
+                 "ccerrs2 sums cc_err2 of the first two ACTIVE pids");
+
+    // The web interface reads ad_ccerr2 from the adapter symbols.
+    _symbols *cc2 = nullptr;
+    for (_symbols *s = adapters_sym; s->name; s++)
+        if (std::string_view(s->name) == "ad_ccerr2")
+            cc2 = s;
+    ASSERT(cc2 != nullptr, "ad_ccerr2 is registered for the web interface");
+    ASSERT(cc2->type == VAR_FUNCTION_INT, "ad_ccerr2 is an int function var");
+    get_data_int fun = reinterpret_cast<get_data_int>(cc2->addr);
+    ASSERT_EQUAL(7, fun(0), "ad_ccerr2 reads get_adapter_ccerrs2");
+
+    a[0] = nullptr;
+    ASSERT_EQUAL(0, get_adapter_ccerrs2(0), "no adapter, no ccerrs2");
+    a[0] = saved_a;
+    return 0;
+}
+
 int main() {
     opts.log = 1;
     opts.debug = 255;
@@ -663,6 +702,8 @@ int main() {
     TEST_FUNC(test_mark_pid_add_bounds(), "test mark_pid_add pid bounds");
     TEST_FUNC(test_next_pid_order_concurrent(),
               "test concurrent next_pid_order hands out unique orders");
+    TEST_FUNC(test_get_adapter_ccerrs2(),
+              "test post-processing cc errors are exported as ad_ccerr2");
 
     return 0;
 }

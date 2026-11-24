@@ -2313,6 +2313,18 @@ int get_adapter_ccerrs(int aid) {
     return cc;
 }
 
+int get_adapter_ccerrs2(int aid) {
+    adapter *ad = get_adapter_nw(aid);
+    if (!ad)
+        return 0;
+
+    int cc = 0;
+    for (int i = 0; i < 2; i++)
+        if (ad->pids[i].flags == PID_STATE_ACTIVE)
+            cc += ad->pids[i].cc_err2;
+    return cc;
+}
+
 int get_adapter_decerrs(int aid) {
     int i, dec = 0;
     adapter *ad = get_adapter_nw(aid);
@@ -2462,6 +2474,8 @@ _symbols adapters_sym[] = {
      0},
     {"ad_ccerr", VAR_FUNCTION_INT, (void *)&get_adapter_ccerrs, 0, MAX_ADAPTERS,
      0},
+    {"ad_ccerr2", VAR_FUNCTION_INT, (void *)&get_adapter_ccerrs2, 0,
+     MAX_ADAPTERS, 0},
     {"ad_decerr", VAR_FUNCTION_INT, (void *)&get_adapter_decerrs, 0,
      MAX_ADAPTERS, 0},
     {"tuner_s2", VAR_INT, &tuner_s2, 1, 0, 0},
