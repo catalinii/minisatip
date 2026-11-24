@@ -508,6 +508,11 @@
 					ccerrpre = (ccerr - ccerrpre < 0) ? ccerr : ccerr - ccerrpre;
 					if (ccerr > 0)
 						signal += "<div class='level'>CC <progress class='pcc progress-1' value='" + ccerrpre + "' max='100' />" + ccerr + "</div><br />";
+					var ccerr2 = state['ad_ccerr2'][i];
+					var ccerr2pre = oldstate['ad_ccerr2'][i];
+					ccerr2pre = (ccerr2 - ccerr2pre < 0) ? ccerr2 : ccerr2 - ccerr2pre;
+					if (ccerr2 > 0)
+						signal += "<div class='level'>CC2 <progress class='pcc progress-1' value='" + ccerr2pre + "' max='100' />" + ccerr2 + "</div><br />";
 				}
 				myTable += "<td class='dt-right'>" + signal + " </td>";
 
