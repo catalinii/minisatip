@@ -3127,6 +3127,69 @@ int test_ddci_push_stop_sheds_stall() {
     return 0;
 }
 
+// Stream CC: jumps count, wrap and adaptation-only packets
+// do not, null pid is skipped.
+static void bl_stamp_cc(uint8_t *pkt, int pid, int cc, bool payload = true) {
+    pkt[0] = 0x47;
+    pkt[1] = (uint8_t)((pid >> 8) & 0x1f);
+    pkt[2] = (uint8_t)(pid & 0xff);
+    pkt[3] = (uint8_t)((payload ? 0x10 : 0x20) | (cc & 0x0f));
+}
+
+int test_ddci_stream_cc_jumps() {
+    ddci_device_t d = {};
+    d.id = 2;
+    int16_t last[8192];
+    std::atomic<uint32_t> jumps[8192]{};
+    for (int i = 0; i < 8192; i++)
+        last[i] = -1;
+    uint8_t s[188 * 6];
+    memset(s, 0, sizeof(s));
+    bl_stamp_cc(s, 100, 5);
+    bl_stamp_cc(s + 188, 100, 6);
+    bl_stamp_cc(s + 376, 100, 9); // jump +3
+    bl_stamp_cc(s + 564, 100, 9, false); // adaptation-only, ignored
+    bl_stamp_cc(s + 752, 8191, 3); // null pid, skipped
+    bl_stamp_cc(s + 940, 100, 10);
+    uint8_t carry[188];
+    size_t carry_len = 0;
+    ddci_count_stream_cc(&d, "test", last, jumps, s, sizeof(s), carry,
+                         &carry_len);
+    ASSERT(jumps[100].load() == 1, "one jump counted");
+    ASSERT(last[100] == 10, "last CC tracked");
+    // Wrap 15->0 is continuous.
+    uint8_t w[188 * 2];
+    memset(w, 0, sizeof(w));
+    bl_stamp_cc(w, 200, 15);
+    bl_stamp_cc(w + 188, 200, 0);
+    // Fresh pid: prime without jump, then wrap.
+    int16_t last2[8192];
+    std::atomic<uint32_t> jumps2[8192]{};
+    for (int i = 0; i < 8192; i++)
+        last2[i] = -1;
+    carry_len = 0;
+    ddci_count_stream_cc(&d, "test", last2, jumps2, w, sizeof(w), carry,
+                         &carry_len);
+    ASSERT(jumps2[200].load() == 0, "wrap is not a jump");
+    // A packet split across chunks completes without a jump.
+    int16_t last3[8192];
+    std::atomic<uint32_t> jumps3[8192]{};
+    for (int i = 0; i < 8192; i++)
+        last3[i] = -1;
+    uint8_t p[188 * 2];
+    memset(p, 0, sizeof(p));
+    bl_stamp_cc(p, 300, 7);
+    bl_stamp_cc(p + 188, 300, 8);
+    carry_len = 0;
+    ddci_count_stream_cc(&d, "test", last3, jumps3, p, 100, carry, &carry_len);
+    ddci_count_stream_cc(&d, "test", last3, jumps3, p + 100, sizeof(p) - 100,
+                         carry, &carry_len);
+    ASSERT(jumps3[300].load() == 0, "straddler completes cleanly");
+    ASSERT(last3[300] == 8, "completed CC tracked");
+    ASSERT(carry_len == 0, "carry drained");
+    return 0;
+}
+
 int test_ddci_push_reserve_arm_burst() {
     ddci_device_t d = {};
     adapter ad2 = {};
@@ -3762,6 +3825,7 @@ int main() {
               "testing push EAGAIN retries after a drain");
     TEST_FUNC(test_ddci_push_stop_sheds_stall(),
               "testing push stop sheds a stall");
+    TEST_FUNC(test_ddci_stream_cc_jumps(), "testing stream CC jumps");
     TEST_FUNC(test_ddci_push_reserve_arm_burst(),
               "testing push reserve arm with a burst");
     TEST_FUNC(test_ddci_push_stays_frame_aligned(),

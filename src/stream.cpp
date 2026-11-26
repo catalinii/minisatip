@@ -19,6 +19,7 @@
  */
 #include "stream.h"
 #include "adapter.h"
+#include "ddci.h"
 #include "api/symbols.h"
 #include "api/variables.h"
 #include "dvb.h"
@@ -1184,8 +1185,11 @@ int process_dmx(sockets *s) {
         s->rlen = 0;
         return 0;
     }
-    if (drop_after_tune(ad, s))
+    int dropped = s->rlen;
+    if (drop_after_tune(ad, s)) {
+        ddci_count_dvr_dropped(s->sid, dropped);
         return 0;
+    }
 
     int64_t ms_ago = s->rtime - ad->rtime;
     ad->rtime = s->rtime;
@@ -1249,8 +1253,11 @@ int read_dmx(sockets *s) {
     // tune() and other threads change these fields under the adapter lock;
     // process_dmx() takes it again
     std::unique_lock<SMutex> lock(ad->mutex);
-    if (drop_after_tune(ad, s))
+    int dropped = s->rlen;
+    if (drop_after_tune(ad, s)) {
+        ddci_count_dvr_dropped(s->sid, dropped);
         return 0;
+    }
     threshold = ad->threshold;
 
     if (rtime - ad->rtime > threshold)

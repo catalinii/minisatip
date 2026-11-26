@@ -105,6 +105,24 @@ typedef struct ddci_device {
     std::atomic<bool> slot_claimed{false}; // reservation; close releases
     char tsclk_saved[16];     // prior ciN_tsclk; nonzero once raised
     SFIFO push_backlog;       // queued push bytes, oldest first
+    // CC jumps per pid at queue-in, push-emit, dvr-stage; satip
+    // shows at queue, shed adds at push, DDCI adds at dvr.
+    int16_t queue_last_cc[8192];
+    int16_t push_last_cc[8192];
+    int16_t dvr_last_cc[8192];
+    std::atomic<uint32_t> queue_cc_jumps[8192]{};
+    std::atomic<uint32_t> push_cc_jumps[8192]{};
+    std::atomic<uint32_t> dvr_cc_jumps[8192]{};
+    // Split-packet carry: a straddler completes next chunk instead
+    // of false-jumping. Single-thread each side.
+    uint8_t queue_carry[188];
+    size_t queue_carry_len{0};
+    uint8_t push_carry[188];
+    size_t push_carry_len{0};
+    uint8_t dvr_carry[188];
+    size_t dvr_carry_len{0};
+    std::atomic<uint64_t> push_written{0}; // ring bytes emitted ok
+    std::atomic<uint64_t> dvr_read{0};     // dvr bytes staged into fifo
     uint64_t push_dropped{0}; // refused while full: CAM backpressure only
     std::atomic<uint64_t> shed_bytes{0}; // voluntary sheds: tune + stop
     int64_t push_last_drop_log{0}; // last ring-full report, push_mutex only
@@ -147,6 +165,13 @@ int ddci_close_adapter(adapter *ad);
 void ddci_output_shed(adapter *ad, ddci_device_t *d);
 // Micro-kick: close/open re-primes a dead CAM pull, backlog kept.
 void ddci_push_kick(adapter *ad, ddci_device_t *d);
+// Discarded output still crossed the CAM: count it as read.
+void ddci_count_dvr_dropped(int adapter_id, int64_t bytes);
+// CC jumps over a stream chunk; a split packet completes via
+// carry on the next chunk. Drops sync-less leading garbage.
+void ddci_count_stream_cc(ddci_device_t *d, const char *side, int16_t *last,
+                          std::atomic<uint32_t> *jumps, uint8_t *b, size_t n,
+                          uint8_t *carry, size_t *carry_len);
 // Queues fresh PSI first, then TS; a full ring drops newest, counted.
 size_t ddci_push_queue(ddci_device_t *d, uint8_t *psi, size_t psi_len,
                        struct iovec *io, int iop);
