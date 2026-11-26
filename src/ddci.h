@@ -29,7 +29,7 @@
 
 // Push bytes per cycle, kept a multiple of the 188B TS frame;
 // enigma filepush default buffersize.
-#define DDCI_PUSH_CHUNK (188 * 109) // 20KB write quantum
+#define DDCI_PUSH_CHUNK (188 * 1024)
 // Jitter-buffer reserve prebuffered before the drain starts, and
 // the token burst the paced drain may emit at once (both bytes).
 #define DDCI_PUSH_RESERVE (188 * 3000)
