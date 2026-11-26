@@ -131,6 +131,22 @@ int test_socket_writev_flush_enqued() {
     return 0;
 }
 
+int find_next_rtsp_header(SFIFO *fifo);
+
+// Less than one header in the FIFO must not wrap the search window
+int test_find_rtsp_header_short_fifo() {
+    SFIFO fifo{};
+    uint8_t frame[] = {0x24, 0x0, 1, 2, 0x80, 0x21, 0, 0};
+    ASSERT_EQUAL(find_next_rtsp_header(&fifo), -1, "unallocated FIFO");
+    create_fifo(&fifo, 100);
+    fifo_push(&fifo, frame, 4);
+    ASSERT_EQUAL(find_next_rtsp_header(&fifo), -1, "header cut short");
+    fifo_push(&fifo, frame + 4, 4);
+    ASSERT_EQUAL(find_next_rtsp_header(&fifo), 0, "complete header found");
+    free_fifo(&fifo);
+    return 0;
+}
+
 uint8_t test_buf[1000];
 int buf_pos;
 int to_write;
@@ -588,6 +604,8 @@ int main() {
               "testing a large high priority reply");
     TEST_FUNC(test_socket_writev_flush_enqued(),
               "testing socket_writev with flushing the queue");
+    TEST_FUNC(test_find_rtsp_header_short_fifo(),
+              "testing the RTSP header search on a short FIFO");
     TEST_FUNC(test_socket_buffering(), "testing socket buffering and flushing");
     TEST_FUNC(test_bind_dev(), "testing bind-dev handling");
 #ifdef SO_BINDTODEVICE
