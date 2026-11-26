@@ -2307,7 +2307,7 @@ int get_adapter_ccerrs(int aid) {
     if (!ad)
         return 0;
 
-    for (i = 0; i < 2; i++)
+    for (i = 0; i < MAX_PIDS; i++)
         if (ad->pids[i].flags == PID_STATE_ACTIVE)
             cc += ad->pids[i].cc_err;
     return cc;
@@ -2319,7 +2319,7 @@ int get_adapter_ccerrs2(int aid) {
         return 0;
 
     int cc = 0;
-    for (int i = 0; i < 2; i++)
+    for (int i = 0; i < MAX_PIDS; i++)
         if (ad->pids[i].flags == PID_STATE_ACTIVE)
             cc += ad->pids[i].cc_err2;
     return cc;
