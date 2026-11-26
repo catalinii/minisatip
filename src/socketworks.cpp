@@ -1646,5 +1646,5 @@ void sockets_set_master(int slave, int master) {
     }
     s->tid = m->tid.load();
     s->master = master;
-    LOG("sock %d is master for sock %d", s->master, s->id);
+    LOG("sock %d is master for sock %d", master, s->id);
 }

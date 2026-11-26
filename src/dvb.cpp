@@ -1757,7 +1757,7 @@ int dvb_psi_read(int socket, void *buf, int len, sockets *ss, int *rb) {
     //		r += 4;
     //	}
     DEBUGM("%s: socket %d, master %d, buf %p len %d, read %d", __FUNCTION__,
-           socket, ss->master, buf, len, r);
+           socket, ss->master.load(), buf, len, r);
     *rb = buffer_to_ts((uint8_t *)buf, len, section, r, &p->cc1, pid);
 
     return 1;

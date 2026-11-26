@@ -737,7 +737,7 @@ int get_free_adapter(transponder *tp) {
     if (ad)
         LOG("get free adapter %d - a[%d] => e:%d m:%d sid_cnt:%d src:%d f:%d "
             "pol=%d sys: %s %s",
-            tp->fe.value_or(0), ad->id, ad->enabled, ad->master_sid,
+            tp->fe.value_or(0), ad->id, ad->enabled.load(), ad->master_sid,
             ad->sid_cnt, ad->tp.diseqc.value_or(0), ad->tp.freq.value_or(0),
             ad->tp.pol.value_or(0),
             fe_delsys_map.reverse_lookup(ad->sys[0]).data(),
@@ -903,8 +903,8 @@ void close_adapter_for_stream(int sid, int aid, int close_stream) {
     if (s && s->adapter == aid)
         s->adapter = -1;
     else if (s && s->adapter != aid)
-        LOG("%s adapter mismatch: got %d expected %d", __FUNCTION__, s->adapter,
-            aid);
+        LOG("%s adapter mismatch: got %d expected %d", __FUNCTION__,
+            s->adapter.load(), aid);
 
     if (ad->master_sid == sid) {
         ad->master_sid = -1;
@@ -2378,7 +2378,7 @@ ADAPTER_TP_GETTER(gi, gi, GUARD_INTERVAL_AUTO)
 // Unlike get_adapter_nw, present-but-disabled adapters still read.
 int get_adapter_enabled(int aid) {
     adapter *ad = get_adapter_slot(aid);
-    return ad ? ad->enabled : 0;
+    return ad ? ad->enabled.load() : 0;
 }
 int get_adapter_type(int aid) {
     adapter *ad = get_adapter_slot(aid);
