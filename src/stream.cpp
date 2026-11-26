@@ -246,8 +246,8 @@ int start_play(streams *sid, sockets *s) {
 
     LOG("Play for stream sid %d, type %d, rsock %d, adapter %d, sock_id %d, "
         "rsock_id %d, handle %d",
-        s->sid, sid->type, sid->rsock, sid->adapter, s->id, sid->rsock_id,
-        s->sock);
+        s->sid, sid->type, sid->rsock, sid->adapter.load(), s->id,
+        sid->rsock_id, s->sock);
     ad = get_adapter(sid->adapter);
 
     if (compare_tunning_parameters(
@@ -609,7 +609,8 @@ int decode_transport(sockets *s, std::string_view arg, char *default_rtp,
                         "%d: "
                         "sid %d -> "
                         "%s:%d, aid: %d",
-                        sid->sid, sid2->id, p.dest, p.port, sid2->adapter);
+                        sid->sid, sid2->id, p.dest, p.port,
+                        sid2->adapter.load());
                     close_stream(sid2->id);
                 }
             }
@@ -858,8 +859,8 @@ int flush_stream(streams *sid, struct iovec *iov, int iiov, int64_t ctime) {
 
     DEBUGM("%s: sent %d bytes for sid %d, handle %d, sock_id %d, seq %d => "
            "%s:%d",
-           __FUNCTION__, rv, sid->sid, sid->rsock, sid->rsock_id, sid->seq,
-           get_stream_rhost(sid->sid, ra, sizeof(ra)),
+           __FUNCTION__, rv, sid->sid, sid->rsock, sid->rsock_id,
+           sid->seq.load(), get_stream_rhost(sid->sid, ra, sizeof(ra)),
            get_stream_rport(sid->sid));
 
     sid->wtime = ctime;
@@ -1225,7 +1226,7 @@ int process_dmx(sockets *s) {
 // after stream or adapter, avoid locking socket
 
 int read_dmx(sockets *s) {
-    static int cnt;
+    static thread_local int cnt;
     adapter *ad;
     int send = 0, force_send = 0;
     int threshold = opts.udp_threshold;
@@ -1392,7 +1393,7 @@ int stream_timeout(sockets *s) {
             LOG("Stream timeout sid %d, closing (ctime %jd , sid->rtime "
                 "%jd, "
                 "sid->timeout %d)",
-                sid->sid, ctime, sid->rtime, sid->timeout);
+                sid->sid, ctime, sid->rtime.load(), sid->timeout);
 
             lock.unlock();
             close_stream(sid->sid); // do not lock before this
@@ -1409,7 +1410,7 @@ void dump_streams() {
     LOG("Dumping streams:");
     for (streams *sid : streams_pool)
         LOG("%d|  a:%d rsock:%d type:%d play:%d remote:%s:%d", sid->id,
-            sid->adapter, sid->rsock, sid->type, sid->do_play,
+            sid->adapter.load(), sid->rsock, sid->type, sid->do_play,
             get_stream_rhost(sid->sid, ra, sizeof(ra)),
             get_stream_rport(sid->sid));
 }
@@ -1588,7 +1589,7 @@ static int get_st_adapter(int i) {
     if (i < 0 || i >= MAX_STREAMS)
         return 0;
     streams *sid = streams_pool[static_cast<size_t>(i)];
-    return sid ? sid->adapter : 0;
+    return sid ? sid->adapter.load() : 0;
 }
 
 static char *get_st_useragent(int i, char *dest, int max_size) {

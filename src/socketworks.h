@@ -53,7 +53,7 @@ typedef struct struct_sockets {
     // if != -1 points to the master socket which holds the buffer and the
     // action function. Useful when the DVR buffer comes from different file
     // handles
-    int master;
+    std::atomic<int> master;
     bool close_unix_socket; // flag to control if unix socket should be closed
     struct_sockets() = default;
     ~struct_sockets();

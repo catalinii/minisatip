@@ -32,7 +32,8 @@ typedef struct struct_streams {
     SMutex mutex;
     int sid; // socket - <0 for invalid/not used, 0 for end of the list
     int id;  // stream index in streams_pool[], set by obtain()
-    int adapter;
+    // process_dmx() reads it without the stream lock
+    std::atomic<int> adapter;
     USockAddr sa; // remote address - set on accept or recvfrom on udp sockets
     int sock;     // remote tcp socket (http, rtsp)
     int rsock; // return socket handle, for rtsp over tcp, rtsp over udp or http
@@ -42,10 +43,10 @@ typedef struct struct_streams {
     std::string srt_streamid; // SRT stream ID for caller/listener correlation
     int type;
     int len;
-    uint16_t seq; // rtp seq id
-    int ssrc;     // rtp seq id
+    std::atomic<uint16_t> seq; // rtp seq id, read_rtsp() reads it unlocked
+    int ssrc;                  // rtp seq id
     int64_t wtime;
-    int64_t rtime; // stream timeout
+    std::atomic<int64_t> rtime; // stream timeout, read_rtsp() sets it unlocked
     int64_t rtcp_wtime;
     int64_t last_init_hw;
     int do_play;

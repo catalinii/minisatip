@@ -73,7 +73,8 @@ typedef struct struct_pid {
 
 typedef struct struct_adapter adapter;
 struct struct_adapter {
-    char enabled;
+    // is_adapter_active() and others read it without the adapter lock
+    std::atomic<char> enabled = 0;
     SMutex mutex;
     char type; // available on the system
     int fe = -1, dmx, dvr = -1;

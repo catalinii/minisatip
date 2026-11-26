@@ -1424,7 +1424,7 @@ int read_rtsp(sockets *s) {
 
             snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf) - 1,
                      "RTP-Info: url=%s;seq=%d;rtptime=%jd\r\nRange: npt=0.000-",
-                     url_str.c_str(), sid->seq, (getTickUs() / 1000000));
+                     url_str.c_str(), sid->seq.load(), (getTickUs() / 1000000));
         }
         if (buf[0] == 0 && sid->type == STREAM_HTTP)
             snprintf(buf, sizeof(buf),
