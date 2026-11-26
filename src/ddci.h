@@ -110,9 +110,6 @@ typedef struct ddci_device {
     int16_t queue_last_cc[8192];
     int16_t push_last_cc[8192];
     int16_t dvr_last_cc[8192];
-    std::atomic<uint32_t> queue_cc_jumps[8192]{};
-    std::atomic<uint32_t> push_cc_jumps[8192]{};
-    std::atomic<uint32_t> dvr_cc_jumps[8192]{};
     // Split-packet carry: a straddler completes next chunk instead
     // of false-jumping. Single-thread each side.
     uint8_t queue_carry[188];
@@ -121,8 +118,6 @@ typedef struct ddci_device {
     size_t push_carry_len{0};
     uint8_t dvr_carry[188];
     size_t dvr_carry_len{0};
-    std::atomic<uint64_t> push_written{0}; // ring bytes emitted ok
-    std::atomic<uint64_t> dvr_read{0};     // dvr bytes staged into fifo
     uint64_t push_dropped{0}; // refused while full: CAM backpressure only
     std::atomic<uint64_t> shed_bytes{0}; // voluntary sheds: tune + stop
     int64_t push_last_drop_log{0}; // last ring-full report, push_mutex only
@@ -165,10 +160,10 @@ int ddci_close_adapter(adapter *ad);
 void ddci_output_shed(adapter *ad, ddci_device_t *d);
 // Micro-kick: close/open re-primes a dead CAM pull, backlog kept.
 void ddci_push_kick(adapter *ad, ddci_device_t *d);
-// Discarded output still crossed the CAM: count it as read.
-void ddci_count_dvr_dropped(int adapter_id, int64_t bytes);
+extern ddci_device_t *ddci_devices[];
 // CC jumps over a stream chunk; a split packet completes via
 // carry on the next chunk. Drops sync-less leading garbage.
+// jumps may be null (LOGM-only); tests pass counting arrays.
 void ddci_count_stream_cc(ddci_device_t *d, const char *side, int16_t *last,
                           std::atomic<uint32_t> *jumps, uint8_t *b, size_t n,
                           uint8_t *carry, size_t *carry_len);

@@ -1350,7 +1350,8 @@ static void ddci_cc_packet(ddci_device_t *d, const char *side, int16_t *last,
         return;
     int cc = p[3] & 0x0f;
     if (last[pid] >= 0 && cc != (last[pid] + 1) % 16) {
-        jumps[pid].fetch_add(1, std::memory_order_relaxed);
+        if (jumps)
+            jumps[pid].fetch_add(1, std::memory_order_relaxed);
         LOGM("DDCI %d: CC %s jump pid %d (%d -> %d)", d->id, side, pid,
              last[pid], cc);
     }
@@ -1403,13 +1404,6 @@ static void ddci_flow_reset(ddci_device_t *d) {
     ddci_cc_reset(d->queue_last_cc, &d->queue_carry_len);
     ddci_cc_reset(d->push_last_cc, &d->push_carry_len);
     ddci_cc_reset(d->dvr_last_cc, &d->dvr_carry_len);
-    for (int i = 0; i < 8192; i++) {
-        d->queue_cc_jumps[i].store(0, std::memory_order_relaxed);
-        d->push_cc_jumps[i].store(0, std::memory_order_relaxed);
-        d->dvr_cc_jumps[i].store(0, std::memory_order_relaxed);
-    }
-    d->push_written.store(0, std::memory_order_relaxed);
-    d->dvr_read.store(0, std::memory_order_relaxed);
 }
 
 // Push loop: paced ring drain, one TS-aligned quantum per pass
@@ -1585,37 +1579,28 @@ static void ddci_push_loop(int id, int fe) {
             size_t from_ring =
                 std::min(static_cast<size_t>(w), ring_total);
             if (from_ring) {
-                uint64_t nw = d->push_written.fetch_add(
-                                  from_ring, std::memory_order_relaxed) +
-                              from_ring;
-                uint64_t nr = d->dvr_read.load(std::memory_order_relaxed);
-                LOGM("DDCI %d: push +%zu w=%ju r=%ju gap=%jd", d->id, from_ring,
-                     (uintmax_t)nw, (uintmax_t)nr,
-                     (intmax_t)(nw >= nr ? nw - nr : 0));
                 // Walk emitted ring spans in wire order.
                 size_t rem = static_cast<size_t>(w);
                 if (need > 0) {
                     size_t take = std::min(head, rem);
                     if (take > 0)
                         ddci_count_stream_cc(d, "push", d->push_last_cc,
-                                             d->push_cc_jumps,
-                                             (uint8_t *)comp_base, take,
-                                             d->push_carry, &d->push_carry_len);
+                                             nullptr, (uint8_t *)comp_base,
+                                             take, d->push_carry,
+                                             &d->push_carry_len);
                     rem -= take;
                 }
                 if (n1 > 0 && rem > 0) {
                     size_t take = std::min(n1, rem);
-                    ddci_count_stream_cc(d, "push", d->push_last_cc,
-                                         d->push_cc_jumps, (uint8_t *)seg1,
-                                         take, d->push_carry,
+                    ddci_count_stream_cc(d, "push", d->push_last_cc, nullptr,
+                                         (uint8_t *)seg1, take, d->push_carry,
                                          &d->push_carry_len);
                     rem -= take;
                 }
                 if (n2 > 0 && rem > 0)
-                    ddci_count_stream_cc(d, "push", d->push_last_cc,
-                                         d->push_cc_jumps, (uint8_t *)seg2,
-                                         std::min(n2, rem), d->push_carry,
-                                         &d->push_carry_len);
+                    ddci_count_stream_cc(d, "push", d->push_last_cc, nullptr,
+                                         (uint8_t *)seg2, std::min(n2, rem),
+                                         d->push_carry, &d->push_carry_len);
                 std::lock_guard<std::mutex> lock(d->push_mutex);
                 fifo_skip_bytes(f, from_ring);
             }
@@ -1728,21 +1713,6 @@ void ddci_push_stop(ddci_device_t *d) {
     fifo_reset(f);
 }
 
-// Discarded output crossed the CAM: count it as read.
-void ddci_count_dvr_dropped(int adapter_id, int64_t bytes) {
-    if (bytes <= 0 || adapter_id < 0 || adapter_id >= MAX_ADAPTERS)
-        return;
-    ddci_device_t *d = ddci_devices[adapter_id];
-    if (!d)
-        return;
-    uint64_t nr = d->dvr_read.fetch_add(static_cast<uint64_t>(bytes),
-                                        std::memory_order_relaxed) +
-                  static_cast<uint64_t>(bytes);
-    uint64_t nw = d->push_written.load(std::memory_order_relaxed);
-    LOGM("DDCI %d: dvr drop +%jd w=%ju r=%ju gap=%jd", d->id, (intmax_t)bytes,
-         (uintmax_t)nw, (uintmax_t)nr, (intmax_t)(nw >= nr ? nw - nr : 0));
-}
-
 // Tune shed, output side: drain the stopped demux and drop
 // queued output; the push fifo keeps flowing untouched.
 void ddci_output_shed(adapter *ad, ddci_device_t *d) {
@@ -1772,14 +1742,9 @@ void ddci_output_shed(adapter *ad, ddci_device_t *d) {
         // At idle->active no consumer is owed bytes, so every
         // cursor resets alongside the fifo.
         memset(d->read_index, 0, sizeof(d->read_index));
-        // Drained output never stages: count it, and restart CC
+        // Drained output never stages: log it, and restart CC
         // history past the shed.
-        uint64_t nr =
-            d->dvr_read.fetch_add(drained, std::memory_order_relaxed) + drained;
-        uint64_t nw = d->push_written.load(std::memory_order_relaxed);
-        LOGM("DDCI %d: dvr shed +%zu w=%ju r=%ju gap=%jd", d->id, drained,
-             (uintmax_t)nw, (uintmax_t)nr,
-             (intmax_t)(nw >= nr ? nw - nr : 0));
+        LOGM("DDCI %d: dvr shed +%zu bytes", d->id, drained);
         ddci_cc_reset(d->dvr_last_cc, &d->dvr_carry_len);
         d->shed_bytes += drained + left;
         ad->rlen = 0;
@@ -1804,15 +1769,14 @@ size_t ddci_push_queue(ddci_device_t *d, uint8_t *psi, size_t psi_len,
         // returns are full-ring drops, counted, never partial.
         // Queue-side CC first: incoming jumps are satip-side.
         if (psi && psi_len > 0) {
-            ddci_count_stream_cc(d, "queue", d->queue_last_cc, d->queue_cc_jumps,
-                                 psi, psi_len, d->queue_carry,
-                                 &d->queue_carry_len);
+            ddci_count_stream_cc(d, "queue", d->queue_last_cc, nullptr, psi,
+                                 psi_len, d->queue_carry, &d->queue_carry_len);
             size_t q = fifo_push(f, psi, psi_len);
             queued += q;
             dropped += psi_len - q;
         }
         for (int k = 0; k < iop; k++) {
-            ddci_count_stream_cc(d, "queue", d->queue_last_cc, d->queue_cc_jumps,
+            ddci_count_stream_cc(d, "queue", d->queue_last_cc, nullptr,
                                  (uint8_t *)io[k].iov_base, io[k].iov_len,
                                  d->queue_carry, &d->queue_carry_len);
             size_t q = fifo_push(f, io[k].iov_base, io[k].iov_len);
@@ -2073,9 +2037,10 @@ int ddci_read_sec_data(sockets *s) {
     if (ad->drop_buffer) {
         // Consume the flag: a shed racing this read set it, and an
         // unconsumed flag would eat the next fresh batch instead.
-        ddci_count_dvr_dropped(s->sid, ad->rlen);
-        if (d)
+        if (d) {
+            LOGM("DDCI %d: dvr drop +%d bytes", d->id, ad->rlen);
             ddci_cc_reset(d->dvr_last_cc, &d->dvr_carry_len);
+        }
         ad->drop_buffer = 0;
         ad->rlen = 0;
         return 0;
@@ -2092,14 +2057,8 @@ int ddci_read_sec_data(sockets *s) {
         if (left == 0) {
             LOG("dropping %zu bytes for ddci_adapter %d", left, d->id);
         } else {
-            uint64_t nr = d->dvr_read.fetch_add(left, std::memory_order_relaxed) +
-                          left;
-            uint64_t nw = d->push_written.load(std::memory_order_relaxed);
-            LOGM("DDCI %d: dvr +%zu w=%ju r=%ju gap=%jd", d->id, left,
-                 (uintmax_t)nw, (uintmax_t)nr,
-                 (intmax_t)(nw >= nr ? nw - nr : 0));
-            ddci_count_stream_cc(d, "dvr", d->dvr_last_cc, d->dvr_cc_jumps, b,
-                                 left, d->dvr_carry, &d->dvr_carry_len);
+            ddci_count_stream_cc(d, "dvr", d->dvr_last_cc, nullptr, b, left,
+                                 d->dvr_carry, &d->dvr_carry_len);
         }
     }
     DEBUGM("pushed %zu bytes to the adapter buffer from %d [write_index %jd]",

@@ -1187,7 +1187,9 @@ int process_dmx(sockets *s) {
     }
     int dropped = s->rlen;
     if (drop_after_tune(ad, s)) {
-        ddci_count_dvr_dropped(s->sid, dropped);
+        if (s->sid >= 0 && s->sid < MAX_ADAPTERS &&
+            ddci_devices[s->sid] != nullptr)
+            LOGM("DDCI %d: dvr drop +%d bytes", s->sid, dropped);
         return 0;
     }
 
@@ -1255,7 +1257,9 @@ int read_dmx(sockets *s) {
     std::unique_lock<SMutex> lock(ad->mutex);
     int dropped = s->rlen;
     if (drop_after_tune(ad, s)) {
-        ddci_count_dvr_dropped(s->sid, dropped);
+        if (s->sid >= 0 && s->sid < MAX_ADAPTERS &&
+            ddci_devices[s->sid] != nullptr)
+            LOGM("DDCI %d: dvr drop +%d bytes", s->sid, dropped);
         return 0;
     }
     threshold = ad->threshold;
