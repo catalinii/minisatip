@@ -587,8 +587,8 @@ void set_adapter_signal(adapter *ad, char *b) {
     tun = strstr(b, "tuner=");
     if (tun)
         signal = strchr(tun, ',');
-    if (signal) {
-        sscanf(signal + 1, "%d,%d,%d", &strength, &status, &quality);
+    if (signal &&
+        sscanf(signal + 1, "%d,%d,%d", &strength, &status, &quality) == 3) {
         // Workaround for faulty servers (level=0)
         // Ex. XORO:
         // "SES1....ver=1.0;src=1;tuner=1,0,1,15,10744,h,dvbs,qpsk,off,0.35,22000,56;pids=0,100,200,400,500,600,17,16"
@@ -1707,6 +1707,7 @@ int http_request(adapter *ad, char *url, const char *method) {
 }
 
 void tune_url(adapter *ad, char *url, int url_len) {
+    url[0] = 0;
     switch (ad->sys[0]) {
     case SYS_DVBS2:
     case SYS_DVBS:
@@ -2225,7 +2226,7 @@ const char *satip_delsys[] = {
     "ISDBT",     "ISDBS", "ISDBC", "ATSCT", "ATSCMH", "DMBTH", "CMMB",  "DAB",
     "DVBT2",     "TURBO", "DVBCC", "DVBC2", NULL,     NULL,    NULL,    NULL};
 
-void satip_getxml_data(char *data, int len, void *opaque, Shttp_client *h) {
+int satip_getxml_data(void *data, int len, void *opaque, Shttp_client *h) {
     Ssatip_xml_data *s = (Ssatip_xml_data *)opaque;
     if (!data) // the socket will be closed, process the data;
     {
@@ -2244,7 +2245,7 @@ void satip_getxml_data(char *data, int len, void *opaque, Shttp_client *h) {
             sep = strstr(sep, ">");
         if (!sep) {
             LOG("No satipcap found for %s, XML:\n%s", s->url, s->xml);
-            return;
+            return 0;
         }
         sep++;
         eos = strchr(sep, '<');
@@ -2300,17 +2301,18 @@ void satip_getxml_data(char *data, int len, void *opaque, Shttp_client *h) {
             getAdaptersCount();
         } else
             LOG("No change for satip xml: %s", s->url);
-        return;
+        return 0;
     }
     size_t xml_len = strlen(s->xml);
     size_t data_len = static_cast<size_t>(len);
     if (data_len + xml_len >= sizeof(s->xml)) {
         LOG("too much data from the satip server for URL %s", s->url);
-        return;
+        return 0;
     }
     memcpy(s->xml + xml_len, data, data_len);
     s->xml[xml_len + data_len] = 0;
     DEBUGM("%s: %s", __FUNCTION__, s->xml);
+    return 0;
 }
 
 int satip_getxml(void *) {
