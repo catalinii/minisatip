@@ -1342,70 +1342,6 @@ int push_ts_to_adapter(ddci_device_t *d, adapter *ad, uint16_t *mapping) {
     return 0;
 }
 
-// One packet's CC against its pid history; jumps go to LOGM.
-static void ddci_cc_packet(ddci_device_t *d, const char *side, int16_t *last,
-                           std::atomic<uint32_t> *jumps, uint8_t *p) {
-    int pid = ((p[1] & 0x1f) << 8) | p[2];
-    if (pid == 8191 || !(p[3] & 0x10))
-        return;
-    int cc = p[3] & 0x0f;
-    if (last[pid] >= 0 && cc != (last[pid] + 1) % 16) {
-        if (jumps)
-            jumps[pid].fetch_add(1, std::memory_order_relaxed);
-        LOGM("DDCI %d: CC %s jump pid %d (%d -> %d)", d->id, side, pid,
-             last[pid], cc);
-    }
-    last[pid] = static_cast<int16_t>(cc);
-}
-
-// CC jumps over a stream chunk; a split packet completes via
-// carry on the next chunk. Drops sync-less leading garbage.
-void ddci_count_stream_cc(ddci_device_t *d, const char *side, int16_t *last,
-                          std::atomic<uint32_t> *jumps, uint8_t *b, size_t n,
-                          uint8_t *carry, size_t *carry_len) {
-    size_t i = 0;
-    if (*carry_len > 0) {
-        size_t take = std::min(n, 188 - *carry_len);
-        memcpy(carry + *carry_len, b, take);
-        *carry_len += take;
-        i += take;
-        if (*carry_len < 188)
-            return;
-        ddci_cc_packet(d, side, last, jumps, carry);
-        *carry_len = 0;
-    } else {
-        while (i < n && b[i] != 0x47)
-            i++;
-    }
-    while (i < n) {
-        if (i + 188 > n) {
-            *carry_len = n - i;
-            memcpy(carry, b + i, *carry_len);
-            return;
-        }
-        if (b[i] != 0x47) {
-            i++;
-            continue;
-        }
-        ddci_cc_packet(d, side, last, jumps, b + i);
-        i += 188;
-    }
-}
-
-// Fresh stream: no CC history or partial packet survives.
-static void ddci_cc_reset(int16_t *last, size_t *carry_len) {
-    for (int i = 0; i < 8192; i++)
-        last[i] = -1;
-    *carry_len = 0;
-}
-
-// Fresh open: zero flow accounting and CC attribution.
-static void ddci_flow_reset(ddci_device_t *d) {
-    ddci_cc_reset(d->queue_last_cc, &d->queue_carry_len);
-    ddci_cc_reset(d->push_last_cc, &d->push_carry_len);
-    ddci_cc_reset(d->dvr_last_cc, &d->dvr_carry_len);
-}
-
 // Push loop: paced ring drain, one TS-aligned quantum per pass
 // (up to DDCI_PUSH_CHUNK). Loopback only; hardware writevs inline.
 static void ddci_push_loop(int id, int fe) {
@@ -1579,28 +1515,6 @@ static void ddci_push_loop(int id, int fe) {
             size_t from_ring =
                 std::min(static_cast<size_t>(w), ring_total);
             if (from_ring) {
-                // Walk emitted ring spans in wire order.
-                size_t rem = static_cast<size_t>(w);
-                if (need > 0) {
-                    size_t take = std::min(head, rem);
-                    if (take > 0)
-                        ddci_count_stream_cc(d, "push", d->push_last_cc,
-                                             nullptr, (uint8_t *)comp_base,
-                                             take, d->push_carry,
-                                             &d->push_carry_len);
-                    rem -= take;
-                }
-                if (n1 > 0 && rem > 0) {
-                    size_t take = std::min(n1, rem);
-                    ddci_count_stream_cc(d, "push", d->push_last_cc, nullptr,
-                                         (uint8_t *)seg1, take, d->push_carry,
-                                         &d->push_carry_len);
-                    rem -= take;
-                }
-                if (n2 > 0 && rem > 0)
-                    ddci_count_stream_cc(d, "push", d->push_last_cc, nullptr,
-                                         (uint8_t *)seg2, std::min(n2, rem),
-                                         d->push_carry, &d->push_carry_len);
                 std::lock_guard<std::mutex> lock(d->push_mutex);
                 fifo_skip_bytes(f, from_ring);
             }
@@ -1742,10 +1656,6 @@ void ddci_output_shed(adapter *ad, ddci_device_t *d) {
         // At idle->active no consumer is owed bytes, so every
         // cursor resets alongside the fifo.
         memset(d->read_index, 0, sizeof(d->read_index));
-        // Drained output never stages: log it, and restart CC
-        // history past the shed.
-        LOGM("DDCI %d: dvr shed +%zu bytes", d->id, drained);
-        ddci_cc_reset(d->dvr_last_cc, &d->dvr_carry_len);
         d->shed_bytes += drained + left;
         ad->rlen = 0;
         ad->drop_buffer = 1;
@@ -1767,18 +1677,12 @@ size_t ddci_push_queue(ddci_device_t *d, uint8_t *psi, size_t psi_len,
             d->last_push_write.store(getTick(), std::memory_order_relaxed);
         // fifo_push is all-or-nothing without force: short
         // returns are full-ring drops, counted, never partial.
-        // Queue-side CC first: incoming jumps are satip-side.
         if (psi && psi_len > 0) {
-            ddci_count_stream_cc(d, "queue", d->queue_last_cc, nullptr, psi,
-                                 psi_len, d->queue_carry, &d->queue_carry_len);
             size_t q = fifo_push(f, psi, psi_len);
             queued += q;
             dropped += psi_len - q;
         }
         for (int k = 0; k < iop; k++) {
-            ddci_count_stream_cc(d, "queue", d->queue_last_cc, nullptr,
-                                 (uint8_t *)io[k].iov_base, io[k].iov_len,
-                                 d->queue_carry, &d->queue_carry_len);
             size_t q = fifo_push(f, io[k].iov_base, io[k].iov_len);
             queued += q;
             dropped += io[k].iov_len - q;
@@ -2037,10 +1941,6 @@ int ddci_read_sec_data(sockets *s) {
     if (ad->drop_buffer) {
         // Consume the flag: a shed racing this read set it, and an
         // unconsumed flag would eat the next fresh batch instead.
-        if (d) {
-            LOGM("DDCI %d: dvr drop +%d bytes", d->id, ad->rlen);
-            ddci_cc_reset(d->dvr_last_cc, &d->dvr_carry_len);
-        }
         ad->drop_buffer = 0;
         ad->rlen = 0;
         return 0;
@@ -2056,9 +1956,6 @@ int ddci_read_sec_data(sockets *s) {
         left = fifo_push_force(&d->fifo, b, static_cast<size_t>(rlen), 1);
         if (left == 0) {
             LOG("dropping %zu bytes for ddci_adapter %d", left, d->id);
-        } else {
-            ddci_count_stream_cc(d, "dvr", d->dvr_last_cc, nullptr, b, left,
-                                 d->dvr_carry, &d->dvr_carry_len);
         }
     }
     DEBUGM("pushed %zu bytes to the adapter buffer from %d [write_index %jd]",
@@ -2155,7 +2052,6 @@ static int ddci_open_enigma(adapter *ad, ddci_device_t *d) {
         // outer here matches the queue's nesting, P stays a leaf.
         std::lock_guard<std::mutex> plock(d->push_mutex);
         fifo_reset(&d->push_backlog);
-        ddci_flow_reset(d);
     }
     d->enabled = 1;
     // Retake unless a live tuner claimed it while closed; then
@@ -2260,7 +2156,6 @@ int ddci_open_device(adapter *ad) {
         // outer here matches the queue's nesting, P stays a leaf.
         std::lock_guard<std::mutex> plock(d->push_mutex);
         fifo_reset(&d->push_backlog);
-        ddci_flow_reset(d);
     }
     d->enabled = 1;
     ad->enabled = 1;
