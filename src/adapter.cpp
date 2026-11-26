@@ -2302,14 +2302,14 @@ char *get_adapter_name(int aid, char *dest, int max_size) {
 }
 
 int get_adapter_ccerrs(int aid) {
-    int i, cc = 0;
     adapter *ad = get_adapter_nw(aid);
     if (!ad)
         return 0;
 
-    for (i = 0; i < 2; i++)
-        if (ad->pids[i].flags == PID_STATE_ACTIVE)
-            cc += ad->pids[i].cc_err;
+    int cc = 0;
+    for (const auto &p : ad->pids)
+        if (p.flags == PID_STATE_ACTIVE)
+            cc += p.cc_err;
     return cc;
 }
 
@@ -2319,9 +2319,9 @@ int get_adapter_ccerrs2(int aid) {
         return 0;
 
     int cc = 0;
-    for (int i = 0; i < 2; i++)
-        if (ad->pids[i].flags == PID_STATE_ACTIVE)
-            cc += ad->pids[i].cc_err2;
+    for (const auto &p : ad->pids)
+        if (p.flags == PID_STATE_ACTIVE)
+            cc += p.cc_err2;
     return cc;
 }
 
