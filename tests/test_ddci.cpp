@@ -3158,7 +3158,7 @@ int test_ddci_push_reserve_arm_burst() {
             {&burst[(size_t)queued_pkts * 188], (size_t)n * 188}};
         queued += ddci_push_queue(&d, nullptr, 0, io, 1);
         queued_pkts += n;
-        usleep(10000);
+        usleep(2000);
     }
     ASSERT(queued == burst.size(), "burst queued whole");
     struct pollfd pfd = {fds[0], POLLIN, 0};
