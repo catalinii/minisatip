@@ -17,6 +17,14 @@ It is tested on x86_64, x86, ARM and MIPS platforms and it requires DVBAPI 5. Su
 
 The application shows also a status page by default at the address: http://IP:8080 
 
+## Independent CI support
+
+Minisatip supports independent CI interfaces with Multi-Transponder Decryption (MTD): the CI is not tied to a tuner, it can attach to any adapter (local DVB or SAT>IP) and descramble PIDs from multiple transponders at once. Supported hardware includes:
+
+* TBS6900 DVB Dual CI PCI-E card (two CI slots)
+* Digital Devices DuoFlex CI (twin CI extension for the Cine/Octopus series)
+* Enigma2 receivers with a CI slot, such as GigaBlue GBQuad4K and Vu+ Uno 4K SE - see the [Enigma DDCI setup guide](https://github.com/catalinii/minisatip/wiki/Enigma-DDCI-setup)
+
 ## Contact
 
 Please use github for any question: https://github.com/catalinii/minisatip/discussions
@@ -30,7 +38,7 @@ https://paypal.me/minisatip
 
 (Message automatically generated from `minisatip --help`)
 ```
-minisatip version v2.0.71~6d5db68, compiled on Feb 18 2026 18:25:16, with s2api version: 050C
+minisatip version v2.0.207~2006427, compiled on Nov 27 2026 11:08:00, with s2api version: 050C
 
 	./minisatip [-[fgtzE]] [-a x:y:z] [-b X:Y] [-B X] [-H X:Y] [-d A:C-U ] [-D device_id] [-e X-Y,Z] [-i prio] 
 	[-[uj] A1:S1-F1[-PIN]] [-P port] [-l module1[,module2]] [-v module1[,module2]] 
@@ -59,6 +67,9 @@ Help
 	- The default value is 0, corresponding to use the kernel default value
 	* eg: --satip-receive-buffer  100 - to set the socket buffer to 100KB
 	* eg: --satip-receive-buffer 1024 - to set the socket buffer to 1MB
+
+* --sdt-charset auto|latin1 : decode SDT channel names as ISO-8859-1 (latin1) instead of auto-detecting the DVB charset 
+	- use latin1 when the provider sends raw Latin-1 bytes without a charset prefix (mangled names, see #1477). Default: auto 
 
 * -z --cache-dir dir : set the app cache directory to dir. The directory will be created if it doesn't exist. 
 	* defaults to /var/cache/minisatip (/var/lib/minisatip on Enigma) 
@@ -257,6 +268,10 @@ Help
 * -9 --disable-pmt-scan: Disables scanning PMTs and only reads the PMTs that are requested by the client
 	* Provides more reliable decrypting for channels included in multiple providers
 
+* --hw-descrambler: Enable hardware descrambler (Enigma2 CA ioctl). Disabled by default
+
+* --enigma-ddci: Enable the enigma DVR loopback on any model. Disabled by default
+
 * -3 --ca-pin mapping_string: set the pin for CIs
 	* The format is: ADAPTER1:PIN,ADAPTER2-ADAPTER4:PIN
 	* eg: 0:1234,2-3:4567 
@@ -267,7 +282,7 @@ Help
 
 * -c --ca-channels adapter_list:maximum_number_of_channels_supported: Specify the number of channels supported by the CAM and override the CAIDs
 	* The format is: ADAPTER1:[*]MAX_CHANNELS[-CAID1[-CAID2]...,ADAPTER2:MAX_CHANNELS[-CAID3[-CAID4]...] 
-		 * before the MAX_CHANNELS enable 2 PMTs inside of the same CAPMT to double the number of decrypted channels
+		 * before the MAX_CHANNELS enable 2 PMTs inside of the same CAPMT to double the number of decrypted channels, ** packs 3 PMTs
 			* eg : 0:*1-100
 The DDCI adapters 0 will support maximum of 1 CAPMT (2 channels because of *) and will use CAID1. If CAID is not specified it will use CAMs CAIDs
 Official CAMs support 1 or 2 channels, with this option this is extended to 2 or 4

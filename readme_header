@@ -17,6 +17,14 @@ It is tested on x86_64, x86, ARM and MIPS platforms and it requires DVBAPI 5. Su
 
 The application shows also a status page by default at the address: http://IP:8080 
 
+## Independent CI support
+
+Minisatip supports independent CI interfaces with Multi-Transponder Decryption (MTD): the CI is not tied to a tuner, it can attach to any adapter (local DVB or SAT>IP) and descramble PIDs from multiple transponders at once. Supported hardware includes:
+
+* TBS6900 DVB Dual CI PCI-E card (two CI slots)
+* Digital Devices DuoFlex CI (twin CI extension for the Cine/Octopus series)
+* Enigma2 receivers with a CI slot, such as GigaBlue GBQuad4K and Vu+ Uno 4K SE - see the [Enigma DDCI setup guide](https://github.com/catalinii/minisatip/wiki/Enigma-DDCI-setup)
+
 ## Contact
 
 Please use github for any question: https://github.com/catalinii/minisatip/discussions
