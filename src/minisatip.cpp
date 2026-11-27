@@ -140,6 +140,7 @@ int rtsp, http, si, si1, ssdp1;
 #define HW_DESCRAMBLER_OPT (LONG_OPT_ONLY_START + 5)
 #define SDT_CHARSET_OPT (LONG_OPT_ONLY_START + 6)
 #define ENIGMA_DDCI_OPT (LONG_OPT_ONLY_START + 7)
+#define FORCE_DISEQC_VOLTAGE_OPT (LONG_OPT_ONLY_START + 8)
 
 static const struct option long_options[] = {
     {"adapters", required_argument, NULL, ADAPTERS_OPT},
@@ -160,6 +161,7 @@ static const struct option long_options[] = {
     {"disable-ssdp", no_argument, NULL, DISABLESSDP_OPT},
     {"diseqc", required_argument, NULL, DISEQC_OPT},
     {"diseqc-timing", required_argument, NULL, DISEQC_TIMING_OPT},
+    {"diseqc-voltage", required_argument, NULL, FORCE_DISEQC_VOLTAGE_OPT},
     {"diseqc-multi", required_argument, NULL, DISEQC_MULTI},
     {"document-root", required_argument, NULL, DOCUMENTROOT_OPT},
     {"drop-encrypted", no_argument, NULL, DROP_ENCRYPTED_OPT},
@@ -358,6 +360,8 @@ Help\n\
 * -q --diseqc-timing ADAPTER1:BEFORE_CMD1-AFTER_CMD1-AFTER_REPEATED_CMD1-AFTER_SWITCH1-AFTER_BURST1-AFTER_TONE1[,...]\n\
 \t* All timing values are in ms, default adapter values are: 15-54-15-15-15-0\n\
 	- note: * as adapter means apply to all adapters\n\
+\n\
+* --diseqc-voltage 13|18 - enforces the voltage when sending DiseqC commands\n\
 \n\
 * -D --device-id DVC_ID: specify the device id (in case there are multiple SAT>IP servers in the network)\n \
 	* eg: -D 4 \n\
@@ -677,6 +681,7 @@ void set_options(int argc, char *argv[]) {
     opts.diseqc_after_tone = 0;
     opts.diseqc_committed_no = 1;
     opts.diseqc_multi = -1;
+    opts.diseqc_voltage = -1;
     opts.lnb_low = (9750 * 1000UL);
     opts.lnb_high = (10600 * 1000UL);
     opts.lnb_circular = (10750 * 1000UL);
@@ -917,6 +922,13 @@ void set_options(int argc, char *argv[]) {
 
         case DISEQC_MULTI: {
             set_diseqc_multi(optarg);
+            break;
+        }
+
+        case FORCE_DISEQC_VOLTAGE_OPT: {
+            int val = atoi(optarg);
+            if (val == 13 || val == 18)
+                opts.diseqc_voltage = val;
             break;
         }
 
