@@ -49,6 +49,7 @@
 #include <time.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <array>
 #include <dlfcn.h>
 #include <poll.h>
@@ -2948,13 +2949,13 @@ int test_ddci_push_thread_roundtrip() {
 // Pacer test packet: sync byte, non-null pid, and a sequence number
 // the grid check uses to filter filler and verify order and loss.
 static void bl_make_seq(uint8_t *pkt, int seq) {
-    memset(pkt, 0xA5, 188);
+    std::fill(pkt, pkt + 188, 0xA5);
     pkt[0] = 0x47;
     set_pid_ts(pkt, 0x100 + (seq % 0x100));
-    pkt[4] = (uint8_t)(seq >> 24);
-    pkt[5] = (uint8_t)(seq >> 16);
-    pkt[6] = (uint8_t)(seq >> 8);
-    pkt[7] = (uint8_t)seq;
+    pkt[4] = static_cast<uint8_t>(seq >> 24);
+    pkt[5] = static_cast<uint8_t>(seq >> 16);
+    pkt[6] = static_cast<uint8_t>(seq >> 8);
+    pkt[7] = static_cast<uint8_t>(seq);
 }
 
 // Verifies the TS grid over the complete packets and collects the
@@ -3146,17 +3147,18 @@ int test_ddci_push_reserve_arm_burst() {
     // Past the reserve in sequenced packets; the drain must arm at
     // once instead of waiting out the slow-stream cap (timed below).
     static const int NPKT = DDCI_PUSH_RESERVE / 188 + 1;
-    std::vector<uint8_t> burst((size_t)NPKT * 188);
+    std::vector<uint8_t> burst(static_cast<size_t>(NPKT) * 188);
     for (int i = 0; i < NPKT; i++)
-        bl_make_seq(&burst[(size_t)i * 188], i);
+        bl_make_seq(&burst[static_cast<size_t>(i) * 188], i);
     int64_t t0 = getTick();
     size_t queued = 0;
     int queued_pkts = 0;
     for (int k = 0; k < 4; k++) {
         int n = NPKT / 4 + (k < NPKT % 4 ? 1 : 0);
-        struct iovec io[1] = {
-            {&burst[(size_t)queued_pkts * 188], (size_t)n * 188}};
-        queued += ddci_push_queue(&d, nullptr, 0, io, 1);
+        std::array<iovec, 1> io;
+        io[0] = {&burst[static_cast<size_t>(queued_pkts) * 188],
+                 static_cast<size_t>(n) * 188};
+        queued += ddci_push_queue(&d, nullptr, 0, io.data(), 1);
         queued_pkts += n;
         usleep(2000);
     }
@@ -3178,8 +3180,9 @@ int test_ddci_push_reserve_arm_burst() {
         uint8_t chunk[25 * 188];
         for (int i = 0; i < 25; i++)
             bl_make_seq(&chunk[i * 188], NPKT + c * 25 + i);
-        struct iovec cio[1] = {{chunk, sizeof(chunk)}};
-        ASSERT(ddci_push_queue(&d, nullptr, 0, cio, 1) == sizeof(chunk),
+        std::array<iovec, 1> cio = {{{chunk, sizeof(chunk)}}};
+        ASSERT(ddci_push_queue(&d, nullptr, 0, cio.data(), 1) ==
+               sizeof(chunk),
                "trickle chunk queued");
         bl_read_until_drained(&d, fds[0], out, 5000);
         ASSERT(bl_have(&d) == 0, "trickle chunk drained");
@@ -3201,7 +3204,7 @@ int test_ddci_push_reserve_arm_burst() {
     ASSERT(seqs.size() == (size_t)(NPKT + NTRICKLE),
            "no packet lost or duplicated");
     for (int i = 0; i < NPKT + NTRICKLE; i++)
-        ASSERT(seqs[(size_t)i] == i, "packets arrive in order");
+        ASSERT(seqs[static_cast<size_t>(i)] == i, "packets arrive in order");
     ASSERT(d.shed_bytes.load() == 0, "clean drain sheds nothing");
     ASSERT(d.push_dropped == 0, "clean drain drops nothing");
     ASSERT(!d.push_running.load(), "loop exited");
@@ -3225,8 +3228,7 @@ int test_ddci_push_stays_frame_aligned() {
     // Small ring, head parked near the end: the queued packets
     // straddle the wrap from the very first quantum on.
     create_fifo(&d.push_backlog, 188 * 64);
-    uint8_t pad[188];
-    memset(pad, 0, sizeof(pad));
+    uint8_t pad[188] = {};
     pad[0] = 0x47;
     for (int i = 0; i < 60; i++)
         ASSERT(fifo_push(&d.push_backlog, pad, sizeof(pad)) == sizeof(pad),
@@ -3250,8 +3252,8 @@ int test_ddci_push_stays_frame_aligned() {
     uint8_t burst[NPKT * 188];
     for (int i = 0; i < NPKT; i++)
         bl_make_seq(&burst[i * 188], i);
-    struct iovec io[1] = {{burst, sizeof(burst)}};
-    ASSERT(ddci_push_queue(&d, nullptr, 0, io, 1) == sizeof(burst),
+    std::array<iovec, 1> io = {{{burst, sizeof(burst)}}};
+    ASSERT(ddci_push_queue(&d, nullptr, 0, io.data(), 1) == sizeof(burst),
            "burst queued whole");
     std::vector<uint8_t> out;
     uint8_t tmp[1024];
@@ -3277,9 +3279,10 @@ int test_ddci_push_stays_frame_aligned() {
     size_t tail = 0;
     ASSERT(bl_check_grid(out.data(), out.size(), seqs, tail) == 0,
            "output stays on the TS grid");
-    ASSERT(seqs.size() == (size_t)NPKT, "no packet lost or duplicated");
+    ASSERT(seqs.size() == static_cast<size_t>(NPKT),
+           "no packet lost or duplicated");
     for (int i = 0; i < NPKT; i++)
-        ASSERT(seqs[(size_t)i] == i, "packets arrive in order");
+        ASSERT(seqs[static_cast<size_t>(i)] == i, "packets arrive in order");
     ASSERT(d.shed_bytes.load() == 0, "clean drain sheds nothing");
     ASSERT(d.push_dropped == 0, "clean drain drops nothing");
     ASSERT(!d.push_running.load(), "loop exited");
@@ -3313,8 +3316,9 @@ int test_ddci_push_idles_to_silence() {
     uint8_t msg[5 * 188];
     for (int i = 0; i < 5; i++)
         bl_make_seq(&msg[i * 188], i);
-    struct iovec io[1] = {{msg, sizeof(msg)}};
-    ASSERT(ddci_push_queue(&d, nullptr, 0, io, 1) == sizeof(msg), "queued");
+    std::array<iovec, 1> io = {{{msg, sizeof(msg)}}};
+    ASSERT(ddci_push_queue(&d, nullptr, 0, io.data(), 1) == sizeof(msg),
+           "queued");
     int t = 0;
     while (bl_have(&d) > 0 && t++ < 500)
         usleep(10000);
@@ -3331,8 +3335,8 @@ int test_ddci_push_idles_to_silence() {
     uint8_t msg2[5 * 188];
     for (int i = 0; i < 5; i++)
         bl_make_seq(&msg2[i * 188], 5 + i);
-    struct iovec io2[1] = {{msg2, sizeof(msg2)}};
-    ASSERT(ddci_push_queue(&d, nullptr, 0, io2, 1) == sizeof(msg2),
+    std::array<iovec, 1> io2 = {{{msg2, sizeof(msg2)}}};
+    ASSERT(ddci_push_queue(&d, nullptr, 0, io2.data(), 1) == sizeof(msg2),
            "re-arm queued");
     bl_read_until_drained(&d, fds[0], out, 5000);
     int redrained = (bl_have(&d) == 0);
@@ -3346,7 +3350,7 @@ int test_ddci_push_idles_to_silence() {
            "grid continues across the silence gap");
     ASSERT(seqs.size() == 10, "no packet lost or duplicated");
     for (int i = 0; i < 10; i++)
-        ASSERT(seqs[(size_t)i] == i, "packets arrive in order");
+        ASSERT(seqs[static_cast<size_t>(i)] == i, "packets arrive in order");
     ASSERT(!d.push_running.load(), "loop exited on stop");
     ASSERT(!d.push_thread.joinable(), "thread joined");
     ASSERT(d.shed_bytes.load() == 0, "clean drain sheds nothing");

@@ -1403,8 +1403,8 @@ static void ddci_push_loop(int id, int fe) {
         if (armed && now - rate_at >= DDCI_PUSH_RETUNE_MS) {
             std::lock_guard<std::mutex> lock(d->push_mutex);
             uint64_t produced = f->write_index - seen;
-            int64_t measured =
-                (int64_t)(produced * 1000 / (uint64_t)(now - rate_at));
+            int64_t measured = static_cast<int64_t>(
+                produced * 1000 / static_cast<uint64_t>(now - rate_at));
             seen = f->write_index;
             rate_at = now;
             if (produced > 0)
@@ -1481,8 +1481,8 @@ static void ddci_push_loop(int id, int fe) {
             if (len == 0)
                 continue;
         }
-        struct iovec iov[3];
-        int iovcnt = 0;
+        std::array<iovec, 3> iov;
+        size_t iovcnt = 0;
         size_t ring_total = 0;
         if (need > 0) {
             iov[iovcnt].iov_base = comp_base;
@@ -1504,7 +1504,7 @@ static void ddci_push_loop(int id, int fe) {
                 ring_total += n2;
             }
         }
-        ssize_t w = writev(fe, iov, iovcnt);
+        ssize_t w = writev(fe, iov.data(), static_cast<int>(iovcnt));
         if (w > 0) {
             d->last_push_write.store(getTick(), std::memory_order_relaxed);
             // Deduct what left the fd: EAGAIN/EINTR/short writes keep
