@@ -38,7 +38,6 @@ void parse_dvbapi_opt(const char *arg, struct_opts_t *optz) {
     if (sep2 != NULL) {
         *sep2 = 0;
         optz->dvbapi_offset = parse_int(sep2 + 1);
-        memmove(buf, buf, strlen(buf) - 1 - strlen(sep2));
     }
     char *sep1 = strchr(buf, ':');
     if (sep1 != NULL) {

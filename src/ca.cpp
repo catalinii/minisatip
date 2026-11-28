@@ -4612,13 +4612,12 @@ void set_ca_channels(char *o) {
         size_t next_dash = rem.find('-');
         while (next_dash != std::string_view::npos) {
             std::string_view caid_sv = rem.substr(next_dash + 1);
-            unsigned int caid = 0;
+            uint16_t caid = 0; // a larger value is out of range
             auto result = std::from_chars(
                 caid_sv.data(), caid_sv.data() + caid_sv.size(), caid, 16);
             if (result.ec == std::errc{} && caid > 0) {
                 if (ca_devices[ddci]->caids < MAX_CAID) {
-                    ca_devices[ddci]->caid[ca_devices[ddci]->caids++] =
-                        static_cast<uint16_t>(caid);
+                    ca_devices[ddci]->caid[ca_devices[ddci]->caids++] = caid;
                     ca_devices[ddci]->has_forced_caids = 1;
                     LOG("Forcing CA %d to use CAID %04X", ddci, caid);
                 } else {

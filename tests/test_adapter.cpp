@@ -199,6 +199,17 @@ int test_get_adapter_name_bounded() {
     return 0;
 }
 
+// An absolute source for an adapter out of range is skipped
+int test_set_absolute_src_bounds() {
+    char cfg[] = "0:200:0,0:-1:0";
+    char saved = absolute_switch;
+    absolute_switch = 0;
+    set_absolute_src(cfg);
+    ASSERT_EQUAL(absolute_switch, 0, "nothing set");
+    absolute_switch = saved;
+    return 0;
+}
+
 static int tune_ok(int, transponder *) { return 0; }
 
 // The DVR socket belongs to the adapter thread: tune() must not reset its
@@ -719,6 +730,8 @@ int main() {
     TEST_FUNC(test_update_pids(), "test update_pids and sort_pids");
     TEST_FUNC(test_describe_adapter_large_plp_ds(),
               "test describe_adapter with ten-digit plp and ds");
+    TEST_FUNC(test_set_absolute_src_bounds(),
+              "test set_absolute_src adapter bounds");
     TEST_FUNC(test_get_adapter_name_bounded(),
               "test get_adapter_name stays within max_size");
     TEST_FUNC(test_tune_flushes_dvr_in_read_dmx(),

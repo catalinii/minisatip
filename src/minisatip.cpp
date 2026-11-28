@@ -837,7 +837,12 @@ void set_options(int argc, char *argv[]) {
 
         case APPBUFFER_OPT: {
             int val = atoi(optarg);
-            opts.max_sbuf = val;
+            // the FIFO size in bytes must fit an int
+            if (val > 0 && val < 2048)
+                opts.max_sbuf = val;
+            else
+                LOG("-B %s: not 1 to 2047 MB, keeping %d MB", optarg,
+                    opts.max_sbuf);
             break;
         }
 

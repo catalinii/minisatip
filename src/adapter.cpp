@@ -1782,6 +1782,8 @@ void set_absolute_src(char *o) {
             continue;
         if (pos < 0 || pos >= 15)
             continue;
+        if (inp < 0 || inp >= MAX_ADAPTERS)
+            continue;
         int cnt = 1;
         while (src <= range) {
             LOG("Setting source %d (src=%d) to adapter %d position %d", src,

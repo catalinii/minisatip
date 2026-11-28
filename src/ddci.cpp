@@ -2311,6 +2311,7 @@ void load_channels() {
         Sddci_channel *c = &channels[sid];
         c->sid = sid;
         c->locked = 1;
+        c->ddcis = 0; // each DDCI adapter found loads the file again
         std::string_view cc_sv = strip(cc + 1);
 
         auto arg = split(cc_sv, ',');
@@ -2318,7 +2319,7 @@ void load_channels() {
         nchannels++;
         for (const auto &arg_item : arg) {
             int v = parse_int(arg_item, -1);
-            if (v != -1) {
+            if (v >= 0 && v < MAX_ADAPTERS && c->ddcis < MAX_ADAPTERS) {
                 c->ddci[c->ddcis++].ddci = static_cast<uint8_t>(v);
                 strcatf(buf, pos, "%s%d", i ? "," : "", v);
             }

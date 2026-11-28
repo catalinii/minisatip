@@ -48,6 +48,10 @@ int test_parse_dvbapi_opt() {
 
     // Socket with offset or port doesn't make sense, so skip checking those
 
+    // Offset without a host
+    _parse_dvbapi_opt(",1");
+    ASSERT(opts.dvbapi_offset == 1, "opts.dvbapi_offset != 1");
+
     // Host
     _parse_dvbapi_opt("192.168.1.100");
     ASSERT(opts.pids_all_no_dec == 0, "opts.pids_all_no_dec != 0");

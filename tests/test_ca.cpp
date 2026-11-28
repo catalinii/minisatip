@@ -849,6 +849,13 @@ int test_set_ca_channels_parsing() {
     free(ca_devices[0]);
     ca_devices[0] = nullptr;
 
+    char config_wide[] = "1:2-10900-0500";
+    set_ca_channels(config_wide);
+    ASSERT_EQUAL(ca_devices[1]->caids, 1, "CAID over 16 bits skipped");
+    ASSERT_EQUAL(ca_devices[1]->caid[0], 0x0500, "Valid CAID kept");
+    free(ca_devices[1]);
+    ca_devices[1] = nullptr;
+
     // ** packs 3 programs per CAPMT; more stars are capped
     char config3[] = "8:**2";
     set_ca_channels(config3);
