@@ -1523,6 +1523,8 @@ char *describe_adapter(int sid, int aid, char *dad, size_t ld) {
                 .reverse_lookup(t->inversion.value_or(INVERSION_AUTO))
                 .data());
 
+    if (len >= static_cast<int>(ld)) // truncated, no room for the pids
+        return dad;
     if (use_ad) {
         if (!*get_stream_pids(sid, dad + len, static_cast<int>(ld) - len))
             strlcatf(dad, ld, len, "%s", "none");

@@ -1862,7 +1862,7 @@ fe_delivery_system_t dvb_delsys(int aid, int fd, fe_delivery_system_t *sys) {
         .num = sizeof(enum_cmdargs) / sizeof(struct dtv_property),
         .props = enum_cmdargs};
 
-    for (i = 0; i < 10; i++)
+    for (i = 0; i < MAX_DELSYS; i++)
         sys[i] = (fe_delivery_system_t)0;
     if (ioctl(fd, FE_GET_PROPERTY, &enum_cmdseq) < 0) {
         LOG("unable to query frontend, perhaps DVB-API < 5.5 ?");
@@ -1879,6 +1879,11 @@ fe_delivery_system_t dvb_delsys(int aid, int fd, fe_delivery_system_t *sys) {
         fe_info.name);
 
     int nsys = static_cast<int>(enum_cmdargs[0].u.buffer.len);
+    if (nsys > MAX_DELSYS) {
+        LOG("adapter %d: using the first %d of %d delivery systems", aid,
+            MAX_DELSYS, nsys);
+        nsys = MAX_DELSYS;
+    }
 
     if (nsys < 1) {
 
