@@ -3706,9 +3706,12 @@ void ca_match_reply(ca_session_t *s, int tag) {
 // writes session data to the CAM.
 int ca_write_spdu(ca_device_t *d, int session_number, unsigned char tag,
                   const void *data, size_t len, const void *apdu, size_t alen) {
-    unsigned char pkt[4096];
+    // tag, length (up to 3 bytes), data, session number, APDU
+    size_t size = 1 + 3 + len + 2 + alen;
+    auto spdu = std::make_unique_for_overwrite<unsigned char[]>(size);
+    unsigned char *pkt = spdu.get();
     unsigned char *ptr = pkt;
-    memset(pkt, 0xFF, sizeof(pkt));
+    memset(pkt, 0xFF, size);
     *ptr++ = tag;
     ptr += asn_1_encode(len + 2, ptr);
     if (data)
