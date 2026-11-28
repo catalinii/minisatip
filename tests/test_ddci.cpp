@@ -3673,6 +3673,28 @@ int test_ddci_open_releases_d_before_push() {
     return 0;
 }
 
+static int close_dev_calls[2];
+static int close_dev0(adapter *) { return ++close_dev_calls[0]; }
+static int close_dev1(adapter *) { return ++close_dev_calls[1]; }
+
+// tables_close_device() closes exactly the CAs in the adapter's mask
+int test_tables_close_device_mask() {
+    SCA_op op0{}, op1{};
+    op0.ca_close_dev = close_dev0;
+    op1.ca_close_dev = close_dev1;
+    int id0 = add_ca(&op0), id1 = add_ca(&op1);
+    ASSERT(id0 != id1, "two CAs registered");
+    adapter ad{};
+    ad.ca_mask = 1 << id1;
+    close_dev_calls[0] = close_dev_calls[1] = 0;
+    tables_close_device(&ad);
+    del_ca(&op0);
+    del_ca(&op1);
+    ASSERT_EQUAL(close_dev_calls[0], 0, "CA outside the mask left alone");
+    ASSERT_EQUAL(close_dev_calls[1], 1, "CA in the mask closed");
+    return 0;
+}
+
 int main() {
     opts.log = 65535 ^ LOG_LOCK ^ LOG_UTILS;
     opts.debug = 0;
@@ -3789,6 +3811,8 @@ int main() {
               "testing ddci sweep skips a full table");
     TEST_FUNC(test_ddci_open_releases_d_before_push(),
               "testing enigma open drops D before push");
+    TEST_FUNC(test_tables_close_device_mask(),
+              "testing tables_close_device CA mask");
     pmts.destroy_all();
     filters.destroy_all();
     fflush(stdout);

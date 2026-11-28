@@ -46,7 +46,7 @@ typedef struct struct_opts {
     int pids_all_no_dec;
     int sdt_charset; // DVB_CHARSET_*, --sdt-charset
     int rtsp_port;
-    uint8_t netcv_count;
+    int netcv_count;
     char *netcv_if;
     char *playlist;
     const char *log_file;

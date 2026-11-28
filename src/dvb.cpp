@@ -24,6 +24,7 @@
 #include "pmt.h"
 #include "utils.h"
 #include "utils/ticks.h"
+#include <algorithm>
 #include <type_traits>
 #include <unordered_map>
 #include <vector>
@@ -1858,6 +1859,7 @@ fe_delivery_system_t dvb_delsys(int aid, int fd, fe_delivery_system_t *sys) {
         {.cmd = DTV_ENUM_DELSYS, .reserved = {}, .u = {}, .result = 0},
     };
     enum_cmdargs[0].u.data = 0;
+    enum_cmdargs[0].u.buffer.len = 0; // u.data covers only the first word
     static struct dtv_properties enum_cmdseq = {
         .num = sizeof(enum_cmdargs) / sizeof(struct dtv_property),
         .props = enum_cmdargs};
@@ -2336,12 +2338,15 @@ int dvb_get_signal(adapter *ad) {
             status = 1;
         LOGM("Signal metrics are not retrieved as both multipliers are 0");
     }
+    // out of range float to integer conversions are undefined
     if (ad->strength_multiplier != 0)
-        strength = static_cast<uint16_t>(strength * ad->strength_multiplier);
+        strength = static_cast<uint16_t>(
+            std::clamp(strength * ad->strength_multiplier, 0.0f, 65535.0f));
     else
         strength = 65535;
     if (ad->snr_multiplier != 0)
-        snr = static_cast<uint16_t>(snr * ad->snr_multiplier);
+        snr = static_cast<uint16_t>(
+            std::clamp(snr * ad->snr_multiplier, 0.0f, 65535.0f));
     else
         snr = 65535;
 

@@ -1037,13 +1037,13 @@ void set_options(int argc, char *argv[]) {
             if (sep1 != NULL) {
                 *sep1 = 0;
                 opts.netcv_if = optarg;
-                opts.netcv_count = static_cast<uint8_t>(parse_int(sep1 + 1));
+                opts.netcv_count = parse_int(sep1 + 1);
                 break;
             }
 
             // default interface is vlan4 as it is used on the REEL
             opts.netcv_if = (char *)"vlan4";
-            opts.netcv_count = static_cast<uint8_t>(parse_int(optarg));
+            opts.netcv_count = parse_int(optarg);
 #endif
             break;
         }

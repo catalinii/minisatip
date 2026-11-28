@@ -376,7 +376,7 @@ int netcv_commit(adapter *ad) {
 
 int netcv_tune(int aid, transponder *) {
     adapter *ad = get_adapter(aid);
-    LOG("netceiver: called netcv_tune for adapter %d", ad->id);
+    LOG("netceiver: called netcv_tune for adapter %d", aid);
     if (!ad)
         return 1;
 

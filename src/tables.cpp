@@ -405,6 +405,7 @@ int tables_close_device(adapter *ad) {
         if (ca[i].enabled && (ad->ca_mask & mask) && op->ca_close_dev) {
             op->ca_close_dev(ad);
         }
+        mask <<= 1;
     }
 
     {
