@@ -1071,18 +1071,29 @@ void set_sockets_rtime(int i, int r) {
         ss->rtime = r;
 }
 
+static bool is_stream_socket(sockets *ss) {
+    return ss->type == TYPE_RTSP || ss->type == TYPE_RTP ||
+           ss->type == TYPE_RTCP;
+}
+
 int sockets_del_for_sid(int sid) {
     if (sid < 0)
         return 0;
-    for (sockets *ss : sockets_pool)
-        if (ss->sid >= 0 && ss->sid == sid &&
-            (ss->type == TYPE_RTSP || ss->type == TYPE_RTP ||
-             ss->type == TYPE_RTCP)) {
+    for (sockets *ss : sockets_pool) {
+        // Only these types carry a stream id in sid (a DVR socket carries
+        // its adapter id). Checked again under the lock.
+        if (!is_stream_socket(ss) || ss->sid != sid)
+            continue;
+        // Only the closing stream's sockets are locked, and only one thread
+        // closes a stream: no other closer holds one while waiting for ours.
+        std::lock_guard<SMutex> lock(ss->mutex);
+        if (ss->enabled && is_stream_socket(ss) && ss->sid == sid) {
             ss->sid =
                 -1; // make sure the stream is not closed in the future to
                     // prevent closing the stream created by another socket
             ss->close = NULL;
         }
+    }
     return 0;
 }
 

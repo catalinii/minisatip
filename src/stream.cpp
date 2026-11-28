@@ -366,6 +366,9 @@ int close_stream(int i) {
         rsock = sid->rsock;
     }
 
+    // Detach the sockets before the poller threads start deleting them
+    sockets_del_for_sid(i);
+
     sockets_set_flush_enqued_data(rsock_id);
     if (type == STREAM_RTSP_UDP && rsock_id > 0) {
         LOG("Closing RTP sock %d handle %d", rsock_id, rsock);
@@ -386,8 +389,6 @@ int close_stream(int i) {
 
     if (ad >= 0)
         close_adapter_for_stream(i, ad, 1);
-
-    sockets_del_for_sid(i);
 
     // Exclusive now (disabled, unclaimable): cleanup needs no lock.
     sid->adapter = -1;
