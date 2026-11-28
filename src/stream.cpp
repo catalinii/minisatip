@@ -641,7 +641,8 @@ int streams_add() {
     /* coverity[DC.WEAK_CRYPTO] */
     ss->ssrc = static_cast<int>(random());
     ss->timeout = opts.timeout_sec;
-    ss->wtime = ss->rtcp_wtime = getTick();
+    ss->seq = 0;
+    ss->wtime = ss->rtcp_wtime = ss->rtime = getTick();
     ss->enabled = 1;
 
     return i;
@@ -707,13 +708,14 @@ size_t enqueue_rtp_header(streams *sid, struct iovec *iov, int liov,
     }
 
     copy16(rtp_buf, len + 0, (uint32_t)0x8021);
-    copy16(rtp_buf, len + 2, sid->seq);
+    uint16_t seq = sid->seq; // one read: copy16() evaluates its value twice
+    copy16(rtp_buf, len + 2, seq);
     copy32(rtp_buf, len + 4, timestamp);
     copy32(rtp_buf, len + 8, sid->ssrc);
     len += 12;
     iov[iiov_rtp_header].iov_base = rtp_buf;
     iov[iiov_rtp_header].iov_len = len;
-    sid->seq = (sid->seq + 1) & 0xFFFF; // rollover
+    sid->seq = (seq + 1) & 0xFFFF; // rollover
 
     return len;
 }
