@@ -1445,9 +1445,14 @@ char *describe_adapter(int sid, int aid, char *dad, size_t ld) {
     int status = 1, strength = 255, snr = 15;
 
     ss = get_sid(sid);
+    ad = get_adapter_nw(aid);
+    // tune() and the signal thread change these values under the lock
+    std::unique_lock<SMutex> lock;
+    if (ad)
+        lock = std::unique_lock<SMutex>(ad->mutex);
 
     use_ad = 1;
-    if (!(ad = get_adapter_nw(aid)) || (ss && !ss->do_play)) {
+    if (!ad || (ss && !ss->do_play)) {
         if (aid < 0)
             aid = 0;
         if (!ss)
