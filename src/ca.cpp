@@ -503,8 +503,8 @@ int dh_dhph_signature(uint8_t *out, uint8_t *nonce, uint8_t *dhph,
 int verify_cb(int, X509_STORE_CTX *ctx) {
     if (X509_STORE_CTX_get_error(ctx) == X509_V_ERR_CERT_NOT_YET_VALID) {
         time_t now = time(NULL);
-        struct tm *t = localtime(&now);
-        if (t->tm_year < 2015) {
+        struct tm tm_buf, *t = localtime_r(&now, &tm_buf);
+        if (t && t->tm_year < 2015) {
             LOG("seems our rtc is wrong - ignore!");
             return 1;
         }
