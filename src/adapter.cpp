@@ -1092,7 +1092,7 @@ int tune(int aid, int sid) {
     if (!ad)
         return -500;
 
-    std::lock_guard<SMutex> lock(ad->mutex);
+    std::unique_lock<SMutex> lock(ad->mutex);
 
     if (sid == ad->master_sid && ad->do_tune) {
         ad->tp.diseqc_param = ad->diseqc_param;
@@ -1112,7 +1112,13 @@ int tune(int aid, int sid) {
         ad->rlen = 0;
         if (ad->sid_cnt > 1) // the master changed the frequency
         {
+            // close_stream() locks each stream, which comes before the
+            // adapter in the lock order: close them without it
+            lock.unlock();
             close_streams_for_adapter(aid, sid);
+            lock.lock();
+            if (!ad->enabled) // closed meanwhile
+                return -500;
             if (update_pids(aid)) {
                 ad->do_tune = 0;
                 // Keep the hardware error like the path below does.
@@ -1439,9 +1445,14 @@ char *describe_adapter(int sid, int aid, char *dad, size_t ld) {
     int status = 1, strength = 255, snr = 15;
 
     ss = get_sid(sid);
+    ad = get_adapter_nw(aid);
+    // tune() and the signal thread change these values under the lock
+    std::unique_lock<SMutex> lock;
+    if (ad)
+        lock = std::unique_lock<SMutex>(ad->mutex);
 
     use_ad = 1;
-    if (!(ad = get_adapter_nw(aid)) || (ss && !ss->do_play)) {
+    if (!ad || (ss && !ss->do_play)) {
         if (aid < 0)
             aid = 0;
         if (!ss)

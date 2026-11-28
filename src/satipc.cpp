@@ -231,6 +231,8 @@ int satipc_reply(sockets *s) {
     int rc = 0;
     __attribute__((unused)) int rv;
     get_ad_and_sipr(s->sid, 1);
+    // tune(), update_pids() and satipc_commit() change this state under it
+    std::lock_guard<SMutex> lock(ad->mutex);
 
     if (!is_rtsp_response((char *)s->buf, s->rlen)) {
         set_socket_new_buffer(s->id, 10240);
@@ -627,6 +629,7 @@ int satipc_rtcp_reply(sockets *s) {
     adapter *ad;
     satipc *sip;
     get_ad_and_sipr(s->sid, 0);
+    std::lock_guard<SMutex> lock(ad->mutex);
     int rp;
     int sm;
 

@@ -1543,9 +1543,9 @@ int read_http(sockets *s) {
     s->rlen = 0;
 
     time_t now;
-    struct tm *info;
+    struct tm tm_buf, *info;
     time(&now);
-    info = localtime(&now);
+    info = localtime_r(&now, &tm_buf);
     sprintf(opts.datetime_current, "%s ", asctime(info));
     opts.datetime_current[24] = ' ';
     opts.datetime_current[25] = '\0';

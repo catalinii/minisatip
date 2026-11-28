@@ -106,11 +106,11 @@ void _log(const char *file, int line, const char *fmt, ...) {
 char *get_current_timestamp_log(void) {
     static char date_str[200];
     struct timeval tv;
-    struct tm *t;
+    struct tm tm_buf, *t;
 
     if (gettimeofday(&tv, NULL))
         return (char *)"01/01 00:00:20";
-    t = localtime(&tv.tv_sec);
+    t = localtime_r(&tv.tv_sec, &tm_buf);
     if (!t)
         return (char *)"01/01 00:00:20";
     snprintf(date_str, sizeof(date_str), "%02d/%02d %02d:%02d:%02d.%03d",
