@@ -36,6 +36,8 @@
 #include <net/if.h>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <openssl/pem.h>
+#include <openssl/x509_vfy.h>
 #include <poll.h>
 #include <signal.h>
 #include <stdarg.h>
@@ -74,6 +76,7 @@ int ca_timeout(sockets *s);
 int ca_read(sockets *s);
 int ca_write_apdu(ca_session_t *s, int tag, const void *data, size_t len);
 int ca_read_apdu(ca_session_t *session, uint8_t *buf, int buf_len);
+int verify_cb(int ok, X509_STORE_CTX *ctx);
 int ca_read_tpdu(int socket, void *buf, int buf_len, sockets *ss, int *rb);
 int ca_read_enigma(int socket, void *buf, int len, sockets *ss, int *rb);
 int get_enabled_pmts_for_ca(ca_device_t *d);
@@ -1332,6 +1335,60 @@ static int track_stub_cb(ca_session_t *s, int r, uint8_t *b, int l) {
     (void)r;
     (void)b;
     (void)l;
+    return 0;
+}
+
+// EC root and leaf, valid 2020-2120, made with openssl req/x509
+static const char test_root_pem[] =
+    "-----BEGIN CERTIFICATE-----\n"
+    "MIIBhjCCASugAwIBAgIUKQkp+3p1pO9a6CfHquU7+/sbbvAwCgYIKoZIzj0EAwIw\n"
+    "DzENMAsGA1UEAwwEcm9vdDAgFw0yMDAxMDEwMDAwMDBaGA8yMTIwMDEwMTAwMDAw\n"
+    "MFowDzENMAsGA1UEAwwEcm9vdDBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABDfb\n"
+    "lIWPsaxzsQ5rFAtzUUtkHyfAkCLKJtSZp9EL/tSupNDou6Tyo2yjlq/8L1ljIuk1\n"
+    "6K463luGuMtLHpd02iCjYzBhMB0GA1UdDgQWBBQWqsaUArWpHNSFzOS7aYnZgH8w\n"
+    "6zAfBgNVHSMEGDAWgBQWqsaUArWpHNSFzOS7aYnZgH8w6zAPBgNVHRMBAf8EBTAD\n"
+    "AQH/MA4GA1UdDwEB/wQEAwICBDAKBggqhkjOPQQDAgNJADBGAiEAktZ2nbq2NssF\n"
+    "4OOE06o8T/An0Fd/fJiehWsPDEuL3n4CIQCDAPwFVmc//C7NGP+k4WveR1bW+DNV\n"
+    "Wgl3zL6NGIo/Cw==\n"
+    "-----END CERTIFICATE-----\n";
+static const char test_leaf_pem[] =
+    "-----BEGIN CERTIFICATE-----\n"
+    "MIIBZTCCAQqgAwIBAgIUfXnE8UlZWKGNiup5S0yWpLTCRHAwCgYIKoZIzj0EAwIw\n"
+    "DzENMAsGA1UEAwwEcm9vdDAgFw0yMDAxMDEwMDAwMDBaGA8yMTIwMDEwMTAwMDAw\n"
+    "MFowDzENMAsGA1UEAwwEbGVhZjBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABDa6\n"
+    "nSfI7WtBjdRv+I8BGqEN2MpnRgMgor/nZ6zKk3H7E3cn6MG6HRfatwUayNr47Lyb\n"
+    "ZllNdvbWEZIemrlQaUijQjBAMB0GA1UdDgQWBBRvY1+DkGMbl/AZwK7SZmta3lje\n"
+    "/jAfBgNVHSMEGDAWgBQWqsaUArWpHNSFzOS7aYnZgH8w6zAKBggqhkjOPQQDAgNJ\n"
+    "ADBGAiEA9TQ4tnzltNVeD7G3LVz0sIj4OJ/7WHAadJHtlbgNFkICIQDlNu6+VJOX\n"
+    "qjkPITscgKY5A+SakTZ6BuAWBOcavNWkOw==\n"
+    "-----END CERTIFICATE-----\n";
+
+static X509 *pem_cert(const char *pem) {
+    BIO *bio = BIO_new_mem_buf(pem, -1);
+    X509 *cert = PEM_read_bio_X509(bio, NULL, NULL, NULL);
+    BIO_free(bio);
+    return cert;
+}
+
+// A chain that verifies must pass the CI+ verify callback
+int test_ci_cert_verify_cb() {
+    X509 *root = pem_cert(test_root_pem), *leaf = pem_cert(test_leaf_pem);
+    ASSERT(root && leaf, "test certificates parsed");
+    X509_STORE *store = X509_STORE_new();
+    X509_STORE_add_cert(store, root);
+    int results[2];
+    for (int i = 0; i < 2; i++) {
+        X509_STORE_CTX *ctx = X509_STORE_CTX_new();
+        X509_STORE_CTX_init(ctx, store, i ? root : leaf, NULL);
+        X509_STORE_CTX_set_verify_cb(ctx, verify_cb);
+        results[i] = X509_verify_cert(ctx);
+        X509_STORE_CTX_free(ctx);
+    }
+    X509_STORE_free(store);
+    X509_free(root);
+    X509_free(leaf);
+    ASSERT_EQUAL(results[0], 1, "leaf signed by the root verifies");
+    ASSERT_EQUAL(results[1], 1, "root verifies");
     return 0;
 }
 
@@ -3098,6 +3155,7 @@ int main() {
     TEST_FUNC(test_ca_keepalive_counts_failures(),
               "testing keepalive failure counting");
     TEST_FUNC(test_ca_cmd_watchdog(), "testing command watchdog");
+    TEST_FUNC(test_ci_cert_verify_cb(), "testing the CI+ certificate callback");
     TEST_FUNC(test_ca_read_tpdu_outcomes(), "testing TPDU read outcomes");
     TEST_FUNC(test_ca_read_enigma_removal(), "testing enigma removal close");
     TEST_FUNC(test_dvbca_init_dev_guards(), "testing init device guards");
